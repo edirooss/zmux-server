@@ -35,8 +35,8 @@ type SystemdServiceConfig struct {
 	RestartSec  string
 }
 
-// CreateService creates a new systemd service
-func (s *SystemdService) CreateService(cfg SystemdServiceConfig) error {
+// CommitService saves a systemd service
+func (s *SystemdService) CommitService(cfg SystemdServiceConfig) error {
 	serviceFilePath := filepath.Join("/etc/systemd/system", cfg.ServiceName+".service")
 
 	// Escape % characters for systemd

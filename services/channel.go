@@ -37,11 +37,18 @@ func (s *ChannelService) CreateChannel(ctx context.Context, channelReq *models.C
 	ch := channelReq.ToChannel(id)
 
 	if err := s.repo.Set(ctx, ch); err != nil {
-		return nil, fmt.Errorf("save: %w", err)
+		return nil, fmt.Errorf("set: %w", err)
 	}
 	if err := s.commitSystemdService(ch); err != nil {
-		// Best effort
+		// What if we fail here? should we delete the channel from Redis?
 		return nil, fmt.Errorf("commit systemd service: %w", err)
+	}
+
+	if ch.Enabled {
+		if err := s.enableChannel(ch.ID); err != nil {
+			// What if we fail here? should we delete the channel from Redis?
+			return nil, fmt.Errorf("enable channel: %w", err)
+		}
 	}
 	return ch, nil
 }
@@ -55,7 +62,7 @@ func (s *ChannelService) GetChannel(ctx context.Context, id int64) (*models.Zmux
 }
 
 func (s *ChannelService) ListChannels(ctx context.Context) ([]*models.ZmuxChannel, error) {
-	chs, err := s.repo.ListFast(ctx)
+	chs, err := s.repo.List(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list: %w", err)
 	}
@@ -63,50 +70,116 @@ func (s *ChannelService) ListChannels(ctx context.Context) ([]*models.ZmuxChanne
 }
 
 func (s *ChannelService) UpdateChannel(ctx context.Context, id int64, req *models.UpdateZmuxChannelReq) (*models.ZmuxChannel, error) {
-	// 1) Load current
+	// Load current
 	ch, err := s.repo.Get(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("get: %w", err)
 	}
 
-	// 2) Apply patch
+	// Copy prev enabled
+	prevEnabled := ch.Enabled
+
+	// Apply patch
 	req.ApplyTo(ch)
 
-	// 3) Persist
+	// Persist
 	if err := s.repo.Set(ctx, ch); err != nil {
-		return nil, fmt.Errorf("save: %w", err)
+		return nil, fmt.Errorf("set: %w", err)
 	}
 
-	// 4) (Re)apply systemd (idempotent-ish simple approach)
+	// (Re)apply systemd (idempotent-ish simple approach)
 	if err := s.commitSystemdService(ch); err != nil {
-		// Best effort
+		// What if we fail here? should we return the channel in Redis to it's prev settings?
 		return nil, fmt.Errorf("commit systemd service: %w", err)
+	}
+
+	// Re-enableing if channel is enabled (if prev enabled, need to be restart anyway)
+	// If prev enabled and now disabled, disable the channel
+	if ch.Enabled {
+		if err := s.enableChannel(ch.ID); err != nil {
+			// What if we fail here? should we return the channel in Redis to it's prev settings?
+			return nil, fmt.Errorf("enable channel: %w", err)
+		}
+	} else if prevEnabled {
+		if err := s.disableChannel(ch.ID); err != nil {
+			// What if we fail here? should we return the channel in Redis to it's prev settings?
+			return nil, fmt.Errorf("disable channel: %w", err)
+		}
 	}
 
 	return ch, nil
 }
 
 // DeleteChannel deletes a single channel and disables its systemd unit.
-// Order: disable unit first (so we don't orphan a running service), then delete from repo.
 func (s *ChannelService) DeleteChannel(ctx context.Context, id int64) error {
 	// Load to confirm existence and to build unit name
 	ch, err := s.repo.Get(ctx, id)
 	if err != nil {
-		// propagate typed not-found (e.g., redis.ErrChannelNotFound) for HTTP layer to map to 404
 		return fmt.Errorf("get: %w", err)
 	}
 
-	unitName := fmt.Sprintf("zmux-channel-%d", ch.ID)
-
-	// Disable the unit; if this fails, return error and keep record so user can retry
-	if err := s.systemd.DisableService(unitName); err != nil {
-		return fmt.Errorf("disable systemd service: %w", err)
+	if ch.Enabled {
+		if err := s.disableChannel(ch.ID); err != nil {
+			return fmt.Errorf("disable channel: %w", err)
+		}
 	}
+
+	// Note: Systemd unit file for the channel is still configured on the system.
+	// We don't have to delete it and it's one less operation to be errored on so we keep it.
 
 	// Finally delete from repo
 	if err := s.repo.Delete(ctx, id); err != nil {
-		// Best effort
+		// What if we fail here? should we re-enable the channel if enabled?
 		return fmt.Errorf("delete: %w", err)
+	}
+	return nil
+}
+
+// EnableChannel enables a channel
+func (s *ChannelService) EnableChannel(ctx context.Context, id int64) error {
+	// Check if exists
+	ch, err := s.GetChannel(ctx, id)
+	if err != nil {
+		return fmt.Errorf("get channel: %w", err)
+	}
+
+	// Force enable/ re-enable
+	if err := s.enableChannel(ch.ID); err != nil {
+		// What if we fail here? should we return the channel in Redis to it's prev settings?
+		return fmt.Errorf("enable channel: %w", err)
+	}
+	return nil
+}
+
+// DisableChannel disables a channel
+func (s *ChannelService) DisableChannel(ctx context.Context, id int64) error {
+	// Check if exists
+	ch, err := s.GetChannel(ctx, id)
+	if err != nil {
+		return fmt.Errorf("get channel: %w", err)
+	}
+
+	// Force disable/ re-disable
+	if err := s.disableChannel(ch.ID); err != nil {
+		return fmt.Errorf("disable channel: %w", err)
+	}
+	return nil
+}
+
+// enableChannel enables a channel
+func (s *ChannelService) enableChannel(channelID int64) error {
+	serviceName := fmt.Sprintf("zmux-channel-%d", channelID)
+	if err := s.systemd.EnableService(serviceName); err != nil {
+		return fmt.Errorf("enable systemd service: %w", err)
+	}
+	return nil
+}
+
+// disableChannel disables a channel
+func (s *ChannelService) disableChannel(channelID int64) error {
+	serviceName := fmt.Sprintf("zmux-channel-%d", channelID)
+	if err := s.systemd.DisableService(serviceName); err != nil {
+		return fmt.Errorf("disable systemd service: %w", err)
 	}
 	return nil
 }
@@ -118,20 +191,8 @@ func (s *ChannelService) commitSystemdService(channel *models.ZmuxChannel) error
 		RestartSec:  strconv.FormatUint(uint64(channel.RestartSec), 10),
 	}
 
-	if err := s.systemd.CreateService(cfg); err != nil {
-		return fmt.Errorf("create systemd service: %w", err)
-	}
-
-	if channel.Enabled {
-		if err := s.systemd.EnableService(cfg.ServiceName); err != nil {
-			// TODO: Rallback
-			return fmt.Errorf("enable systemd service: %w", err)
-		}
-	} else {
-		if err := s.systemd.DisableService(cfg.ServiceName); err != nil {
-			// TODO: Rallback
-			return fmt.Errorf("disable systemd service: %w", err)
-		}
+	if err := s.systemd.CommitService(cfg); err != nil {
+		return fmt.Errorf("commit systemd service: %w", err)
 	}
 
 	return nil

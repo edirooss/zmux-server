@@ -100,9 +100,8 @@ func (r *ChannelRepository) Delete(ctx context.Context, id int64) error {
 	return nil
 }
 
-// ListFast retrieves all channels without SCAN by using the maintained SET of IDs.
-// Falls back to SCAN-based List() if the set is empty (first run / legacy data).
-func (r *ChannelRepository) ListFast(ctx context.Context) ([]*models.ZmuxChannel, error) {
+// List retrieves all channels by using the maintained SET of IDs.
+func (r *ChannelRepository) List(ctx context.Context) ([]*models.ZmuxChannel, error) {
 	ids, err := r.client.SMembers(ctx, channelIDSetKey).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		return nil, fmt.Errorf("smembers: %w", err)
