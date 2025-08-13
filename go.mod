@@ -10,6 +10,7 @@ require (
 	github.com/mcuadros/go-defaults v1.2.0
 	github.com/redis/go-redis/v9 v9.12.0
 	go.uber.org/zap v1.27.0
+	golang.org/x/sync v0.15.0
 )
 
 require (

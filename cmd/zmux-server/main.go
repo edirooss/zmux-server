@@ -1,12 +1,10 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	models "github.com/edirooss/zmux-server/pkg/models/channel"
@@ -86,6 +84,17 @@ func main() {
 
 	// Service for reading local addresses
 	localaddrLister := services.NewLocalAddrLister(services.LocalAddrListerOptions{})
+
+	// Service for generating channel summaries
+	summarySvc := services.NewSummaryService(
+		log,
+		redis.NewChannelRepository(log),
+		redis.NewRemuxRepository(log),
+		services.SummaryOptions{
+			TTL:            1000 * time.Millisecond, // tune as needed
+			RefreshTimeout: 500 * time.Millisecond,
+		},
+	)
 
 	// Create Gin router
 	r := gin.New()
@@ -232,69 +241,34 @@ func main() {
 		c.JSON(http.StatusOK, localAddrs)
 	})
 
-	// Extra repos for summary (separate clients; cheap to construct and reuse TCP pool)
-	chanRepo := redis.NewChannelRepository(log)
-	remuxRepo := redis.NewRemuxRepository(log)
-
 	r.GET("/api/channels/summary", func(c *gin.Context) {
-		// Tight latency budget (dashboard refresh every ~1.5s). Bound work per request.
-		ctx, cancel := context.WithTimeout(c.Request.Context(), 300*time.Millisecond)
-		defer cancel()
+		// Optional query to bypass cache for admin/diagnostics: ?force=1
+		force := c.Query("force") == "1"
 
-		// 1) Fetch all channels (fast path via SET of ids; falls back to SCAN once)
-		chs, err := chanRepo.ListFast(ctx)
+		var (
+			res services.SummaryResult
+			err error
+		)
+		if force {
+			// Force a refresh by temporarily setting TTL=0 via a context trick:
+			// Simply call summarySvc.Get with expired cache by invalidating before.
+			// Safer: expose a public Invalidate(). We'll do that:
+			summarySvc.Invalidate()
+		}
+
+		res, err = summarySvc.Get(c.Request.Context())
 		if err != nil {
 			_ = c.Error(err)
 			c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 			return
 		}
 
-		// 2) Collect enabled ids for status lookup
-		enabledIDs := make([]int64, 0, len(chs))
-		for _, ch := range chs {
-			if ch.Enabled {
-				enabledIDs = append(enabledIDs, ch.ID)
-			}
-		}
+		// Friendly cache headers for debugging/observability
+		c.Header("X-Cache", map[bool]string{true: "HIT", false: "MISS"}[res.CacheHit])
+		c.Header("X-Summary-Generated-At", strconv.FormatInt(res.GeneratedAt.UnixMilli(), 10))
+		c.Header("X-Total-Count", strconv.Itoa(len(res.Data)))
 
-		// 3) Bulk fetch statuses for enabled channels (single round-trip)
-		statusMap, err := remuxRepo.BulkStatus(ctx, enabledIDs)
-		if err != nil {
-			// Non-fatal: still return channels; attach error for observability
-			_ = c.Error(err)
-		}
-
-		// 4) Determine live channels; bulk fetch ifmt+metrics (single round-trip)
-		liveIDs := make([]int64, 0, len(enabledIDs))
-		for _, id := range enabledIDs {
-			if st, ok := statusMap[id]; ok && strings.EqualFold(st.Liveness, "Live") {
-				liveIDs = append(liveIDs, id)
-			}
-		}
-
-		extras, err := remuxRepo.BulkIfmtMetrics(ctx, liveIDs)
-		if err != nil {
-			_ = c.Error(err) // non-fatal
-		}
-
-		// 5) Assemble response (pass-through ifmt/metrics JSON)
-		out := make([]models.ChannelSummary, 0, len(chs))
-		for _, ch := range chs {
-			sum := models.ChannelSummary{ZmuxChannel: *ch}
-			if ch.Enabled {
-				if st, ok := statusMap[ch.ID]; ok {
-					sum.Status = st
-					if extra, ok := extras[ch.ID]; ok {
-						sum.Ifmt = extra.Ifmt
-						sum.Metrics = extra.Metrics
-					}
-				}
-			}
-			out = append(out, sum)
-		}
-
-		c.Header("X-Total-Count", strconv.Itoa(len(out)))
-		c.JSON(http.StatusOK, out)
+		c.JSON(http.StatusOK, res.Data)
 	})
 
 	// Run server
