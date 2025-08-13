@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	models "github.com/edirooss/zmux-server/pkg/models/channel"
@@ -228,6 +230,71 @@ func main() {
 
 		c.Header("X-Total-Count", strconv.Itoa(len(localAddrs))) // RA needs this
 		c.JSON(http.StatusOK, localAddrs)
+	})
+
+	// Extra repos for summary (separate clients; cheap to construct and reuse TCP pool)
+	chanRepo := redis.NewChannelRepository(log)
+	remuxRepo := redis.NewRemuxRepository(log)
+
+	r.GET("/api/channels/summary", func(c *gin.Context) {
+		// Tight latency budget (dashboard refresh every ~1.5s). Bound work per request.
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 300*time.Millisecond)
+		defer cancel()
+
+		// 1) Fetch all channels (fast path via SET of ids; falls back to SCAN once)
+		chs, err := chanRepo.ListFast(ctx)
+		if err != nil {
+			_ = c.Error(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+			return
+		}
+
+		// 2) Collect enabled ids for status lookup
+		enabledIDs := make([]int64, 0, len(chs))
+		for _, ch := range chs {
+			if ch.Enabled {
+				enabledIDs = append(enabledIDs, ch.ID)
+			}
+		}
+
+		// 3) Bulk fetch statuses for enabled channels (single round-trip)
+		statusMap, err := remuxRepo.BulkStatus(ctx, enabledIDs)
+		if err != nil {
+			// Non-fatal: still return channels; attach error for observability
+			_ = c.Error(err)
+		}
+
+		// 4) Determine live channels; bulk fetch ifmt+metrics (single round-trip)
+		liveIDs := make([]int64, 0, len(enabledIDs))
+		for _, id := range enabledIDs {
+			if st, ok := statusMap[id]; ok && strings.EqualFold(st.Liveness, "Live") {
+				liveIDs = append(liveIDs, id)
+			}
+		}
+
+		extras, err := remuxRepo.BulkIfmtMetrics(ctx, liveIDs)
+		if err != nil {
+			_ = c.Error(err) // non-fatal
+		}
+
+		// 5) Assemble response (pass-through ifmt/metrics JSON)
+		out := make([]models.ChannelSummary, 0, len(chs))
+		for _, ch := range chs {
+			sum := models.ChannelSummary{ZmuxChannel: *ch}
+			if ch.Enabled {
+				if st, ok := statusMap[ch.ID]; ok {
+					sum.Status = st
+					if extra, ok := extras[ch.ID]; ok {
+						sum.Ifmt = extra.Ifmt
+						sum.Metrics = extra.Metrics
+					}
+				}
+			}
+			out = append(out, sum)
+		}
+
+		c.Header("X-Total-Count", strconv.Itoa(len(out)))
+		c.JSON(http.StatusOK, out)
 	})
 
 	// Run server

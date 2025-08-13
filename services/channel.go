@@ -55,7 +55,7 @@ func (s *ChannelService) GetChannel(ctx context.Context, id int64) (*models.Zmux
 }
 
 func (s *ChannelService) ListChannels(ctx context.Context) ([]*models.ZmuxChannel, error) {
-	chs, err := s.repo.List(ctx)
+	chs, err := s.repo.ListFast(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list: %w", err)
 	}

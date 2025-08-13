@@ -1,4 +1,3 @@
-// models/models.go
 package models
 
 import "github.com/mcuadros/go-defaults"

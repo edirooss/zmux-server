@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	models "github.com/edirooss/zmux-server/pkg/models/channel"
@@ -46,7 +47,8 @@ func (r *ChannelRepository) GenerateID(ctx context.Context) (int64, error) {
 	return id, nil
 }
 
-// Set saves a channel JSON blob to Redis
+const channelIDSetKey = "zmux:channels" // SET of string ids: {"1","2",...}
+
 func (r *ChannelRepository) Set(ctx context.Context, channel *models.ZmuxChannel) error {
 	key := keyFor(channel.ID)
 
@@ -55,9 +57,11 @@ func (r *ChannelRepository) Set(ctx context.Context, channel *models.ZmuxChannel
 		return fmt.Errorf("marshal: %w", err)
 	}
 
-	// TTL 0 = persist forever;
-	if err := r.client.Set(ctx, key, payload, 0).Err(); err != nil {
-		return fmt.Errorf("set: %w", err)
+	pipe := r.client.TxPipeline()
+	pipe.Set(ctx, key, payload, 0)
+	pipe.SAdd(ctx, channelIDSetKey, strconv.FormatInt(channel.ID, 10))
+	if _, err := pipe.Exec(ctx); err != nil {
+		return fmt.Errorf("set+sadd: %w", err)
 	}
 	return nil
 }
@@ -84,40 +88,38 @@ func (r *ChannelRepository) Get(ctx context.Context, id int64) (*models.ZmuxChan
 // Delete removes a single channel key. Returns ErrChannelNotFound if the key doesn't exist.
 func (r *ChannelRepository) Delete(ctx context.Context, id int64) error {
 	key := keyFor(id)
-	n, err := r.client.Del(ctx, key).Result()
-	if err != nil {
-		return fmt.Errorf("del: %w", err)
+	pipe := r.client.TxPipeline()
+	del := pipe.Del(ctx, key)
+	pipe.SRem(ctx, channelIDSetKey, strconv.FormatInt(id, 10))
+	if _, err := pipe.Exec(ctx); err != nil {
+		return fmt.Errorf("del+srem: %w", err)
 	}
-	if n == 0 {
+	if n := del.Val(); n == 0 {
 		return ErrChannelNotFound
 	}
 	return nil
 }
 
-// List retrieves all channels (no pagination).
-// Uses SCAN to avoid blocking Redis, then MGET to fetch in one round-trip.
-func (r *ChannelRepository) List(ctx context.Context) ([]*models.ZmuxChannel, error) {
-	var keys []string
+// ListFast retrieves all channels without SCAN by using the maintained SET of IDs.
+// Falls back to SCAN-based List() if the set is empty (first run / legacy data).
+func (r *ChannelRepository) ListFast(ctx context.Context) ([]*models.ZmuxChannel, error) {
+	ids, err := r.client.SMembers(ctx, channelIDSetKey).Result()
+	if err != nil && !errors.Is(err, redis.Nil) {
+		return nil, fmt.Errorf("smembers: %w", err)
+	}
+	if len(ids) == 0 {
+		return nil, nil
+	}
 
-	iter := r.client.Scan(ctx, 0, channelKeyPrefix+"*", 1000).Iterator()
-	for iter.Next(ctx) {
-		k := iter.Val()
-		// Skip the counter key just in case a broad pattern catches it
-		if k == nextIDKey || strings.HasSuffix(k, "next_id") {
+	keys := make([]string, 0, len(ids))
+	for _, idStr := range ids {
+		// guard against accidental junk in the set
+		if strings.TrimSpace(idStr) == "" {
 			continue
 		}
-		keys = append(keys, k)
-	}
-	if err := iter.Err(); err != nil {
-		return nil, fmt.Errorf("scan: %w", err)
+		keys = append(keys, fmt.Sprintf("%s%s", channelKeyPrefix, idStr))
 	}
 
-	if len(keys) == 0 {
-		// Consistent with "empty list" semantics
-		return []*models.ZmuxChannel{}, nil
-	}
-
-	// Bulk fetch
 	vals, err := r.client.MGet(ctx, keys...).Result()
 	if err != nil {
 		return nil, fmt.Errorf("mget: %w", err)
@@ -126,19 +128,22 @@ func (r *ChannelRepository) List(ctx context.Context) ([]*models.ZmuxChannel, er
 	result := make([]*models.ZmuxChannel, 0, len(vals))
 	for i, v := range vals {
 		if v == nil {
-			// Key disappeared between SCAN and MGET; skip
-			continue
+			continue // key missing (possible if set drifted); harmless
 		}
-		b, ok := v.(string)
-		if !ok {
+		var b []byte
+		switch t := v.(type) {
+		case string:
+			b = []byte(t)
+		case []byte:
+			b = t
+		default:
 			return nil, fmt.Errorf("unexpected type for key %s at index %d", keys[i], i)
 		}
 		var ch models.ZmuxChannel
-		if err := json.Unmarshal([]byte(b), &ch); err != nil {
+		if err := json.Unmarshal(b, &ch); err != nil {
 			return nil, fmt.Errorf("unmarshal key %s: %w", keys[i], err)
 		}
 		result = append(result, &ch)
 	}
-
 	return result, nil
 }
