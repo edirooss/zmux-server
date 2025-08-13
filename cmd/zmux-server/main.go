@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -99,8 +100,19 @@ func main() {
 	// Create Gin router
 	r := gin.New()
 
+	env := os.Getenv("ENV")
+	var allowedOrigin string
+	switch env {
+	case "MR":
+		allowedOrigin = "https://192.168.1.4:443"
+	case "MZ":
+		allowedOrigin = "https://192.168.2.4:443"
+	default:
+		allowedOrigin = "http://localhost:5173"
+	}
+
 	corsCfg := cors.Config{
-		AllowOrigins:     []string{"http://localhost:5173"},
+		AllowOrigins:     []string{allowedOrigin},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Content-Type", "Authorization"},
 		ExposeHeaders:    []string{"X-Total-Count", "Location"},
@@ -272,6 +284,21 @@ func main() {
 	})
 
 	// Run server
-	log.Info("running server on :8080")
-	r.Run(":8080")
+	switch env {
+	case "MR", "MZ":
+		certFile := os.Getenv("TLS_CERT_FILE") // e.g., /etc/ssl/certs/server.crt
+		keyFile := os.Getenv("TLS_KEY_FILE")   // e.g., /etc/ssl/private/server.key
+		if certFile == "" || keyFile == "" {
+			log.Fatal("TLS_CERT_FILE and TLS_KEY_FILE must be set")
+		}
+		log.Info("running HTTPS server on :8443", zap.String("env", env), zap.String("cors_origin", allowedOrigin))
+		if err := r.RunTLS(":8443", certFile, keyFile); err != nil {
+			log.Fatal("server failed", zap.Error(err))
+		}
+	default:
+		log.Info("running HTTP server on :8080", zap.String("env", env), zap.String("cors_origin", allowedOrigin))
+		if err := r.Run(":8080"); err != nil {
+			log.Fatal("server failed", zap.Error(err))
+		}
+	}
 }
