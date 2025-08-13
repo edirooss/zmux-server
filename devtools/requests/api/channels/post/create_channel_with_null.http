@@ -1,0 +1,28 @@
+POST http://localhost:8080/api/channels
+Content-Type: application/json
+Accept: application/json
+
+{
+    "name": "Electrical Engineering2",
+    "map_video": true,
+    "map_audio": true,
+    "map_data": true,
+    "demuxer": {
+        "input_url": "udp://localhost:12340",
+        "avioflags": "",
+        "probesize": null,
+        "analyzeduration": null,
+        "fflags": "",
+        "max_delay": null,
+        "localaddr": "",
+        "timeout": null,
+        "rtsp_transport": ""
+    },
+    "muxer": {
+        "output_url": "rtsp://blabla.com",
+        "localaddr": "",
+        "pkt_size": null
+    },
+    "enabled": false,
+    "restart_sec": null
+}

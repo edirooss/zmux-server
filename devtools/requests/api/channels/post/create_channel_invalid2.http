@@ -1,0 +1,21 @@
+POST http://localhost:8080/api/channels
+Content-Type: application/json
+Accept: application/json
+
+{
+  "name": "full-config-channel",
+  "map_video": false,
+  "map_audio": true,
+  "demuxer": {
+    "input_url": "rtsp://example.com/full",
+    "aviofags": "direct",
+    "probesize": 1000000,
+    "analyzeduration": 500000,
+    "fflags": "nobuffer",
+    "max_delay": 500,
+    "localaddr": "192.168.1.5",
+    "timeout": 5000000,
+    "rtsp_transport": "tcp"
+  },
+  "restartSec": 10
+}

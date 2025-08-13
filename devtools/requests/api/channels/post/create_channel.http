@@ -1,0 +1,10 @@
+POST http://localhost:8080/api/channels
+Content-Type: application/json
+Accept: application/json
+
+{
+  "name": "sports-channel",
+  "demuxer": {
+    "input_url": "rtsp://example.com/live"
+  }
+}
