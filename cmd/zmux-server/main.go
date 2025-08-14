@@ -203,7 +203,6 @@ func main() {
 
 		ch, err := channelService.UpdateChannel(c.Request.Context(), id, &req)
 		if err != nil {
-			// If your repo returns a typed not-found error, convert here:
 			if errors.Is(err, redis.ErrChannelNotFound) {
 				_ = c.Error(err)
 				c.JSON(http.StatusNotFound, gin.H{"message": redis.ErrChannelNotFound.Error()})

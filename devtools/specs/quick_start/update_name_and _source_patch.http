@@ -1,0 +1,10 @@
+// update_name_and_source_patch.http
+PATCH http://localhost:8080/api/channels/42
+Content-Type: application/merge-patch+json
+
+{
+  "name": "live2 example",
+  "source": {
+    "uri": "rtsp://example.com/live2"
+  }
+}

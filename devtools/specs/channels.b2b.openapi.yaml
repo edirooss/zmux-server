@@ -1,0 +1,331 @@
+openapi: 3.0.3
+info:
+  title: Zmux Channels – Client API
+  version: 0.0.1
+  description: |
+    B2B API for reading Zmux channels configuration and performing partial updates.
+
+    ## Global Policy
+    - **Transport**: HTTPS only
+    - **Authentication**: HTTP Basic over TLS
+    - **Correlation**: Clients MAY send `X-Request-Id`; the server echoes it or generates one
+    - **Resource obfuscation**: When credentials are valid but the operation/resource is not allowed or does not exist, the server returns **403 Forbidden** to avoid exposing resource existence.
+
+security:
+  - basicAuth: []
+
+tags:
+  - name: Channels
+    description: Operations for managing and querying Zmux channels.
+
+paths:
+  /api/channels:
+    get:
+      tags: [Channels]
+      summary: List channels
+      operationId: listChannels
+      description: |
+        Returns all authorized channels, each represented by its current configuration.
+
+      parameters:
+        - $ref: '#/components/parameters/X-Request-Id'
+      responses:
+        '200':
+          description: OK — array of authorized `Channel` objects, each representing a single channel as defined by its configuration; empty if none.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelList'
+        '401': { $ref: '#/components/responses/401Unauthorized' }
+        '403': { $ref: '#/components/responses/403Forbidden' }        
+        '429': { $ref: '#/components/responses/429TooManyRequests' }
+        '500': { $ref: '#/components/responses/500InternalServerError' }
+        '503': { $ref: '#/components/responses/503ServiceUnavailable' }
+
+  /api/channels/{id}:
+    patch:
+      tags: [Channels]
+      summary: Partially update a channel
+      operationId: patchChannel
+      description: |
+        Applies a JSON Merge Patch (RFC 7396) to a channel configuration.
+
+        - Fields not included in the request remain unchanged.
+        - Requires `Content-Type: application/merge-patch+json`.
+
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: Unique numeric identifier for the channel.
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - $ref: '#/components/parameters/X-Request-Id'
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json:
+            schema:
+              $ref: '#/components/schemas/ChannelPatchRequest'
+      responses:
+        '204':
+          description: Channel updated successfully. No content returned.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+        '400': { $ref: '#/components/responses/400BadRequest' }
+        '401': { $ref: '#/components/responses/401Unauthorized' }
+        '403':
+          description: |
+            Access denied — channel ID does not exist (not disclosed as 404) or caller lacks permission to update the channel.
+
+            Also applies if the request includes updates to unknown/undefined  (not disclosed as 400) or unauthorized fields.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+
+        '415':
+          description: Unsupported media type — Only `application/merge-patch+json` is accepted for patch operations.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+        '422':
+          description: |
+            Unprocessable content — patch request was well-formed but semantically invalid.
+
+            - `enabled` becomes true while `name` or `source` is null.
+            - `source.auth` transitions from null to an object that does not include all of `type`, `username`, and `password` in the same patch.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+
+        '429': { $ref: '#/components/responses/429TooManyRequests' }
+        '500': { $ref: '#/components/responses/500InternalServerError' }
+        '503': { $ref: '#/components/responses/503ServiceUnavailable' }
+
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+      description: HTTP Basic authentication (username & password) over a secure TLS connection.
+
+  headers:
+    X-Request-Id:
+      description: Correlation ID used for tracing and debugging requests.
+      schema:
+        type: string
+    WWW-Authenticate:
+      description: Indicates authentication requirements for the requested resource.
+      schema:
+        type: string
+      example: Basic realm="Restricted"
+    Retry-After:
+      description: |
+        Advises clients when to retry after a rate limit (`429`) or temporary downtime (`503`).
+
+        The value MAY be:
+        - A delay in seconds (delta-seconds), e.g., `"60"`
+        - An absolute date and time in HTTP-date format, e.g., `"Wed, 21 Oct 2015 07:28:00 GMT"`
+        
+        Clients SHOULD respect this hint before retrying.
+
+      schema:
+        type: string
+        pattern: '^\d+$|^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), .+ GMT$'
+      examples:
+        deltaSeconds:
+          summary: Delay in seconds
+          value: '60'
+        httpDate:
+          summary: Specific retry date/time
+          value: 'Wed, 21 Oct 2015 07:28:00 GMT'
+
+  parameters:
+    X-Request-Id:
+      name: X-Request-Id
+      in: header
+      required: false
+      description: Optional request ID for tracking; echoed by the server.
+      schema:
+        type: string
+        maxLength: 200
+
+  responses:
+    400BadRequest:
+      description: |
+        Malformed input — invalid JSON syntax or schema type/format violations for defined fields.
+        
+        Unknown/undefined or unauthorized fields are treated as 403 Forbidden.
+
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+    401Unauthorized:
+      description: Authentication failed — missing or invalid credentials.
+      headers:
+        WWW-Authenticate:
+          $ref: '#/components/headers/WWW-Authenticate'
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+    403Forbidden:
+      description: Access denied — resource does not exist or caller lacks permission.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+    429TooManyRequests:
+      description: Rate limit exceeded — too many requests in a short time.
+      headers:
+        Retry-After:
+          $ref: '#/components/headers/Retry-After'
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+    500InternalServerError:
+      description:  Server error — unexpected condition occurred.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+    503ServiceUnavailable:
+      description: Temporary downtime — try again later.
+      headers:
+        Retry-After:
+          $ref: '#/components/headers/Retry-After'
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+
+  schemas:
+    Channel:
+      type: object
+      description: Represents a single channel, defined by its configuration.
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+          readOnly: true
+        name:
+          type: string
+          nullable: true
+          minLength: 1
+          maxLength: 100
+        source:
+          type: object
+          nullable: true
+          description: Configuration for the channel's source connection details; URI and credentials.
+          properties:
+            uri:
+              type: string
+              format: uri
+              maxLength: 2048
+            auth:
+              type: object
+              nullable: true
+              description: | 
+                Authentication for the source. `null` if none.
+
+                `source.auth` MUST be either null or an object with `type`, `username`, and `password`.
+              properties:
+                type:
+                  type: string
+                  enum: [basic, digest]
+                username:
+                  type: string
+                  minLength: 1
+                password:
+                  type: string
+                  minLength: 1
+              additionalProperties: false
+              required: [type, username, password]
+          additionalProperties: false
+          required: [uri, auth]
+        enabled:
+          type: boolean
+          description: |
+            Whether the channel is activated, i.e., restreaming from its media source is enabled.
+
+            Note: This reflects the channel’s configured state, not its real-time streaming status. If deactivated, the server will not connect to the media source for restreaming until activated.
+
+            When `enabled=true`, `name` and `source` MUST be non-null and valid.
+      additionalProperties: false
+      required: [id, name, source, enabled]
+
+    ChannelList:
+      type: array
+      description: A list of `Channel` objects.
+      items:
+        $ref: '#/components/schemas/Channel'
+
+    ChannelPatchRequest:
+      description: |
+        JSON Merge Patch body for channel updates.
+
+        Note: Unknown or unauthorized fields are rejected with **403 Forbidden** policy.
+
+      oneOf:
+        - $ref: '#/components/schemas/ChannelUpdatePatch'
+        - $ref: '#/components/schemas/ChannelClearPatch'
+
+    ChannelUpdatePatch:
+      type: object
+      description: Subset of channel fields to update.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        source:
+          type: object
+          properties:
+            uri:
+              type: string
+              format: uri
+              maxLength: 2048
+            auth:
+              type: object
+              nullable: true
+              description: |
+                  Authentication for the source. `null` if none.
+
+                  Partial updates to `source.auth` are allowed only if `auth` is already non-null in the existing configuration.
+                  To set `auth` from `null`, the patch must include `type`, `username`, and `password` together.
+
+              properties:
+                type:
+                  type: string
+                  enum: [basic, digest]
+                username:
+                  type: string
+                  minLength: 1
+                password:
+                  type: string
+                  minLength: 1
+              additionalProperties: false
+          additionalProperties: false
+        enabled:
+          type: boolean
+          description: |
+            Enables or disables connection to the media source for restreaming. This can be used to pause or resume a channel while preserving its existing settings.
+
+            When enabled=true, both name and source MUST be non-null and valid—either already configured or included in this patch.
+      additionalProperties: false
+
+    ChannelClearPatch:
+      type: object
+      description: Used to reset channel object to null/disabled.
+      additionalProperties: false
+      required: [enabled, name, source]
+      properties:
+        enabled:
+          type: boolean
+          enum: [false]
+        name:
+          nullable: true
+          enum: [null]
+        source:
+          nullable: true
+          enum: [null]
