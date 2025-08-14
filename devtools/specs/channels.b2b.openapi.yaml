@@ -96,7 +96,7 @@ paths:
               $ref: '#/components/headers/X-Request-Id'
         '422':
           description: |
-            Unprocessable content — patch request was well-formed but semantically invalid.
+            Unprocessable entity — patch request was well-formed but semantically invalid.
 
             - `enabled` becomes true while `name` or `source` is null.
             - `source.auth` transitions from null to an object that does not include all of `type`, `username`, and `password` in the same patch.
@@ -117,7 +117,7 @@ components:
 
   headers:
     X-Request-Id:
-      description: Correlation ID used for tracing and debugging requests.
+      description: Opaque correlation ID for this request (echoed by the server; generated if absent). Used for tacking requests.
       schema:
         type: string
     WWW-Authenticate:
@@ -132,12 +132,16 @@ components:
         The value MAY be:
         - A delay in seconds (delta-seconds), e.g., `"60"`
         - An absolute date and time in HTTP-date format, e.g., `"Wed, 21 Oct 2015 07:28:00 GMT"`
-        
-        Clients SHOULD respect this hint before retrying.
 
+        Clients SHOULD respect this hint before retrying.
       schema:
-        type: string
-        pattern: '^\d+$|^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), .+ GMT$'
+        oneOf:
+          - type: string
+            pattern: '^\d+$'
+            description: Delay in seconds
+          - type: string
+            pattern: '^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), .+ GMT$'
+            description: Specific retry date/time in HTTP-date format
       examples:
         deltaSeconds:
           summary: Delay in seconds
@@ -206,17 +210,19 @@ components:
         id:
           type: integer
           format: int64
+          description: Unique numeric channel identifier.
           minimum: 1
           readOnly: true
         name:
           type: string
           nullable: true
+          description: Channel display name.
           minLength: 1
           maxLength: 100
         source:
           type: object
           nullable: true
-          description: Configuration for the channel's source connection details; URI and credentials.
+          description: Channel source connection details; URI and credentials.
           properties:
             uri:
               type: string
@@ -232,12 +238,15 @@ components:
               properties:
                 type:
                   type: string
+                  description: Authentication scheme.
                   enum: [basic, digest]
                 username:
                   type: string
+                  description: Username.
                   minLength: 1
                 password:
                   type: string
+                  description: Plain-text password.
                   minLength: 1
               additionalProperties: false
               required: [type, username, password]
@@ -248,7 +257,8 @@ components:
           description: |
             Whether the channel is activated, i.e., restreaming from its media source is enabled.
 
-            Note: This reflects the channel’s configured state, not its real-time streaming status. If deactivated, the server will not connect to the media source for restreaming until activated.
+            Note: This reflects the channel’s configured state, not its real-time streaming status. 
+            If deactivated, the server will not connect to the media source for restreaming until activated.
 
             When `enabled=true`, `name` and `source` MUST be non-null and valid.
       additionalProperties: false
