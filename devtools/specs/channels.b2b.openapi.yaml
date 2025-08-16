@@ -307,8 +307,10 @@ components:
 
                 ### Protocol-Specific Notes
 
-                - **RTSP URIs** MUST conform to [RFC 2326].
-                - Use the `rtsps` scheme for RTSP 1.0 over TLS.
+                - **RTSP URIs** MUST conform to [RFC 2326]. RTSP support & versioning:
+                    - Supported: RTSP **1.0** (RFC 2326), including `rtsps://` (RTSP 1.0 over TLS).
+                    - Not supported: RTSP **2.0** (RFC 7826).
+                    - For `rtsps://`, the service **forces TCP interleaving** so that control and media traverse the TLS connection; if the server requires UDP under `rtsps://`, the connection fails.
 
                 ### Access Policy (Allow/Deny Lists)
 
