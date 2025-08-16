@@ -20,7 +20,7 @@ paths:
   /api/channels:
     get:
       tags: [Channels]
-      summary: List channels
+      summary: List channel configuration
       operationId: listChannels
       description: |
         Returns all channels visible to the client.
@@ -34,8 +34,11 @@ paths:
         '200':
           description: OK — array of authorized `Channel` objects, each representing a single channel as defined by its configuration; empty if none.
           headers:
+            Cache-Control:
+              $ref: '#/components/headers/Cache-Control-Channels'
             X-Request-Id:
               $ref: '#/components/headers/X-Request-Id'
+
           content:
             application/json:
               schema:
@@ -84,6 +87,9 @@ paths:
         '204':
           description: No Content — Channel updated successfully.
           headers:
+            Cache-Control:
+              $ref: '#/components/headers/Cache-Control-NoStore'
+
             X-Request-Id:
               $ref: '#/components/headers/X-Request-Id'
         '400': { $ref: '#/components/responses/400BadRequest' }
@@ -128,6 +134,9 @@ paths:
           headers:
             X-Request-Id:
               $ref: '#/components/headers/X-Request-Id'
+            Cache-Control:
+              $ref: '#/components/headers/Cache-Control-NoStore'
+          
           content:
             application/json:
               schema:
@@ -160,6 +169,17 @@ components:
       description: Opaque correlation ID for this request (the server echoes `X-Request-Id` or generates one if absent). Used for request correlation and troubleshooting.
       schema:
         type: string
+    Cache-Control-Channels:
+      description: Cache-Control policy for /channels endpoint.
+      schema:
+        type: string
+        default: private, max-age=60, must-revalidate
+    Cache-Control-NoStore:
+      description: Cache-Control policy for sensitive/dynamic endpoints.
+      schema:
+        type: string
+        default: no-store
+
     WWW-Authenticate:
       description: Indicates authentication requirements for the requested resource.
       schema:
