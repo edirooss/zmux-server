@@ -375,6 +375,6 @@ components:
           nullable: true
           enum: [null]
         source:
-          type: string
+          type: object
           nullable: true
           enum: [null]
