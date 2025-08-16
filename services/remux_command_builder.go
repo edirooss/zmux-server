@@ -88,9 +88,9 @@ func shQuote(s string) string {
 //
 //	Top-level:        --id
 //	Stream mapping:   --map-video --map-audio --map-data
-//	Source:          --input-url --avioflags --probesize --analyzeduration --fflags
+//	Input:          --input-url --avioflags --probesize --analyzeduration --fflags
 //	                  --max-delay --input-localaddr --timeout --rtsp-transport
-//	Sink:            --output-url --output-localaddr --pkt-size
+//	Output:            --output-url --output-localaddr --pkt-size
 //
 // Notes:
 //   - Bool defaults are true for map-* flags; we only emit when disabling.
@@ -102,7 +102,7 @@ func BuildRemuxExecArgs(ch *models.ZmuxChannel) []string {
 	builder.WithString("--id", strconv.FormatInt(ch.ID, 10))
 	// (LogLevel is part of Config, not ZmuxChannel; omit here.)
 
-	// --- Source (strings; omit if empty) ---
+	// --- Input (strings; omit if empty) ---
 	builder.
 		WithString("--input-url", ch.Input.URL).
 		WithString("--avioflags", ch.Input.AVIOFlags).
@@ -114,7 +114,7 @@ func BuildRemuxExecArgs(ch *models.ZmuxChannel) []string {
 		WithUint("--timeout", ch.Input.Timeout).
 		WithString("--rtsp-transport", ch.Input.RTSPTransport)
 
-	// --- Sink ---
+	// --- Output ---
 	builder.
 		WithString("--output-url", ch.Output.URL).
 		WithString("--output-localaddr", ch.Output.Localaddr).

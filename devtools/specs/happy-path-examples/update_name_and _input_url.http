@@ -1,4 +1,4 @@
-// update_name_and_source_patch.http
+// update_name_and _input_url.http
 // assumes request sent after full_update_patch.http and needs to clear auth
 PATCH http://localhost:8080/api/channels/42
 Content-Type: application/merge-patch+json

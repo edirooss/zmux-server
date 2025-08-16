@@ -104,9 +104,9 @@ paths:
           description: |
             Unprocessable Content — patch request was well-formed but semantically invalid.
 
-            - After applying the patch, `enabled` is `true` while either `name` or `source` is `null`.
-            - After applying the patch, `source.auth` is non-null but missing `username` (invalid; must include `username`).
-            - After applying the patch, `source.url` contains `userinfo` and `source.auth` is non-null (never mix both).
+            - After applying the patch, `enabled` is `true` while either `name` or `input` is `null`.
+            - After applying the patch, `input.auth` is non-null but missing `username` (invalid; must include `username`).
+            - After applying the patch, `input.url` contains `userinfo` and `input.auth` is non-null (never mix both).
           headers:
             X-Request-Id:
               $ref: '#/components/headers/X-Request-Id'
@@ -281,10 +281,10 @@ components:
           description: Channel display name.
           minLength: 1
           maxLength: 100
-        source:
+        input:
           type: object
           nullable: true
-          description: Channel source connection details; URL and credentials.
+          description: Channel input — source connection details; URL and credentials.
           properties:
             url:
               type: string
@@ -296,7 +296,7 @@ components:
               type: object
               nullable: true
               description: |
-                Authentication for the source. `null` if none.
+                Input source credentials. Set to `null` when no authentication is required.
               properties:
                 username:
                   type: string
@@ -314,10 +314,10 @@ components:
         enabled:
           type: boolean
           description: |
-            Indicates whether the channel is enabled — that is, whether media reading from the source is enabled.
-            When the channel is disabled, the server does not attempt to connect to the media source.
+            Indicates whether the channel is enabled — that is, whether media reading from the input source is enabled.
+            When the channel is disabled, the server does not attempt to connect to the input media source.
 
-            When `enabled` is `true`, both `name` and `source` are non-null.
+            When `enabled` is `true`, both `name` and `input` are non-null.
       additionalProperties: false
       required: [id, enabled]
 
@@ -347,7 +347,7 @@ components:
           type: string
           minLength: 1
           maxLength: 100
-        source:
+        input:
           type: object
           properties:
             url:
@@ -367,8 +367,8 @@ components:
                 
                 RFC 3986 URI `userinfo` (e.g., `username[:password]@`) — supported but **discouraged**.
 
-                Credentials MUST use either URI `userinfo` OR `source.auth`, never both.
-                  - Preferred: Use `source.auth` for credentials
+                Credentials MUST use either URI `userinfo` OR `input.auth`, never both.
+                  - Preferred: Use `input.auth` for credentials
                   - If both would exist after patch → `422 Unprocessable Content`
                   - If `userinfo` is used, it MUST be encoded per RFC 3986 §3.2.1.
 
@@ -394,8 +394,8 @@ components:
               type: object
               nullable: true
               description: |
-                Authentication for the source.
-                - Use `null` to clear credentials.
+                Input source credentials.
+                - Use `null` when no authentication is required or to clear credentials.
                 - Use an object to add or update credentials.
                 
                 - Authentication MUST include a `username` (from patch or stored).  
@@ -414,17 +414,17 @@ components:
         enabled:
           type: boolean
           description: |
-            Enables/disables media reading from the source. This is used to pause or resume a channel while preserving its existing settings.
+            Enables/disables media reading from the input source. This is used to pause or resume a channel while preserving its existing settings.
 
-            - When `enabled: true`, both `name` and `source` must be non-null and valid — either already configured or included in this patch. Violations result in a `422 Unprocessable Content`.
-            - When `enabled: false`, the server will not attempt to connect to the media source.
+            - When `enabled: true`, both `name` and `input` must be non-null and valid — either already configured or included in this patch. Violations result in a `422 Unprocessable Content`.
+            - When `enabled: false`, the server will not attempt to connect to the input media source.
       additionalProperties: false
 
     ChannelClearPatch:
       type: object
       description: Used to reset channel object to null/disabled.
       additionalProperties: false
-      required: [enabled, name, source]
+      required: [enabled, name, input]
       properties:
         enabled:
           type: boolean
@@ -433,7 +433,7 @@ components:
           type: string
           nullable: true
           enum: [null]
-        source:
+        input:
           type: object
           nullable: true
           enum: [null]
@@ -451,9 +451,9 @@ components:
         online:
           type: boolean
           description: |
-            Indicates whether media reading from the source is currently successful.
+            Indicates whether media reading from the input source is currently successful.
 
-            - `true` ⇒ the server is currently reading/processing media successfully from the source.
+            - `true` ⇒ the server is currently reading/processing media successfully from the input source.
             - `false` ⇒ the server is **not** reading media successfully (re/connecting, network/connection issues (timeouts, auth), corrupted/unreadable media, any other errors in media reading/processing).
 
             Note: If `Channel.enabled` is turned off, the server won’t attempt to read media — so online will always report as false.
