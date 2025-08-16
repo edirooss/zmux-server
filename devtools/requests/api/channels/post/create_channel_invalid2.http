@@ -6,7 +6,7 @@ Accept: application/json
   "name": "full-config-channel",
   "map_video": false,
   "map_audio": true,
-  "demuxer": {
+  "source": {
     "input_url": "rtsp://example.com/full",
     "aviofags": "direct",
     "probesize": 1000000,

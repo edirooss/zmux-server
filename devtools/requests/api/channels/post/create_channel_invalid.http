@@ -4,5 +4,5 @@ Accept: application/json
 
 {
   "name": "invalid-channel",
-  "demuxer": {}
+  "source": {}
 }

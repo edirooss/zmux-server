@@ -7,7 +7,7 @@ Accept: application/json
     "map_video": true,
     "map_audio": true,
     "map_data": true,
-    "demuxer": {
+    "source": {
         "input_url": "udp://localhost:12340",
         "avioflags": "",
         "probesize": null,
@@ -18,7 +18,7 @@ Accept: application/json
         "timeout": null,
         "rtsp_transport": ""
     },
-    "muxer": {
+    "sink": {
         "output_url": "rtsp://blabla.com",
         "localaddr": "",
         "pkt_size": null

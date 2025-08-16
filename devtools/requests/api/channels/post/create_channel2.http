@@ -7,7 +7,7 @@ Accept: application/json
   "map_video": false,
   "map_audio": true,
   "map_data": false,
-  "demuxer": {
+  "source": {
     "input_url": "rtsp://example.com/full",
     "avioflags": "direct",
     "probesize": 1000000,
@@ -18,7 +18,7 @@ Accept: application/json
     "timeout": 5000000,
     "rtsp_transport": "tcp"
   },
-  "muxer": {
+  "sink": {
     "output_url": "/tmp/output.ts",
     "localaddr": "192.168.1.10",
     "pkt_size": 2048

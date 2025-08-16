@@ -5,11 +5,7 @@ package models
 type UpdateZmuxChannelReq struct {
 	Name *string `json:"name,omitempty" binding:"omitempty,min=1,max=100"`
 
-	MapVideo *bool `json:"map_video,omitempty"`
-	MapAudio *bool `json:"map_audio,omitempty"`
-	MapData  *bool `json:"map_data,omitempty"`
-
-	Demuxer *struct {
+	Source *struct {
 		InputURL        *string `json:"input_url,omitempty"`
 		AVIOFlags       *string `json:"avioflags,omitempty"`
 		ProbeSize       *uint   `json:"probesize,omitempty"`
@@ -19,13 +15,16 @@ type UpdateZmuxChannelReq struct {
 		LocalAddr       *string `json:"localaddr,omitempty"`
 		Timeout         *uint   `json:"timeout,omitempty"`
 		RTSPTransport   *string `json:"rtsp_transport,omitempty"`
-	} `json:"demuxer,omitempty"`
+	} `json:"source,omitempty"`
 
-	Muxer *struct {
+	Sink *struct {
 		OutputURL *string `json:"output_url,omitempty"`
 		LocalAddr *string `json:"localaddr,omitempty"`
 		PktSize   *uint   `json:"pkt_size,omitempty"`
-	} `json:"muxer,omitempty"`
+	} `json:"sink,omitempty"`
+	MapVideo *bool `json:"map_video,omitempty"`
+	MapAudio *bool `json:"map_audio,omitempty"`
+	MapData  *bool `json:"map_data,omitempty"`
 
 	Enabled    *bool `json:"enabled,omitempty"`
 	RestartSec *uint `json:"restart_sec,omitempty"`
@@ -47,45 +46,45 @@ func (u *UpdateZmuxChannelReq) ApplyTo(ch *ZmuxChannel) {
 		ch.MapData = *u.MapData
 	}
 
-	if u.Demuxer != nil {
-		if u.Demuxer.InputURL != nil {
-			ch.Demuxer.InputURL = *u.Demuxer.InputURL
+	if u.Source != nil {
+		if u.Source.InputURL != nil {
+			ch.Source.InputURL = *u.Source.InputURL
 		}
-		if u.Demuxer.AVIOFlags != nil {
-			ch.Demuxer.AVIOFlags = *u.Demuxer.AVIOFlags
+		if u.Source.AVIOFlags != nil {
+			ch.Source.AVIOFlags = *u.Source.AVIOFlags
 		}
-		if u.Demuxer.ProbeSize != nil {
-			ch.Demuxer.Probesize = *u.Demuxer.ProbeSize
+		if u.Source.ProbeSize != nil {
+			ch.Source.Probesize = *u.Source.ProbeSize
 		}
-		if u.Demuxer.AnalyzeDuration != nil {
-			ch.Demuxer.Analyzeduration = *u.Demuxer.AnalyzeDuration
+		if u.Source.AnalyzeDuration != nil {
+			ch.Source.Analyzeduration = *u.Source.AnalyzeDuration
 		}
-		if u.Demuxer.FFlags != nil {
-			ch.Demuxer.FFlags = *u.Demuxer.FFlags
+		if u.Source.FFlags != nil {
+			ch.Source.FFlags = *u.Source.FFlags
 		}
-		if u.Demuxer.MaxDelay != nil {
-			ch.Demuxer.MaxDelay = *u.Demuxer.MaxDelay
+		if u.Source.MaxDelay != nil {
+			ch.Source.MaxDelay = *u.Source.MaxDelay
 		}
-		if u.Demuxer.LocalAddr != nil {
-			ch.Demuxer.Localaddr = *u.Demuxer.LocalAddr
+		if u.Source.LocalAddr != nil {
+			ch.Source.Localaddr = *u.Source.LocalAddr
 		}
-		if u.Demuxer.Timeout != nil {
-			ch.Demuxer.Timeout = *u.Demuxer.Timeout
+		if u.Source.Timeout != nil {
+			ch.Source.Timeout = *u.Source.Timeout
 		}
-		if u.Demuxer.RTSPTransport != nil {
-			ch.Demuxer.RTSPTransport = *u.Demuxer.RTSPTransport
+		if u.Source.RTSPTransport != nil {
+			ch.Source.RTSPTransport = *u.Source.RTSPTransport
 		}
 	}
 
-	if u.Muxer != nil {
-		if u.Muxer.OutputURL != nil {
-			ch.Muxer.OutputURL = *u.Muxer.OutputURL
+	if u.Sink != nil {
+		if u.Sink.OutputURL != nil {
+			ch.Sink.OutputURL = *u.Sink.OutputURL
 		}
-		if u.Muxer.LocalAddr != nil {
-			ch.Muxer.Localaddr = *u.Muxer.LocalAddr
+		if u.Sink.LocalAddr != nil {
+			ch.Sink.Localaddr = *u.Sink.LocalAddr
 		}
-		if u.Muxer.PktSize != nil {
-			ch.Muxer.PktSize = *u.Muxer.PktSize
+		if u.Sink.PktSize != nil {
+			ch.Sink.PktSize = *u.Sink.PktSize
 		}
 	}
 

@@ -4,7 +4,7 @@ Accept: application/json
 
 {
   "name": "sports-channel",
-  "demuxer": {
+  "source": {
     "input_url": "rtsp://example.com/live"
   }
 }
