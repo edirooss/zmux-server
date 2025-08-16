@@ -109,6 +109,45 @@ paths:
         '500': { $ref: '#/components/responses/500InternalServerError' }
         '503': { $ref: '#/components/responses/503ServiceUnavailable' }
 
+  /api/channels/status:
+    get:
+      tags: [Channels]
+      summary: List channel status
+      operationId: listChannelStatuses
+      description: |
+        Returns the online/offline runtime status for all channels visible to the client.
+
+        - `200` with `[]` when no channels are authorized.
+        - `404` if the client is not permitted to use this endpoint (obscure existence).
+
+      parameters:
+        - $ref: '#/components/parameters/X-Request-Id'
+      responses:
+        '200':
+          description: OK — array of authorized `ChannelStatus` objects; empty if none.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelStatusList'
+              examples:
+                sample:
+                  summary: Example status list
+                  value:
+                    - id: 1
+                      online: true
+                    - id: 2
+                      online: false
+                    - id: 7
+                      online: false
+        '401': { $ref: '#/components/responses/401Unauthorized' }
+        '404': { $ref: '#/components/responses/404NotFound' }
+        '429': { $ref: '#/components/responses/429TooManyRequests' }
+        '500': { $ref: '#/components/responses/500InternalServerError' }
+        '503': { $ref: '#/components/responses/503ServiceUnavailable' }
+
 components:
   securitySchemes:
     basicAuth:
@@ -378,3 +417,33 @@ components:
           type: object
           nullable: true
           enum: [null]
+
+    ChannelStatus:
+      type: object
+      description: Runtime status for a single channel.
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Unique numeric channel identifier.
+          readOnly: true
+        online:
+          type: boolean
+          description: |
+            Indicates whether media reading from the source is currently successful.
+
+            - `true` ⇒ the server is currently reading/processing media successfully from the source.
+            - `false` ⇒ the server is **not** reading media successfully (re/connecting, network/connection issues (timeouts, auth), corrupted/unreadable media, any other errors in media reading/processing).
+
+            Note: If `Channel.enabled` is turned off, the server won’t attempt to read media — so online will always report as false.
+      
+      additionalProperties: false
+      required: [id, online]
+
+    ChannelStatusList:
+      type: array
+      description: A list of `ChannelStatus` objects.
+      items:
+        $ref: '#/components/schemas/ChannelStatus'
+
