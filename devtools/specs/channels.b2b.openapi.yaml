@@ -23,7 +23,10 @@ paths:
       summary: List channels
       operationId: listChannels
       description: |
-        Returns all channels visible to the client; `[]` if the client has access to none.
+        Returns all channels visible to the client.
+
+        - `200` with `[]` when no channels are authorized.
+        - `404` if the client is not permitted to use this endpoint (obscure existence).
 
       parameters:
         - $ref: '#/components/parameters/X-Request-Id'
@@ -54,9 +57,10 @@ paths:
         ### RFC 7396 behavior spelled out
         - Omitting a field → the field **remains unchanged**.
         - Setting a field to `null` → the field is **cleared/removed**.
-        - Setting an object to `{}` → merges nothing (no-op).
-          - Successful patches return `204 No Content` regardless of whether any field changed.
-          - If the current target is `null` or a non-object → the result becomes `{}` per RFC 7396.
+        - If a field is an **object** and you set it to `{}`:
+          - If the current value is an object → **no-op** (unchanged).
+          - If the current value is `null` or non-object → it becomes `{}` (created).
+        - Successful patches return `204 No Content` even if nothing changed.
         - Objects are merged recursively; nested fields follow the same rules.
         - Requires `Content-Type: application/merge-patch+json`.
 
@@ -94,8 +98,9 @@ paths:
           description: |
             Unprocessable Content — patch request was well-formed but semantically invalid.
 
-            - `enabled` is set to `true` while either `name` or `source` is `null`.
-            - `source.auth` changes from `null` to an object with only `password` (without `username`; required).
+            - After applying the patch, `enabled` is `true` while either `name` or `source` is `null`.
+            - After applying the patch, `source.auth` is non-null but missing `username` (invalid; must include `username`).
+            - After applying the patch, `source.uri` contains `userinfo` and `source.auth` is non-null (never mix both).
           headers:
             X-Request-Id:
               $ref: '#/components/headers/X-Request-Id'
@@ -127,7 +132,7 @@ components:
 
         The value MAY be either:
         - A delay in seconds (delta-seconds), e.g., `"60"`.
-        - An absolute date and time in HTTP-date format, e.g., `"Wed, 21 Oct 2015 07:28:00 GMT"`.
+        - An absolute date/time in HTTP-date (IMF-fixdate) format, e.g., "Wed, 21 Oct 2015 07:28:00 GMT".
 
         Clients SHOULD respect this hint before retrying.
       schema:
@@ -136,8 +141,7 @@ components:
             pattern: '^\d+$'
             description: Delay in seconds
           - type: string
-            pattern: '^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), .+ GMT$'
-            description: Specific retry date/time in HTTP-date format
+            description: Specific retry date/time in IMF-fixdate (HTTP-date) format
       examples:
         deltaSeconds:
           summary: Delay in seconds
@@ -226,6 +230,7 @@ components:
             uri:
               type: string
               format: uri
+              pattern: '^[A-Za-z][A-Za-z0-9+.-]*:'
               description: A URI that identifies the source or destination of a multimedia stream.
               maxLength: 2048
             auth:
@@ -289,6 +294,7 @@ components:
             uri:
               type: string
               format: uri
+              pattern: '^[A-Za-z][A-Za-z0-9+.-]*:'
               maxLength: 2048
               description: >
                 An **absolute URI** that specifies the source/destination of a multimedia stream.
@@ -299,10 +305,12 @@ components:
                 URI syntax violations (e.g., malformed encoding, invalid structure) → `400 Bad Request`.
 
                 ### Authentication
+                
+                RFC 3986 URI `userinfo` (e.g., `username[:password]@`) — supported but **discouraged**.
 
-                Credentials in the URI `userinfo` (e.g., `username[:password]@`) are allowed but discouraged; prefer `source.auth`. **Never mix both**.
-                  - If, after applying this PATCH (considering existing configuration + patch body), both a URI with `userinfo`
-                    and a non-null `source.auth` would be present → `422 Unprocessable Content`.
+                Credentials MUST use either URI `userinfo` OR `source.auth`, never both.
+                  - Preferred: Use `source.auth` for credentials
+                  - If both would exist after patch → `422 Unprocessable Content`
                   - If `userinfo` is used, it MUST be encoded per RFC 3986 §3.2.1.
 
                 ### Protocol-Specific Notes
@@ -328,11 +336,12 @@ components:
               nullable: true
               description: |
                 Authentication for the source.
-                - If `null`: remove authentication.
-                - If object: add or update credentials.
-
-                A `password` cannot be set unless a `username` is included in the patch
-                or already exists in the stored configuration. Violations result in `422 Unprocessable Content`.
+                - Use `null` to clear credentials.
+                - Use an object to add or update credentials.
+                
+                - Authentication MUST include a `username` (from patch or stored).  
+                  A `password` MUST NOT exist without it.  
+                  Otherwise → `422 Unprocessable Content`.
               properties:
                 username:
                   type: string
@@ -362,8 +371,10 @@ components:
           type: boolean
           enum: [false]
         name:
+          type: string
           nullable: true
           enum: [null]
         source:
+          type: string
           nullable: true
           enum: [null]
