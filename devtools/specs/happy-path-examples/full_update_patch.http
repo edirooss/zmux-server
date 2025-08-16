@@ -3,13 +3,12 @@ PATCH http://localhost:8080/api/channels/42
 Content-Type: application/merge-patch+json
 
 {
-  "name": "live example",
+  "name": "Live1",
   "source": {
-    "uri": "rtsp://example.com/live",
+    "uri": "rtsp://172.16.5.20/live.sdp",
     "auth": {
-      "type": "digest",
-      "username": "streamUser",
-      "password": "s3cr3t"
+      "username": "zmuxUser",
+      "password": "Aa1234!@#$"
     }
   },
   "enabled": true
