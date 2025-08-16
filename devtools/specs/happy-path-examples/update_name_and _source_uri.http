@@ -6,7 +6,7 @@ Content-Type: application/merge-patch+json
 {
   "name": "Live2",
   "source": {
-    "uri": "rtsp://203.0.113.45:5544/streaming/video1",
+    "url": "rtsp://203.0.113.45:5544/streaming/video1",
     "auth": null
   }
 }

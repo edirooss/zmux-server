@@ -106,7 +106,7 @@ paths:
 
             - After applying the patch, `enabled` is `true` while either `name` or `source` is `null`.
             - After applying the patch, `source.auth` is non-null but missing `username` (invalid; must include `username`).
-            - After applying the patch, `source.uri` contains `userinfo` and `source.auth` is non-null (never mix both).
+            - After applying the patch, `source.url` contains `userinfo` and `source.auth` is non-null (never mix both).
           headers:
             X-Request-Id:
               $ref: '#/components/headers/X-Request-Id'
@@ -284,13 +284,13 @@ components:
         source:
           type: object
           nullable: true
-          description: Channel source connection details; URI and credentials.
+          description: Channel source connection details; URL and credentials.
           properties:
-            uri:
+            url:
               type: string
               format: uri
               pattern: '^[A-Za-z][A-Za-z0-9+.-]*:'
-              description: A URI that identifies the source or destination of a multimedia stream.
+              description: A URL that identifies the source or destination of a multimedia stream.
               maxLength: 2048
             auth:
               type: object
@@ -310,7 +310,7 @@ components:
               additionalProperties: false
               required: [username]
           additionalProperties: false
-          required: [uri]
+          required: [url]
         enabled:
           type: boolean
           description: |
@@ -350,13 +350,13 @@ components:
         source:
           type: object
           properties:
-            uri:
+            url:
               type: string
               format: uri
               pattern: '^[A-Za-z][A-Za-z0-9+.-]*:'
               maxLength: 2048
               description: >
-                An **absolute URI** that specifies the source/destination of a multimedia stream.
+                An **absolute URL** that specifies the source/destination of a multimedia stream.
 
                 MUST follow the generic URI syntax [RFC 3986].
                 MAY be further constrained or extended by the semantics of the specific protocol (scheme).
