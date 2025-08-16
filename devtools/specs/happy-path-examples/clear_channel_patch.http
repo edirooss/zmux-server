@@ -5,5 +5,5 @@ Content-Type: application/merge-patch+json
 {
   "enabled": false,
   "name": null,
-  "source": null
+  "input": null
 }

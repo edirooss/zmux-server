@@ -25,7 +25,7 @@ type CreateZmuxChannelReq struct {
 		LocalAddr       string `json:"localaddr"       default:""`
 		Timeout         uint   `json:"timeout"         default:"3000000"`
 		RTSPTransport   string `json:"rtsp_transport"  default:""`
-	} `json:"source"`
+	} `json:"input"`
 	Sink struct {
 		OutputURL string `json:"url" default:"/dev/null"`
 		LocalAddr string `json:"localaddr"  default:""`
@@ -33,7 +33,7 @@ type CreateZmuxChannelReq struct {
 		MapVideo  bool   `json:"map_video" default:"true"`
 		MapAudio  bool   `json:"map_audio" default:"true"`
 		MapData   bool   `json:"map_data"  default:"true"`
-	} `json:"sink"`
+	} `json:"output"`
 	// ----------------------------
 
 	// Systemd settings
@@ -53,22 +53,22 @@ func (req CreateZmuxChannelReq) ToChannel(id int64) *ZmuxChannel {
 	ch.ID = id
 	ch.Name = req.Name
 
-	ch.Source.URL = req.Source.InputURL
-	ch.Source.AVIOFlags = req.Source.AVIOFlags
-	ch.Source.Probesize = req.Source.ProbeSize
-	ch.Source.Analyzeduration = req.Source.AnalyzeDuration
-	ch.Source.FFlags = req.Source.FFlags
-	ch.Source.MaxDelay = req.Source.MaxDelay
-	ch.Source.Localaddr = req.Source.LocalAddr
-	ch.Source.Timeout = req.Source.Timeout
-	ch.Source.RTSPTransport = req.Source.RTSPTransport
+	ch.Input.URL = req.Source.InputURL
+	ch.Input.AVIOFlags = req.Source.AVIOFlags
+	ch.Input.Probesize = req.Source.ProbeSize
+	ch.Input.Analyzeduration = req.Source.AnalyzeDuration
+	ch.Input.FFlags = req.Source.FFlags
+	ch.Input.MaxDelay = req.Source.MaxDelay
+	ch.Input.Localaddr = req.Source.LocalAddr
+	ch.Input.Timeout = req.Source.Timeout
+	ch.Input.RTSPTransport = req.Source.RTSPTransport
 
-	ch.Sink.URL = req.Sink.OutputURL
-	ch.Sink.Localaddr = req.Sink.LocalAddr
-	ch.Sink.PktSize = req.Sink.PktSize
-	ch.Sink.MapVideo = req.Sink.MapVideo
-	ch.Sink.MapAudio = req.Sink.MapAudio
-	ch.Sink.MapData = req.Sink.MapData
+	ch.Output.URL = req.Sink.OutputURL
+	ch.Output.Localaddr = req.Sink.LocalAddr
+	ch.Output.PktSize = req.Sink.PktSize
+	ch.Output.MapVideo = req.Sink.MapVideo
+	ch.Output.MapAudio = req.Sink.MapAudio
+	ch.Output.MapData = req.Sink.MapData
 
 	ch.Enabled = req.Enabled
 	ch.RestartSec = req.RestartSec

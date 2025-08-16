@@ -104,27 +104,27 @@ func BuildRemuxExecArgs(ch *models.ZmuxChannel) []string {
 
 	// --- Source (strings; omit if empty) ---
 	builder.
-		WithString("--input-url", ch.Source.URL).
-		WithString("--avioflags", ch.Source.AVIOFlags).
-		WithUint("--probesize", ch.Source.Probesize).
-		WithUint("--analyzeduration", ch.Source.Analyzeduration).
-		WithString("--fflags", ch.Source.FFlags).
-		WithInt("--max-delay", ch.Source.MaxDelay).
-		WithString("--input-localaddr", ch.Source.Localaddr).
-		WithUint("--timeout", ch.Source.Timeout).
-		WithString("--rtsp-transport", ch.Source.RTSPTransport)
+		WithString("--input-url", ch.Input.URL).
+		WithString("--avioflags", ch.Input.AVIOFlags).
+		WithUint("--probesize", ch.Input.Probesize).
+		WithUint("--analyzeduration", ch.Input.Analyzeduration).
+		WithString("--fflags", ch.Input.FFlags).
+		WithInt("--max-delay", ch.Input.MaxDelay).
+		WithString("--input-localaddr", ch.Input.Localaddr).
+		WithUint("--timeout", ch.Input.Timeout).
+		WithString("--rtsp-transport", ch.Input.RTSPTransport)
 
 	// --- Sink ---
 	builder.
-		WithString("--output-url", ch.Sink.URL).
-		WithString("--output-localaddr", ch.Sink.Localaddr).
-		WithUint("--pkt-size", ch.Sink.PktSize)
+		WithString("--output-url", ch.Output.URL).
+		WithString("--output-localaddr", ch.Output.Localaddr).
+		WithUint("--pkt-size", ch.Output.PktSize)
 
 	// --- Stream mapping (bool defaults true) ---
 	builder.
-		WithBoolDefault("--map-video", ch.Sink.MapVideo, true).
-		WithBoolDefault("--map-audio", ch.Sink.MapAudio, true).
-		WithBoolDefault("--map-data", ch.Sink.MapData, true)
+		WithBoolDefault("--map-video", ch.Output.MapVideo, true).
+		WithBoolDefault("--map-audio", ch.Output.MapAudio, true).
+		WithBoolDefault("--map-data", ch.Output.MapData, true)
 
 	return builder.BuildArgs()
 }

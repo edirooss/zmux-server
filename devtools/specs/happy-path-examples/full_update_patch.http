@@ -4,7 +4,7 @@ Content-Type: application/merge-patch+json
 
 {
   "name": "Live1",
-  "source": {
+  "input": {
     "url": "rtsp://172.16.5.20/live.sdp",
     "auth": {
       "username": "zmuxUser",

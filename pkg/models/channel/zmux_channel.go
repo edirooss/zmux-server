@@ -6,7 +6,7 @@ type ZmuxChannel struct {
 	Name string `json:"name"`
 
 	// --- Remux configuration ---
-	Source struct {
+	Input struct {
 		URL             string `json:"url"`
 		AVIOFlags       string `json:"avioflags"`
 		Probesize       uint   `json:"probesize"`
@@ -16,15 +16,15 @@ type ZmuxChannel struct {
 		Localaddr       string `json:"localaddr"`
 		Timeout         uint   `json:"timeout"`
 		RTSPTransport   string `json:"rtsp_transport"`
-	} `json:"source"`
-	Sink struct {
+	} `json:"input"`
+	Output struct {
 		URL       string `json:"url"`
 		Localaddr string `json:"localaddr"`
 		PktSize   uint   `json:"pkt_size"`
 		MapVideo  bool   `json:"map_video"`
 		MapAudio  bool   `json:"map_audio"`
 		MapData   bool   `json:"map_data"`
-	} `json:"sink"`
+	} `json:"output"`
 	// ----------------------------
 
 	// Systemd settings

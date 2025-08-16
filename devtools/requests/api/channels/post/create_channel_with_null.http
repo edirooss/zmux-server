@@ -4,7 +4,7 @@ Accept: application/json
 
 {
     "name": "Electrical Engineering2",
-    "source": {
+    "input": {
         "url": "udp://localhost:12340",
         "avioflags": "",
         "probesize": null,
@@ -15,7 +15,7 @@ Accept: application/json
         "timeout": null,
         "rtsp_transport": ""
     },
-    "sink": {
+    "output": {
         "url": "rtsp://blabla.com",
         "localaddr": "",
         "pkt_size": null,

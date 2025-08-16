@@ -15,7 +15,7 @@ type UpdateZmuxChannelReq struct {
 		LocalAddr       *string `json:"localaddr,omitempty"`
 		Timeout         *uint   `json:"timeout,omitempty"`
 		RTSPTransport   *string `json:"rtsp_transport,omitempty"`
-	} `json:"source,omitempty"`
+	} `json:"input,omitempty"`
 
 	Sink *struct {
 		OutputURL *string `json:"url,omitempty"`
@@ -24,7 +24,7 @@ type UpdateZmuxChannelReq struct {
 		MapVideo  *bool   `json:"map_video,omitempty"`
 		MapAudio  *bool   `json:"map_audio,omitempty"`
 		MapData   *bool   `json:"map_data,omitempty"`
-	} `json:"sink,omitempty"`
+	} `json:"output,omitempty"`
 
 	Enabled    *bool `json:"enabled,omitempty"`
 	RestartSec *uint `json:"restart_sec,omitempty"`
@@ -38,52 +38,52 @@ func (u *UpdateZmuxChannelReq) ApplyTo(ch *ZmuxChannel) {
 
 	if u.Source != nil {
 		if u.Source.InputURL != nil {
-			ch.Source.URL = *u.Source.InputURL
+			ch.Input.URL = *u.Source.InputURL
 		}
 		if u.Source.AVIOFlags != nil {
-			ch.Source.AVIOFlags = *u.Source.AVIOFlags
+			ch.Input.AVIOFlags = *u.Source.AVIOFlags
 		}
 		if u.Source.ProbeSize != nil {
-			ch.Source.Probesize = *u.Source.ProbeSize
+			ch.Input.Probesize = *u.Source.ProbeSize
 		}
 		if u.Source.AnalyzeDuration != nil {
-			ch.Source.Analyzeduration = *u.Source.AnalyzeDuration
+			ch.Input.Analyzeduration = *u.Source.AnalyzeDuration
 		}
 		if u.Source.FFlags != nil {
-			ch.Source.FFlags = *u.Source.FFlags
+			ch.Input.FFlags = *u.Source.FFlags
 		}
 		if u.Source.MaxDelay != nil {
-			ch.Source.MaxDelay = *u.Source.MaxDelay
+			ch.Input.MaxDelay = *u.Source.MaxDelay
 		}
 		if u.Source.LocalAddr != nil {
-			ch.Source.Localaddr = *u.Source.LocalAddr
+			ch.Input.Localaddr = *u.Source.LocalAddr
 		}
 		if u.Source.Timeout != nil {
-			ch.Source.Timeout = *u.Source.Timeout
+			ch.Input.Timeout = *u.Source.Timeout
 		}
 		if u.Source.RTSPTransport != nil {
-			ch.Source.RTSPTransport = *u.Source.RTSPTransport
+			ch.Input.RTSPTransport = *u.Source.RTSPTransport
 		}
 	}
 
 	if u.Sink != nil {
 		if u.Sink.OutputURL != nil {
-			ch.Sink.URL = *u.Sink.OutputURL
+			ch.Output.URL = *u.Sink.OutputURL
 		}
 		if u.Sink.LocalAddr != nil {
-			ch.Sink.Localaddr = *u.Sink.LocalAddr
+			ch.Output.Localaddr = *u.Sink.LocalAddr
 		}
 		if u.Sink.PktSize != nil {
-			ch.Sink.PktSize = *u.Sink.PktSize
+			ch.Output.PktSize = *u.Sink.PktSize
 		}
 		if u.Sink.MapVideo != nil {
-			ch.Sink.MapVideo = *u.Sink.MapVideo
+			ch.Output.MapVideo = *u.Sink.MapVideo
 		}
 		if u.Sink.MapAudio != nil {
-			ch.Sink.MapAudio = *u.Sink.MapAudio
+			ch.Output.MapAudio = *u.Sink.MapAudio
 		}
 		if u.Sink.MapData != nil {
-			ch.Sink.MapData = *u.Sink.MapData
+			ch.Output.MapData = *u.Sink.MapData
 		}
 	}
 
