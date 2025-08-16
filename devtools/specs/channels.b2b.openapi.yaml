@@ -8,7 +8,6 @@ info:
     - **Transport**: HTTPS only.
     - **Auth**: HTTP Basic over TLS.
     - **Correlation**: Clients MAY send `X-Request-Id`; the server echoes it or generates one.
-    - **Obfuscation**: To prevent leaking information about resource existence, the server returns `403 Forbidden` both when access is denied and when the resource does not exist — it does not return `404 Not Found`.
 
 security:
   - basicAuth: []
@@ -39,7 +38,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ChannelList'
         '401': { $ref: '#/components/responses/401Unauthorized' }
-        '403': { $ref: '#/components/responses/403Forbidden' }        
+        '404': { $ref: '#/components/responses/404NotFound' }
         '429': { $ref: '#/components/responses/429TooManyRequests' }
         '500': { $ref: '#/components/responses/500InternalServerError' }
         '503': { $ref: '#/components/responses/503ServiceUnavailable' }
@@ -85,14 +84,7 @@ paths:
               $ref: '#/components/headers/X-Request-Id'
         '400': { $ref: '#/components/responses/400BadRequest' }
         '401': { $ref: '#/components/responses/401Unauthorized' }
-        '403':
-          description: |
-            Forbidden — channel ID does not exist (not disclosed as `404`) or the client lacks permission to update the channel.
-            Also applies if the request includes updates to unknown/unauthorized fields (not disclosed as `400`).
-          headers:
-            X-Request-Id:
-              $ref: '#/components/headers/X-Request-Id'
-
+        '404': { $ref: '#/components/responses/404NotFound' }
         '415':
           description: Unsupported Media Type — only `application/merge-patch+json` is accepted for patch operations.
           headers:
@@ -167,10 +159,12 @@ components:
   responses:
     400BadRequest:
       description: |
-        Bad Request — invalid JSON syntax or schema type/format violations for defined fields.
-        
-        Unknown/undefined or unauthorized fields are treated as `403 Forbidden`.
-
+        Bad Request — request validation failed due to one or more of the following:
+        - Malformed JSON syntax
+        - Schema violations (i.e., incorrect data types or formats for defined fields)
+        - Unknown or unexpected fields
+        - Unauthorized access to restricted fields
+        - Field value violates access policy (i.e., not permitted by allowlist/denylist rules)
       headers:
         X-Request-Id:
           $ref: '#/components/headers/X-Request-Id'
@@ -181,8 +175,9 @@ components:
           $ref: '#/components/headers/WWW-Authenticate'
         X-Request-Id:
           $ref: '#/components/headers/X-Request-Id'
-    403Forbidden:
-      description: Forbidden — resource does not exist or client lacks permission.
+    404NotFound:
+      description: |
+        Not Found — the targeted resource does not exist, or access is intentionally obscured for entity endpoints (`404` is used instead of `403` to avoid leaking existence).
       headers:
         X-Request-Id:
           $ref: '#/components/headers/X-Request-Id'
@@ -274,7 +269,7 @@ components:
         
         Use `ChannelUpdatePatch` to apply partial updates, or `ChannelClearPatch` to fully clear all channel fields and disable the channel.
 
-        **Obfuscation**: To prevent leaking information about field existence, the server returns `403 Forbidden` both when field-level access is unauthorized and when the field is unknown/undefined — it does not use `400 Bad Request`.
+        **Obfuscation**: Unauthorized field-level access → `400 Bad Request` (instead of `403`).
 
       oneOf:
         - $ref: '#/components/schemas/ChannelUpdatePatch'
@@ -320,7 +315,7 @@ components:
                 The server MAY enforce internal allow/deny lists (aka whitelists/blacklists) over:
                 - **Schemes, hostnames, ports, or any other URI component.**
 
-                These lists MAY vary by client, tenant, or deployment. Any URI referencing a disallowed resource → `403 Forbidden`.
+                These lists MAY vary by client, tenant, or deployment. Any URI referencing a disallowed resource → `400 Bad Request`.
 
                 ### References
 
