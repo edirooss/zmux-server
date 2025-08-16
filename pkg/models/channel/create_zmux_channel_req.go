@@ -16,7 +16,7 @@ type CreateZmuxChannelReq struct {
 
 	// --- Remux configuration ---
 	Source struct {
-		InputURL        string `json:"input_url"       binding:"required"` // must be provided by client
+		InputURL        string `json:"url"       binding:"required"` // must be provided by client
 		AVIOFlags       string `json:"avioflags"       default:""`
 		ProbeSize       uint   `json:"probesize"       default:"5000000"`
 		AnalyzeDuration uint   `json:"analyzeduration" default:"0"`
@@ -27,7 +27,7 @@ type CreateZmuxChannelReq struct {
 		RTSPTransport   string `json:"rtsp_transport"  default:""`
 	} `json:"source"`
 	Sink struct {
-		OutputURL string `json:"output_url" default:"/dev/null"`
+		OutputURL string `json:"url" default:"/dev/null"`
 		LocalAddr string `json:"localaddr"  default:""`
 		PktSize   uint   `json:"pkt_size"   default:"1316"`
 		MapVideo  bool   `json:"map_video" default:"true"`
@@ -53,7 +53,7 @@ func (req CreateZmuxChannelReq) ToChannel(id int64) *ZmuxChannel {
 	ch.ID = id
 	ch.Name = req.Name
 
-	ch.Source.InputURL = req.Source.InputURL
+	ch.Source.URL = req.Source.InputURL
 	ch.Source.AVIOFlags = req.Source.AVIOFlags
 	ch.Source.Probesize = req.Source.ProbeSize
 	ch.Source.Analyzeduration = req.Source.AnalyzeDuration
@@ -63,7 +63,7 @@ func (req CreateZmuxChannelReq) ToChannel(id int64) *ZmuxChannel {
 	ch.Source.Timeout = req.Source.Timeout
 	ch.Source.RTSPTransport = req.Source.RTSPTransport
 
-	ch.Sink.OutputURL = req.Sink.OutputURL
+	ch.Sink.URL = req.Sink.OutputURL
 	ch.Sink.Localaddr = req.Sink.LocalAddr
 	ch.Sink.PktSize = req.Sink.PktSize
 	ch.Sink.MapVideo = req.Sink.MapVideo

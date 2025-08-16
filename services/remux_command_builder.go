@@ -104,7 +104,7 @@ func BuildRemuxExecArgs(ch *models.ZmuxChannel) []string {
 
 	// --- Source (strings; omit if empty) ---
 	builder.
-		WithString("--input-url", ch.Source.InputURL).
+		WithString("--input-url", ch.Source.URL).
 		WithString("--avioflags", ch.Source.AVIOFlags).
 		WithUint("--probesize", ch.Source.Probesize).
 		WithUint("--analyzeduration", ch.Source.Analyzeduration).
@@ -116,7 +116,7 @@ func BuildRemuxExecArgs(ch *models.ZmuxChannel) []string {
 
 	// --- Sink ---
 	builder.
-		WithString("--output-url", ch.Sink.OutputURL).
+		WithString("--output-url", ch.Sink.URL).
 		WithString("--output-localaddr", ch.Sink.Localaddr).
 		WithUint("--pkt-size", ch.Sink.PktSize)
 

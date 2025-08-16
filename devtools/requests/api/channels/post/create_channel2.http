@@ -5,7 +5,7 @@ Accept: application/json
 {
   "name": "full-config-channel",
   "source": {
-    "input_url": "rtsp://example.com/full",
+    "url": "rtsp://example.com/full",
     "avioflags": "direct",
     "probesize": 1000000,
     "analyzeduration": 500000,
@@ -16,7 +16,7 @@ Accept: application/json
     "rtsp_transport": "tcp"
   },
   "sink": {
-    "output_url": "/tmp/output.ts",
+    "url": "/tmp/output.ts",
     "localaddr": "192.168.1.10",
     "pkt_size": 2048,
     "map_video": false,

@@ -5,6 +5,6 @@ Accept: application/json
 {
   "name": "sports-channel",
   "source": {
-    "input_url": "rtsp://example.com/live"
+    "url": "rtsp://example.com/live"
   }
 }

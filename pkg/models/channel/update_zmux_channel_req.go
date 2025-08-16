@@ -6,7 +6,7 @@ type UpdateZmuxChannelReq struct {
 	Name *string `json:"name,omitempty" binding:"omitempty,min=1,max=100"`
 
 	Source *struct {
-		InputURL        *string `json:"input_url,omitempty"`
+		InputURL        *string `json:"url,omitempty"`
 		AVIOFlags       *string `json:"avioflags,omitempty"`
 		ProbeSize       *uint   `json:"probesize,omitempty"`
 		AnalyzeDuration *uint   `json:"analyzeduration,omitempty"`
@@ -18,7 +18,7 @@ type UpdateZmuxChannelReq struct {
 	} `json:"source,omitempty"`
 
 	Sink *struct {
-		OutputURL *string `json:"output_url,omitempty"`
+		OutputURL *string `json:"url,omitempty"`
 		LocalAddr *string `json:"localaddr,omitempty"`
 		PktSize   *uint   `json:"pkt_size,omitempty"`
 		MapVideo  *bool   `json:"map_video,omitempty"`
@@ -38,7 +38,7 @@ func (u *UpdateZmuxChannelReq) ApplyTo(ch *ZmuxChannel) {
 
 	if u.Source != nil {
 		if u.Source.InputURL != nil {
-			ch.Source.InputURL = *u.Source.InputURL
+			ch.Source.URL = *u.Source.InputURL
 		}
 		if u.Source.AVIOFlags != nil {
 			ch.Source.AVIOFlags = *u.Source.AVIOFlags
@@ -68,7 +68,7 @@ func (u *UpdateZmuxChannelReq) ApplyTo(ch *ZmuxChannel) {
 
 	if u.Sink != nil {
 		if u.Sink.OutputURL != nil {
-			ch.Sink.OutputURL = *u.Sink.OutputURL
+			ch.Sink.URL = *u.Sink.OutputURL
 		}
 		if u.Sink.LocalAddr != nil {
 			ch.Sink.Localaddr = *u.Sink.LocalAddr

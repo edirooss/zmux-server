@@ -5,7 +5,7 @@ Accept: application/json
 {
   "name": "full-config-channel",
   "source": {
-    "input_url": "rtsp://example.com/full",
+    "url": "rtsp://example.com/full",
     "aviofags": "direct",
     "probesize": 1000000,
     "analyzeduration": 500000,

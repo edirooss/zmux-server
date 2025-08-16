@@ -7,7 +7,7 @@ type ZmuxChannel struct {
 
 	// --- Remux configuration ---
 	Source struct {
-		InputURL        string `json:"input_url"`
+		URL             string `json:"url"`
 		AVIOFlags       string `json:"avioflags"`
 		Probesize       uint   `json:"probesize"`
 		Analyzeduration uint   `json:"analyzeduration"`
@@ -18,7 +18,7 @@ type ZmuxChannel struct {
 		RTSPTransport   string `json:"rtsp_transport"`
 	} `json:"source"`
 	Sink struct {
-		OutputURL string `json:"output_url"`
+		URL       string `json:"url"`
 		Localaddr string `json:"localaddr"`
 		PktSize   uint   `json:"pkt_size"`
 		MapVideo  bool   `json:"map_video"`

@@ -5,7 +5,7 @@ Accept: application/json
 {
     "name": "Electrical Engineering2",
     "source": {
-        "input_url": "udp://localhost:12340",
+        "url": "udp://localhost:12340",
         "avioflags": "",
         "probesize": null,
         "analyzeduration": null,
@@ -16,7 +16,7 @@ Accept: application/json
         "rtsp_transport": ""
     },
     "sink": {
-        "output_url": "rtsp://blabla.com",
+        "url": "rtsp://blabla.com",
         "localaddr": "",
         "pkt_size": null,
         "map_video": true,
