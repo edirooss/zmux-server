@@ -21,10 +21,10 @@ type UpdateZmuxChannelReq struct {
 		OutputURL *string `json:"output_url,omitempty"`
 		LocalAddr *string `json:"localaddr,omitempty"`
 		PktSize   *uint   `json:"pkt_size,omitempty"`
+		MapVideo  *bool   `json:"map_video,omitempty"`
+		MapAudio  *bool   `json:"map_audio,omitempty"`
+		MapData   *bool   `json:"map_data,omitempty"`
 	} `json:"sink,omitempty"`
-	MapVideo *bool `json:"map_video,omitempty"`
-	MapAudio *bool `json:"map_audio,omitempty"`
-	MapData  *bool `json:"map_data,omitempty"`
 
 	Enabled    *bool `json:"enabled,omitempty"`
 	RestartSec *uint `json:"restart_sec,omitempty"`
@@ -34,16 +34,6 @@ type UpdateZmuxChannelReq struct {
 func (u *UpdateZmuxChannelReq) ApplyTo(ch *ZmuxChannel) {
 	if u.Name != nil {
 		ch.Name = *u.Name
-	}
-
-	if u.MapVideo != nil {
-		ch.MapVideo = *u.MapVideo
-	}
-	if u.MapAudio != nil {
-		ch.MapAudio = *u.MapAudio
-	}
-	if u.MapData != nil {
-		ch.MapData = *u.MapData
 	}
 
 	if u.Source != nil {
@@ -85,6 +75,15 @@ func (u *UpdateZmuxChannelReq) ApplyTo(ch *ZmuxChannel) {
 		}
 		if u.Sink.PktSize != nil {
 			ch.Sink.PktSize = *u.Sink.PktSize
+		}
+		if u.Sink.MapVideo != nil {
+			ch.Sink.MapVideo = *u.Sink.MapVideo
+		}
+		if u.Sink.MapAudio != nil {
+			ch.Sink.MapAudio = *u.Sink.MapAudio
+		}
+		if u.Sink.MapData != nil {
+			ch.Sink.MapData = *u.Sink.MapData
 		}
 	}
 

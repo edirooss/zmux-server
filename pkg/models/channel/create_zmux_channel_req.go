@@ -30,10 +30,10 @@ type CreateZmuxChannelReq struct {
 		OutputURL string `json:"output_url" default:"/dev/null"`
 		LocalAddr string `json:"localaddr"  default:""`
 		PktSize   uint   `json:"pkt_size"   default:"1316"`
+		MapVideo  bool   `json:"map_video" default:"true"`
+		MapAudio  bool   `json:"map_audio" default:"true"`
+		MapData   bool   `json:"map_data"  default:"true"`
 	} `json:"sink"`
-	MapVideo bool `json:"map_video" default:"true"`
-	MapAudio bool `json:"map_audio" default:"true"`
-	MapData  bool `json:"map_data"  default:"true"`
 	// ----------------------------
 
 	// Systemd settings
@@ -53,10 +53,6 @@ func (req CreateZmuxChannelReq) ToChannel(id int64) *ZmuxChannel {
 	ch.ID = id
 	ch.Name = req.Name
 
-	ch.MapVideo = req.MapVideo
-	ch.MapAudio = req.MapAudio
-	ch.MapData = req.MapData
-
 	ch.Source.InputURL = req.Source.InputURL
 	ch.Source.AVIOFlags = req.Source.AVIOFlags
 	ch.Source.Probesize = req.Source.ProbeSize
@@ -70,6 +66,9 @@ func (req CreateZmuxChannelReq) ToChannel(id int64) *ZmuxChannel {
 	ch.Sink.OutputURL = req.Sink.OutputURL
 	ch.Sink.Localaddr = req.Sink.LocalAddr
 	ch.Sink.PktSize = req.Sink.PktSize
+	ch.Sink.MapVideo = req.Sink.MapVideo
+	ch.Sink.MapAudio = req.Sink.MapAudio
+	ch.Sink.MapData = req.Sink.MapData
 
 	ch.Enabled = req.Enabled
 	ch.RestartSec = req.RestartSec

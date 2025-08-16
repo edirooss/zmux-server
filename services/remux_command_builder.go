@@ -102,12 +102,6 @@ func BuildRemuxExecArgs(ch *models.ZmuxChannel) []string {
 	builder.WithString("--id", strconv.FormatInt(ch.ID, 10))
 	// (LogLevel is part of Config, not ZmuxChannel; omit here.)
 
-	// --- Stream mapping (bool defaults true) ---
-	builder.
-		WithBoolDefault("--map-video", ch.MapVideo, true).
-		WithBoolDefault("--map-audio", ch.MapAudio, true).
-		WithBoolDefault("--map-data", ch.MapData, true)
-
 	// --- Source (strings; omit if empty) ---
 	builder.
 		WithString("--input-url", ch.Source.InputURL).
@@ -125,6 +119,12 @@ func BuildRemuxExecArgs(ch *models.ZmuxChannel) []string {
 		WithString("--output-url", ch.Sink.OutputURL).
 		WithString("--output-localaddr", ch.Sink.Localaddr).
 		WithUint("--pkt-size", ch.Sink.PktSize)
+
+	// --- Stream mapping (bool defaults true) ---
+	builder.
+		WithBoolDefault("--map-video", ch.Sink.MapVideo, true).
+		WithBoolDefault("--map-audio", ch.Sink.MapAudio, true).
+		WithBoolDefault("--map-data", ch.Sink.MapData, true)
 
 	return builder.BuildArgs()
 }

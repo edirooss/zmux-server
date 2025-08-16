@@ -4,9 +4,6 @@ Accept: application/json
 
 {
   "name": "full-config-channel",
-  "map_video": false,
-  "map_audio": true,
-  "map_data": false,
   "source": {
     "input_url": "rtsp://example.com/full",
     "avioflags": "direct",
@@ -21,7 +18,10 @@ Accept: application/json
   "sink": {
     "output_url": "/tmp/output.ts",
     "localaddr": "192.168.1.10",
-    "pkt_size": 2048
+    "pkt_size": 2048,
+    "map_video": false,
+    "map_audio": true,
+    "map_data": false,
   },
   "enabled": false,
   "restartSec": 10

@@ -21,10 +21,10 @@ type ZmuxChannel struct {
 		OutputURL string `json:"output_url"`
 		Localaddr string `json:"localaddr"`
 		PktSize   uint   `json:"pkt_size"`
+		MapVideo  bool   `json:"map_video"`
+		MapAudio  bool   `json:"map_audio"`
+		MapData   bool   `json:"map_data"`
 	} `json:"sink"`
-	MapVideo bool `json:"map_video"`
-	MapAudio bool `json:"map_audio"`
-	MapData  bool `json:"map_data"`
 	// ----------------------------
 
 	// Systemd settings

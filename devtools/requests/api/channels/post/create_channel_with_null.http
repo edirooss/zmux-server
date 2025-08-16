@@ -4,9 +4,6 @@ Accept: application/json
 
 {
     "name": "Electrical Engineering2",
-    "map_video": true,
-    "map_audio": true,
-    "map_data": true,
     "source": {
         "input_url": "udp://localhost:12340",
         "avioflags": "",
@@ -21,7 +18,10 @@ Accept: application/json
     "sink": {
         "output_url": "rtsp://blabla.com",
         "localaddr": "",
-        "pkt_size": null
+        "pkt_size": null,
+        "map_video": true,
+        "map_audio": true,
+        "map_data": true,
     },
     "enabled": false,
     "restart_sec": null
