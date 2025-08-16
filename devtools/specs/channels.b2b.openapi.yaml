@@ -5,11 +5,10 @@ info:
   description: |
     B2B API for reading Zmux channels configuration and performing partial updates.
 
-    ## Global Policy
-    - **Transport**: HTTPS only
-    - **Authentication**: HTTP Basic over TLS
-    - **Correlation**: Clients MAY send `X-Request-Id`; the server echoes it or generates one
-    - **Resource obfuscation**: When credentials are valid but the operation/resource is not allowed or does not exist, the server returns **403 Forbidden** to avoid exposing resource existence.
+    - **Transport**: HTTPS only.
+    - **Auth**: HTTP Basic over TLS.
+    - **Correlation**: Clients MAY send `X-Request-Id`; the server echoes it or generates one.
+    - **Obfuscation**: To prevent leaking information about resource existence, the server returns `403 Forbidden` both when access is denied and when the resource does not exist — it does not return `404 Not Found`.
 
 security:
   - basicAuth: []
@@ -25,7 +24,7 @@ paths:
       summary: List channels
       operationId: listChannels
       description: |
-        Returns all authorized channels, each represented by its current configuration.
+        Returns all channels visible to the client; `[]` if the client has access to none.
 
       parameters:
         - $ref: '#/components/parameters/X-Request-Id'
@@ -53,14 +52,20 @@ paths:
       description: |
         Applies a JSON Merge Patch (RFC 7396) to a channel configuration.
 
-        - Fields not included in the request remain unchanged.
+        ### RFC 7396 behavior spelled out
+        - Omitting a field → the field **remains unchanged**.
+        - Setting a field to `null` → the field is **cleared/removed**.
+        - Setting an object to `{}` → merges nothing (no-op).
+          - Successful patches return `204 No Content` regardless of whether any field changed.
+          - If the current target is `null` or a non-object → the result becomes `{}` per RFC 7396.
+        - Objects are merged recursively; nested fields follow the same rules.
         - Requires `Content-Type: application/merge-patch+json`.
 
       parameters:
         - in: path
           name: id
           required: true
-          description: Unique numeric identifier for the channel.
+          description: Unique numeric identifier of the channel.
           schema:
             type: integer
             format: int64
@@ -74,7 +79,7 @@ paths:
               $ref: '#/components/schemas/ChannelPatchRequest'
       responses:
         '204':
-          description: Channel updated successfully. No content returned.
+          description: No Content — Channel updated successfully.
           headers:
             X-Request-Id:
               $ref: '#/components/headers/X-Request-Id'
@@ -82,24 +87,23 @@ paths:
         '401': { $ref: '#/components/responses/401Unauthorized' }
         '403':
           description: |
-            Access denied — channel ID does not exist (not disclosed as 404) or caller lacks permission to update the channel.
-
-            Also applies if the request includes updates to unknown/undefined  (not disclosed as 400) or unauthorized fields.
+            Forbidden — channel ID does not exist (not disclosed as `404`) or the client lacks permission to update the channel.
+            Also applies if the request includes updates to unknown/unauthorized fields (not disclosed as `400`).
           headers:
             X-Request-Id:
               $ref: '#/components/headers/X-Request-Id'
 
         '415':
-          description: Unsupported media type — Only `application/merge-patch+json` is accepted for patch operations.
+          description: Unsupported Media Type — only `application/merge-patch+json` is accepted for patch operations.
           headers:
             X-Request-Id:
               $ref: '#/components/headers/X-Request-Id'
         '422':
           description: |
-            Unprocessable entity — patch request was well-formed but semantically invalid.
+            Unprocessable Content — patch request was well-formed but semantically invalid.
 
-            - `enabled` becomes true while `name` or `source` is null.
-            - `source.auth` transitions from null to an object that does not include all of `type`, `username`, and `password` in the same patch.
+            - `enabled` is set to `true` while either `name` or `source` is `null`.
+            - `source.auth` changes from `null` to an object with only `password` (without `username`; required).
           headers:
             X-Request-Id:
               $ref: '#/components/headers/X-Request-Id'
@@ -117,7 +121,7 @@ components:
 
   headers:
     X-Request-Id:
-      description: Opaque correlation ID for this request (echoed by the server; generated if absent). Used for tacking requests.
+      description: Opaque correlation ID for this request (the server echoes `X-Request-Id` or generates one if absent). Used for request correlation and troubleshooting.
       schema:
         type: string
     WWW-Authenticate:
@@ -129,9 +133,9 @@ components:
       description: |
         Advises clients when to retry after a rate limit (`429`) or temporary downtime (`503`).
 
-        The value MAY be:
-        - A delay in seconds (delta-seconds), e.g., `"60"`
-        - An absolute date and time in HTTP-date format, e.g., `"Wed, 21 Oct 2015 07:28:00 GMT"`
+        The value MAY be either:
+        - A delay in seconds (delta-seconds), e.g., `"60"`.
+        - An absolute date and time in HTTP-date format, e.g., `"Wed, 21 Oct 2015 07:28:00 GMT"`.
 
         Clients SHOULD respect this hint before retrying.
       schema:
@@ -163,39 +167,39 @@ components:
   responses:
     400BadRequest:
       description: |
-        Malformed input — invalid JSON syntax or schema type/format violations for defined fields.
+        Bad Request — invalid JSON syntax or schema type/format violations for defined fields.
         
-        Unknown/undefined or unauthorized fields are treated as 403 Forbidden.
+        Unknown/undefined or unauthorized fields are treated as `403 Forbidden`.
 
       headers:
         X-Request-Id:
           $ref: '#/components/headers/X-Request-Id'
     401Unauthorized:
-      description: Authentication failed — missing or invalid credentials.
+      description: Unauthorized — missing or invalid credentials.
       headers:
         WWW-Authenticate:
           $ref: '#/components/headers/WWW-Authenticate'
         X-Request-Id:
           $ref: '#/components/headers/X-Request-Id'
     403Forbidden:
-      description: Access denied — resource does not exist or caller lacks permission.
+      description: Forbidden — resource does not exist or client lacks permission.
       headers:
         X-Request-Id:
           $ref: '#/components/headers/X-Request-Id'
     429TooManyRequests:
-      description: Rate limit exceeded — too many requests in a short time.
+      description: Too Many Requests — rate limit exceeded.
       headers:
         Retry-After:
           $ref: '#/components/headers/Retry-After'
         X-Request-Id:
           $ref: '#/components/headers/X-Request-Id'
     500InternalServerError:
-      description:  Server error — unexpected condition occurred.
+      description: Internal Server Error — unexpected condition occurred.
       headers:
         X-Request-Id:
           $ref: '#/components/headers/X-Request-Id'
     503ServiceUnavailable:
-      description: Temporary downtime — try again later.
+      description: Service Unavailable — temporary downtime; try again later.
       headers:
         Retry-After:
           $ref: '#/components/headers/Retry-After'
@@ -227,42 +231,36 @@ components:
             uri:
               type: string
               format: uri
+              description: A URI that identifies the source or destination of a multimedia stream.
               maxLength: 2048
             auth:
               type: object
               nullable: true
-              description: | 
+              description: |
                 Authentication for the source. `null` if none.
-
-                `source.auth` MUST be either null or an object with `type`, `username`, and `password`.
               properties:
-                type:
-                  type: string
-                  description: Authentication scheme.
-                  enum: [basic, digest]
                 username:
                   type: string
                   description: Username.
                   minLength: 1
                 password:
                   type: string
-                  description: Plain-text password.
+                  nullable: true
+                  description: Plain-text password (may be `null` if none).
                   minLength: 1
               additionalProperties: false
-              required: [type, username, password]
+              required: [username]
           additionalProperties: false
-          required: [uri, auth]
+          required: [uri]
         enabled:
           type: boolean
           description: |
-            Whether the channel is activated, i.e., restreaming from its media source is enabled.
+            Indicates whether the channel is enabled — that is, whether media reading from the source is enabled.
+            When the channel is disabled, the server does not attempt to connect to the media source.
 
-            Note: This reflects the channel’s configured state, not its real-time streaming status. 
-            If deactivated, the server will not connect to the media source for restreaming until activated.
-
-            When `enabled=true`, `name` and `source` MUST be non-null and valid.
+            When `enabled` is `true`, both `name` and `source` are non-null.
       additionalProperties: false
-      required: [id, name, source, enabled]
+      required: [id, enabled]
 
     ChannelList:
       type: array
@@ -273,8 +271,10 @@ components:
     ChannelPatchRequest:
       description: |
         JSON Merge Patch body for channel updates.
+        
+        Use `ChannelUpdatePatch` to apply partial updates, or `ChannelClearPatch` to fully clear all channel fields and disable the channel.
 
-        Note: Unknown or unauthorized fields are rejected with **403 Forbidden** policy.
+        **Obfuscation**: To prevent leaking information about field existence, the server returns `403 Forbidden` both when field-level access is unauthorized and when the field is unknown/undefined — it does not use `400 Bad Request`.
 
       oneOf:
         - $ref: '#/components/schemas/ChannelUpdatePatch'
@@ -295,33 +295,64 @@ components:
               type: string
               format: uri
               maxLength: 2048
+              description: >
+                An **absolute URI** that specifies the source/destination of a multimedia stream.
+
+                MUST follow the generic URI syntax [RFC 3986].
+                MAY be further constrained or extended by the semantics of the specific protocol (scheme).
+
+                URI syntax violations (e.g., malformed encoding, invalid structure) → `400 Bad Request`.
+
+                ### Authentication
+
+                Credentials in the URI `userinfo` (e.g., `username[:password]@`) are allowed but discouraged; prefer `source.auth`. **Never mix both**.
+                  - If, after applying this PATCH (considering existing configuration + patch body), both a URI with `userinfo`
+                    and a non-null `source.auth` would be present → `422 Unprocessable Content`.
+                  - If `userinfo` is used, it MUST be encoded per RFC 3986 §3.2.1.
+
+                ### Protocol-Specific Notes
+
+                - **RTSP URIs** MUST conform to [RFC 2326].
+                - Use the `rtsps` scheme for RTSP 1.0 over TLS.
+
+                ### Access Policy (Allow/Deny Lists)
+
+                The server MAY enforce internal allow/deny lists (aka whitelists/blacklists) over:
+                - **Schemes, hostnames, ports, or any other URI component.**
+
+                These lists MAY vary by client, tenant, or deployment. Any URI referencing a disallowed resource → `403 Forbidden`.
+
+                ### References
+
+                - [RFC 3986] Uniform Resource Identifier (URI): Generic Syntax
+                - [RFC 2326] Real Time Streaming Protocol (RTSP) 1.0
             auth:
               type: object
               nullable: true
               description: |
-                  Authentication for the source. `null` if none.
+                Authentication for the source.
+                - If `null`: remove authentication.
+                - If object: add or update credentials.
 
-                  Partial updates to `source.auth` are allowed only if `auth` is already non-null in the existing configuration.
-                  To set `auth` from `null`, the patch must include `type`, `username`, and `password` together.
-
+                A `password` cannot be set unless a `username` is included in the patch
+                or already exists in the stored configuration. Violations result in `422 Unprocessable Content`.
               properties:
-                type:
-                  type: string
-                  enum: [basic, digest]
                 username:
                   type: string
                   minLength: 1
                 password:
                   type: string
+                  nullable: true
                   minLength: 1
               additionalProperties: false
           additionalProperties: false
         enabled:
           type: boolean
           description: |
-            Enables or disables connection to the media source for restreaming. This can be used to pause or resume a channel while preserving its existing settings.
+            Enables/disables media reading from the source. This is used to pause or resume a channel while preserving its existing settings.
 
-            When enabled=true, both name and source MUST be non-null and valid—either already configured or included in this patch.
+            - When `enabled: true`, both `name` and `source` must be non-null and valid — either already configured or included in this patch. Violations result in a `422 Unprocessable Content`.
+            - When `enabled: false`, the server will not attempt to connect to the media source.
       additionalProperties: false
 
     ChannelClearPatch:

@@ -88,7 +88,7 @@ func shQuote(s string) string {
 //
 //	Top-level:        --id
 //	Stream mapping:   --map-video --map-audio --map-data
-//	Demuxer:          --input-url --avioflags --probe-size --analyze-duration --fflags
+//	Demuxer:          --input-url --avioflags --probesize --analyzeduration --fflags
 //	                  --max-delay --input-localaddr --timeout --rtsp-transport
 //	Muxer:            --output-url --output-localaddr --pkt-size
 //
