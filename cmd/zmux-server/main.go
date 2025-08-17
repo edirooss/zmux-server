@@ -80,7 +80,7 @@ func main() {
 	// Service for channel CRUD
 	channelService, err := services.NewChannelService(log)
 	if err != nil {
-		log.Error("channel service creation failed", zap.Error(err))
+		log.Fatal("channel service creation failed", zap.Error(err))
 	}
 
 	// Service for reading local addresses
@@ -100,30 +100,25 @@ func main() {
 	// Create Gin router
 	r := gin.New()
 
-	env := os.Getenv("ENV")
-	var allowedOrigin string
-	switch env {
-	case "MR":
-		allowedOrigin = "https://192.168.1.4:443"
-	case "MZ":
-		allowedOrigin = "https://192.168.2.4:443"
-	default:
-		allowedOrigin = "http://localhost:5173"
-	}
-
-	corsCfg := cors.Config{
-		AllowOrigins:     []string{allowedOrigin},
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Content-Type", "Authorization"},
-		ExposeHeaders:    []string{"X-Total-Count", "Location"},
-		AllowCredentials: false,
-		MaxAge:           12 * time.Hour, // cache preflight
-	}
+	// Trust reverse proxy
+	_ = r.SetTrustedProxies([]string{"127.0.0.1"})
 
 	// Apply middlewares
-	r.Use(gin.Recovery())    // Recovery first (outermost)
-	r.Use(cors.New(corsCfg)) // “Edge” middleware next (CORS, etc.)
-	r.Use(ZapLogger(log))    // Observability after that (logger, tracing)
+	r.Use(gin.Recovery()) // Recovery first (outermost)
+
+	// CORS (dev only)
+	if os.Getenv("ENV") == "dev" {
+		r.Use(cors.New(cors.Config{
+			AllowOrigins:     []string{"http://localhost:5173"},
+			AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+			AllowHeaders:     []string{"Content-Type", "Authorization"},
+			ExposeHeaders:    []string{"X-Total-Count", "Location"},
+			AllowCredentials: false,
+			MaxAge:           12 * time.Hour, // cache preflight
+		}))
+	}
+
+	r.Use(ZapLogger(log)) // Observability after that (logger, tracing)
 
 	r.GET("/api/ping", func(c *gin.Context) {
 		c.JSON(200, gin.H{"message": "pong"})
@@ -282,22 +277,8 @@ func main() {
 		c.JSON(http.StatusOK, res.Data)
 	})
 
-	// Run server
-	switch env {
-	case "MR", "MZ":
-		certFile := os.Getenv("TLS_CERT_FILE") // e.g., /etc/ssl/certs/server.crt
-		keyFile := os.Getenv("TLS_KEY_FILE")   // e.g., /etc/ssl/private/server.key
-		if certFile == "" || keyFile == "" {
-			log.Fatal("TLS_CERT_FILE and TLS_KEY_FILE must be set")
-		}
-		log.Info("running HTTPS server on :8443", zap.String("env", env), zap.String("cors_origin", allowedOrigin))
-		if err := r.RunTLS(":8443", certFile, keyFile); err != nil {
-			log.Fatal("server failed", zap.Error(err))
-		}
-	default:
-		log.Info("running HTTP server on :8080", zap.String("env", env), zap.String("cors_origin", allowedOrigin))
-		if err := r.Run(":8080"); err != nil {
-			log.Fatal("server failed", zap.Error(err))
-		}
+	log.Info("running HTTP server on 127.0.0.1:8080")
+	if err := r.Run("127.0.0.1:8080"); err != nil {
+		log.Fatal("server failed", zap.Error(err))
 	}
 }

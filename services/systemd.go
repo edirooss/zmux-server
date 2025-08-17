@@ -21,7 +21,7 @@ type SystemdService struct {
 
 // NewSystemdService creates a new systemd service handler
 func NewSystemdService(_ *zap.Logger) (*SystemdService, error) {
-	tmpl, err := template.ParseFiles("/home/adiros/zmux-server/templates/service.j2")
+	tmpl, err := template.ParseFiles(templateFilePath())
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse systemd template: %w", err)
 	}
@@ -107,4 +107,12 @@ func (s *SystemdService) execSystemctl(ctx context.Context, args ...string) erro
 			cmdStr, err, stdoutBuf.String(), stderrBuf.String())
 	}
 	return nil
+}
+
+func templateFilePath() string {
+	filePath := os.Getenv("ZMUX_REMUX_TEMPLATE_UNIT_FILE")
+	if filePath == "" {
+		return "templates/service.j2"
+	}
+	return filePath
 }
