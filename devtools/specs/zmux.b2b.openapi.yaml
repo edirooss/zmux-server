@@ -348,7 +348,8 @@ components:
       description: |
         Subset of channel fields to update.
 
-        #### Cross-field constraints (evaluated **after** applying the JSON Merge Patch)
+        ### Cross-field constraints (evaluated **after** applying the JSON Merge Patch)
+        
         - Input media source URL requires a channel display name: 
           if `input.url` is non-null and `name` is null → **422 Unprocessable Content**.
         - Channel activation requires both input media source URL and channel display name:
@@ -401,6 +402,7 @@ components:
                 - [RFC 2326] Real Time Streaming Protocol (RTSP) 1.0
 
                 ### Note: Input URL & Name Dependency
+
                 - `input.url` with `name` null (not already configured or included in this patch) → `422 Unprocessable Content`.
           additionalProperties: false
         enabled:
@@ -411,6 +413,7 @@ components:
             Useful for pausing a channel without losing its settings.
 
             ### Note: Enabled & Input URL/Name Dependency
+
             - `enabled: true` with `input.url` null (not already configured or included in this patch) → `422 Unprocessable Content`.
             - `enabled: true` with `name` null (not already configured or included in this patch) → `422 Unprocessable Content`.
       additionalProperties: false
