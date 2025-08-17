@@ -1,6 +1,6 @@
 // full_update_patch.http
 // username=zmuxUser password=Aa1234/!@#$
-PATCH http://localhost:8080/api/channels/42
+PATCH http://localhost:8080/api/channels/1
 Content-Type: application/merge-patch+json
 
 {

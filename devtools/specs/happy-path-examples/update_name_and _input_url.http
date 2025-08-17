@@ -1,7 +1,7 @@
 // update_name_and _input_url.http
 // username=administrator, password=Bb/&%!
 // enabled=true from prev `full_update_patch.http`
-PATCH http://localhost:8080/api/channels/42
+PATCH http://localhost:8080/api/channels/1
 Content-Type: application/merge-patch+json
 
 {

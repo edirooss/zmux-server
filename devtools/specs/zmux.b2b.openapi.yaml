@@ -43,6 +43,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ChannelList'
+              examples:
+                emptyList:
+                  summary: No authorized channels
+                  value: []
+                authorizedChannels:
+                  summary: Multiple channels with enabled, disabled and cleared (null/disabled) states
+                  value:
+                    - id: 1
+                      name: Live1
+                      input:
+                        url: rtsp://zmuxUser:Aa1234%2F%21%40%23%24@172.16.5.20/live.sdp
+                      enabled: true
+                    - id: 2
+                      name: null
+                      input:
+                        url: null
+                      enabled: false
+                    - id: 7
+                      name: Live2
+                      input:
+                        url: rtsp://administrator:Bb%2F%26%25%21@203.0.113.45:5544/streaming/video1
+                      enabled: false
+                    - id: 8
+                      name: Live3-channel-reserved
+                      input:
+                        url: null
+                      enabled: false
         '401': { $ref: '#/components/responses/401Unauthorized' }
         '404': { $ref: '#/components/responses/404NotFound' }
         '429': { $ref: '#/components/responses/429TooManyRequests' }
@@ -141,7 +168,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ChannelStatusList'
               examples:
-                sample:
+                emptyList:
+                  summary: No authorized channels
+                  value: []
+                authorizedChannels:
                   summary: Example status list
                   value:
                     - id: 1
@@ -149,6 +179,8 @@ paths:
                     - id: 2
                       online: false
                     - id: 7
+                      online: false
+                    - id: 8
                       online: false
         '401': { $ref: '#/components/responses/401Unauthorized' }
         '404': { $ref: '#/components/responses/404NotFound' }
@@ -293,6 +325,7 @@ components:
                 Note: When `input.url` is non-null, `name` is also non-null.
               maxLength: 2048
           additionalProperties: false
+          required: [url]
         enabled:
           type: boolean
           description: |
@@ -301,9 +334,9 @@ components:
             Indicates whether the channel is enabled — that is, whether media reading from the input source is enabled.
             When the channel is disabled, the server does not attempt to connect to the input media source.
 
-            Note: When `enabled` is `true`, `input.url` and `name` is non-null.
+            Note: When `enabled` is `true`, `input.url` and `name` are non-null.
       additionalProperties: false
-      required: [id, input, enabled]
+      required: [id, name, input, enabled]
 
     ChannelList:
       type: array
@@ -380,7 +413,7 @@ components:
             ### Note: Enabled & Input URL/Name Dependency
             - `enabled: true` with `input.url` null (not already configured or included in this patch) → `422 Unprocessable Content`.
             - `enabled: true` with `name` null (not already configured or included in this patch) → `422 Unprocessable Content`.
-          additionalProperties: false
+      additionalProperties: false
 
     ChannelStatus:
       type: object
