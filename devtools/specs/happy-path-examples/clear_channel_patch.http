@@ -1,9 +1,12 @@
 // clear_channel_patch.http
+// Used to clear/reset channel to null/disabled.
 PATCH http://localhost:8080/api/channels/42
 Content-Type: application/merge-patch+json
 
 {
-  "enabled": false,
   "name": null,
-  "input": null
+  "input": {
+    "url": null
+  },
+  "enabled": false,
 }

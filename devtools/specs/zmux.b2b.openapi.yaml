@@ -20,7 +20,7 @@ paths:
   /api/channels:
     get:
       tags: [Channels]
-      summary: List channel configuration
+      summary: List channel configurations
       operationId: listChannels
       description: |
         Returns all channels visible to the client.
@@ -57,12 +57,12 @@ paths:
       description: |
         Applies a JSON Merge Patch (RFC 7396) to a channel configuration.
 
-        ### RFC 7396 behavior spelled out
+        ### RFC 7396 behavior quick brief
         - Omitting a field → the field **remains unchanged**.
         - Setting a field to `null` → the field is **cleared/removed**.
-        - If a field is an **object** and you set it to `{}`:
+        - Setting an **object** field to `{}`:
           - If the current value is an object → **no-op** (unchanged).
-          - If the current value is `null` or non-object → it becomes `{}` (created).
+          - If the current value is `null` → it becomes `{}` (created).
         - Successful patches return `204 No Content` even if nothing changed.
         - Objects are merged recursively; nested fields follow the same rules.
         - Requires `Content-Type: application/merge-patch+json`.
@@ -104,9 +104,8 @@ paths:
           description: |
             Unprocessable Content — patch request was well-formed but semantically invalid.
 
-            - After applying the patch, `enabled` is `true` while either `name` or `input` is `null`.
-            - After applying the patch, `input.auth` is non-null but missing `username` (invalid; must include `username`).
-            - After applying the patch, `input.url` contains `userinfo` and `input.auth` is non-null (never mix both).
+            - After applying the patch, `input.url` is non-null and `name` is null.
+            - After applying the patch, `enabled` is `true` and (`input.url` is null or `name` is null).
           headers:
             X-Request-Id:
               $ref: '#/components/headers/X-Request-Id'
@@ -118,7 +117,7 @@ paths:
   /api/channels/status:
     get:
       tags: [Channels]
-      summary: List channel status
+      summary: List channel statuses
       operationId: listChannelStatuses
       description: |
         Returns the online/offline runtime status for all channels visible to the client.
@@ -169,6 +168,8 @@ components:
       description: Opaque correlation ID for this request (the server echoes `X-Request-Id` or generates one if absent). Used for request correlation and troubleshooting.
       schema:
         type: string
+        minLength: 1
+        maxLength: 64
     Cache-Control-Channels:
       description: Cache-Control policy for /channels endpoint.
       schema:
@@ -195,12 +196,7 @@ components:
 
         Clients SHOULD respect this hint before retrying.
       schema:
-        oneOf:
-          - type: string
-            pattern: '^\d+$'
-            description: Delay in seconds
-          - type: string
-            description: Specific retry date/time in IMF-fixdate (HTTP-date) format
+        type: string
       examples:
         deltaSeconds:
           summary: Delay in seconds
@@ -217,7 +213,8 @@ components:
       description: Optional request ID for tracking; echoed by the server.
       schema:
         type: string
-        maxLength: 200
+        minLength: 1
+        maxLength: 64
 
   responses:
     400BadRequest:
@@ -226,8 +223,8 @@ components:
         - Malformed JSON syntax
         - Schema violations (i.e., incorrect data types or formats for defined fields)
         - Unknown or unexpected fields
-        - Unauthorized access to restricted fields
-        - Field value violates access policy (i.e., not permitted by allowlist/denylist rules)
+        - Unauthorized field-level access (`400` is used instead of `403` to avoid leaking existence)
+        - Field value violates access policy (i.e., not permitted by allowlist/denylist rules. `400` is used instead of `403` to avoid leaking existence)
       headers:
         X-Request-Id:
           $ref: '#/components/headers/X-Request-Id'
@@ -240,7 +237,7 @@ components:
           $ref: '#/components/headers/X-Request-Id'
     404NotFound:
       description: |
-        Not Found — the targeted resource does not exist, or access is intentionally obscured for entity endpoints (`404` is used instead of `403` to avoid leaking existence).
+        Not Found — the targeted resource does not exist, or access is intentionally obscured for entity and collection endpoints (`404` is used instead of `403` to avoid leaking existence).
       headers:
         X-Request-Id:
           $ref: '#/components/headers/X-Request-Id'
@@ -283,43 +280,30 @@ components:
           maxLength: 100
         input:
           type: object
-          nullable: true
-          description: Channel input — source connection details; URL and credentials.
+          description: Channel input media source configuration.
           properties:
             url:
               type: string
+              nullable: true
               format: uri
               pattern: '^[A-Za-z][A-Za-z0-9+.-]*:'
-              description: A URL that identifies the source or destination of a multimedia stream.
-              maxLength: 2048
-            auth:
-              type: object
-              nullable: true
               description: |
-                Input source credentials. Set to `null` when no authentication is required.
-              properties:
-                username:
-                  type: string
-                  description: Username.
-                  minLength: 1
-                password:
-                  type: string
-                  nullable: true
-                  description: Plain-text password (may be `null` if none).
-                  minLength: 1
-              additionalProperties: false
-              required: [username]
+                A URL that identifies the source or destination of a multimedia stream.
+
+                Note: When `input.url` is non-null, `name` is also non-null.
+              maxLength: 2048
           additionalProperties: false
-          required: [url]
         enabled:
           type: boolean
           description: |
+            Channel activation state.
+            
             Indicates whether the channel is enabled — that is, whether media reading from the input source is enabled.
             When the channel is disabled, the server does not attempt to connect to the input media source.
 
-            When `enabled` is `true`, both `name` and `input` are non-null.
+            Note: When `enabled` is `true`, `input.url` and `name` is non-null.
       additionalProperties: false
-      required: [id, enabled]
+      required: [id, input, enabled]
 
     ChannelList:
       type: array
@@ -329,22 +313,19 @@ components:
 
     ChannelPatchRequest:
       description: |
-        JSON Merge Patch body for channel updates.
+        Subset of channel fields to update.
+
+        #### Cross-field constraints (evaluated **after** applying the JSON Merge Patch)
+        - Input media source URL requires a channel display name: 
+          if `input.url` is non-null and `name` is null → **422 Unprocessable Content**.
+        - Channel activation requires both input media source URL and channel display name:
+          if `enabled` is `true` and (`input.url` is null or `name` is null) → **422 Unprocessable Content**.
         
-        Use `ChannelUpdatePatch` to apply partial updates, or `ChannelClearPatch` to fully clear all channel fields and disable the channel.
-
-        **Obfuscation**: Unauthorized field-level access → `400 Bad Request` (instead of `403`).
-
-      oneOf:
-        - $ref: '#/components/schemas/ChannelUpdatePatch'
-        - $ref: '#/components/schemas/ChannelClearPatch'
-
-    ChannelUpdatePatch:
       type: object
-      description: Subset of channel fields to update.
       properties:
         name:
           type: string
+          nullable: true
           minLength: 1
           maxLength: 100
         input:
@@ -352,6 +333,7 @@ components:
           properties:
             url:
               type: string
+              nullable: true
               format: uri
               pattern: '^[A-Za-z][A-Za-z0-9+.-]*:'
               maxLength: 2048
@@ -364,83 +346,45 @@ components:
                 URI syntax violations (e.g., malformed encoding, invalid structure) → `400 Bad Request`.
 
                 ### Authentication
-                
-                RFC 3986 URI `userinfo` (e.g., `username[:password]@`) — supported but **discouraged**.
 
-                Credentials MUST use either URI `userinfo` OR `input.auth`, never both.
-                  - Preferred: Use `input.auth` for credentials
-                  - If both would exist after patch → `422 Unprocessable Content`
-                  - If `userinfo` is used, it MUST be encoded per RFC 3986 §3.2.1.
+                Authentication, when required, MUST be provided via RFC 3986 URI `userinfo` (e.g., `username[:password]@`).
+                `userinfo` MUST be percent-encoded per RFC 3986 §3.2.1.
 
                 ### Protocol-Specific Notes
 
                 - **RTSP URIs** MUST conform to [RFC 2326]. RTSP support & versioning:
-                    - Supported: RTSP **1.0** (RFC 2326), including `rtsps://` (RTSP 1.0 over TLS).
-                    - Not supported: RTSP **2.0** (RFC 7826).
-                    - For `rtsps://`, the service **forces TCP interleaving** so that control and media traverse the TLS connection; if the server requires UDP under `rtsps://`, the connection fails.
+                    - Supported: RTSP 1.0 (RFC 2326), including `rtsps://` (RTSP 1.0 over TLS).
+                    - Not supported: RTSP 2.0 (RFC 7826).
+                    - For `rtsps://`, the service forces TCP interleaving so that control and media traverse the TLS connection; if the server requires UDP under `rtsps://`, the connection fails.
 
                 ### Access Policy (Allow/Deny Lists)
 
-                The server MAY enforce internal allow/deny lists (aka whitelists/blacklists) over:
-                - **Schemes, hostnames, ports, or any other URI component.**
-
+                The server MAY enforce internal allow/deny lists over schemes, hostnames, ports, or any other URI component.
                 These lists MAY vary by client, tenant, or deployment. Any URI referencing a disallowed resource → `400 Bad Request`.
 
                 ### References
 
                 - [RFC 3986] Uniform Resource Identifier (URI): Generic Syntax
                 - [RFC 2326] Real Time Streaming Protocol (RTSP) 1.0
-            auth:
-              type: object
-              nullable: true
-              description: |
-                Input source credentials.
-                - Use `null` when no authentication is required or to clear credentials.
-                - Use an object to add or update credentials.
-                
-                - Authentication MUST include a `username` (from patch or stored).  
-                  A `password` MUST NOT exist without it.  
-                  Otherwise → `422 Unprocessable Content`.
-              properties:
-                username:
-                  type: string
-                  minLength: 1
-                password:
-                  type: string
-                  nullable: true
-                  minLength: 1
-              additionalProperties: false
+
+                ### Note: Input URL & Name Dependency
+                - `input.url` with `name` null (not already configured or included in this patch) → `422 Unprocessable Content`.
           additionalProperties: false
         enabled:
           type: boolean
           description: |
-            Enables/disables media reading from the input source. This is used to pause or resume a channel while preserving its existing settings.
+            Enables/disables media reading from the input source. 
+            When channel is disabled, the server does not attempt to connect to the input media source.
+            Useful for pausing a channel without losing its settings.
 
-            - When `enabled: true`, both `name` and `input` must be non-null and valid — either already configured or included in this patch. Violations result in a `422 Unprocessable Content`.
-            - When `enabled: false`, the server will not attempt to connect to the input media source.
-      additionalProperties: false
-
-    ChannelClearPatch:
-      type: object
-      description: Used to reset channel object to null/disabled.
-      additionalProperties: false
-      required: [enabled, name, input]
-      properties:
-        enabled:
-          type: boolean
-          enum: [false]
-        name:
-          type: string
-          nullable: true
-          enum: [null]
-        input:
-          type: object
-          nullable: true
-          enum: [null]
+            ### Note: Enabled & Input URL/Name Dependency
+            - `enabled: true` with `input.url` null (not already configured or included in this patch) → `422 Unprocessable Content`.
+            - `enabled: true` with `name` null (not already configured or included in this patch) → `422 Unprocessable Content`.
+          additionalProperties: false
 
     ChannelStatus:
       type: object
-      description: Runtime status for a single channel.
+      description: Media reading/processing status for a single channel.
       properties:
         id:
           type: integer
@@ -456,7 +400,7 @@ components:
             - `true` ⇒ the server is currently reading/processing media successfully from the input source.
             - `false` ⇒ the server is **not** reading media successfully (re/connecting, network/connection issues (timeouts, auth), corrupted/unreadable media, any other errors in media reading/processing).
 
-            Note: If `Channel.enabled` is turned off, the server won’t attempt to read media — so online will always report as false.
+            Note: If `Channel.enabled` is turned off, the server does not attempt to read media — so online will always report as false.
       
       additionalProperties: false
       required: [id, online]
