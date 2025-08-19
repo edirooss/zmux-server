@@ -127,16 +127,7 @@ paths:
           headers:
             X-Request-Id:
               $ref: '#/components/headers/X-Request-Id'
-        '422':
-          description: |
-            Unprocessable Content — patch request was well-formed but semantically invalid.
-
-            - After applying the patch, `input.url` is non-null and `name` is null.
-            - After applying the patch, `enabled` is `true` and (`input.url` is null or `name` is null).
-          headers:
-            X-Request-Id:
-              $ref: '#/components/headers/X-Request-Id'
-
+        '422': { $ref: '#/components/responses/422UnprocessableContent' }
         '429': { $ref: '#/components/responses/429TooManyRequests' }
         '500': { $ref: '#/components/responses/500InternalServerError' }
         '503': { $ref: '#/components/responses/503ServiceUnavailable' }
@@ -251,15 +242,21 @@ components:
   responses:
     400BadRequest:
       description: |
-        Bad Request — request validation failed due to one or more of the following:
-        - Malformed JSON syntax
-        - Schema violations (i.e., incorrect data types or formats for defined fields)
-        - Unknown or unexpected fields
-        - Unauthorized field-level access (`400` is used instead of `403` to avoid leaking existence)
-        - Field value violates access policy (i.e., not permitted by allowlist/denylist rules. `400` is used instead of `403` to avoid leaking existence)
+        Bad Request — request parsing failed due to **syntax/structural issues in the HTTP request or JSON payload**, including:
+
+        - Missing or invalid required HTTP headers
+        - Malformed JSON (e.g., bad tokens, truncated body)
+        - JSON schema **shape** violation:
+          - Incorrect data type (i.e., field-type mismatch)
+          - Disallowed additional properties (i.e., unknown/unexpected fields)
+          - Omitted mandatory properties (i.e., missing required fields)
+        - Field access policy violation:
+          - Access restricted properties (i,e., unauthorized field access) — use `400` instead of `403` to avoid disclosing field existence.
+
       headers:
         X-Request-Id:
           $ref: '#/components/headers/X-Request-Id'
+    
     401Unauthorized:
       description: Unauthorized — missing or invalid credentials.
       headers:
@@ -267,12 +264,26 @@ components:
           $ref: '#/components/headers/WWW-Authenticate'
         X-Request-Id:
           $ref: '#/components/headers/X-Request-Id'
+    
     404NotFound:
       description: |
         Not Found — the targeted resource does not exist, or access is intentionally obscured for entity and collection endpoints (`404` is used instead of `403` to avoid leaking existence).
       headers:
         X-Request-Id:
           $ref: '#/components/headers/X-Request-Id'
+    
+    422UnprocessableContent:
+      description: |
+        Unprocessable Content (422) — The request was syntactically valid and successfully parsed, 
+        but failed validation due to semantically invalid data that violates domain rules or business logic, including:
+
+          - Non-nullable field set to null
+          - Invalid string length or format (e.g., not a valid uuid or uri)
+          - Numeric value out of range
+          - Unsupported enum value
+          - Cross-field value dependency issues (e.g., `enabled: true` requires `name` and `input.url`)
+          - Field value blocked by allowlist/denylist logic (use `422` instead of `403` to avoid exposing policy details)
+
     429TooManyRequests:
       description: Too Many Requests — rate limit exceeded.
       headers:
@@ -437,7 +448,7 @@ components:
             - `false` ⇒ the server is **not** reading media successfully (re/connecting, network/connection issues (timeouts, auth), corrupted/unreadable media, any other errors in media reading/processing).
 
             Note: If `Channel.enabled` is turned off, the server does not attempt to read media — so online will always report as false.
-      
+          readOnly: true
       additionalProperties: false
       required: [id, online]
 
