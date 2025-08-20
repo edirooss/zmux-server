@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -13,7 +15,6 @@ import (
 	"github.com/edirooss/zmux-server/services"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"github.com/gin-gonic/gin/binding"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -97,9 +98,6 @@ func main() {
 	// Configure Gin's logger
 	gin.DefaultWriter = zap.NewStdLog(log.Named("gin")).Writer()
 
-	// Configure Gin's binding JSON decoder to reject payloads with fields not in the target struct
-	binding.EnableDecoderDisallowUnknownFields = true
-
 	// Create Gin router
 	r := gin.New()
 
@@ -130,7 +128,7 @@ func main() {
 	r.POST("/api/channels", func(c *gin.Context) {
 		req := channelmodel.NewCreateZmuxChannelReq()
 
-		if err := c.ShouldBindJSON(&req); err != nil {
+		if err := bind(c.Request, &req); err != nil {
 			_ = c.Error(err) // <-- attach
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"message": err.Error()})
 			return
@@ -193,7 +191,7 @@ func main() {
 		}
 
 		var req channelmodel.UpdateZmuxChannelReq
-		if err := c.ShouldBindJSON(&req); err != nil {
+		if err := bind(c.Request, &req); err != nil {
 			_ = c.Error(err)
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"message": err.Error()})
 			return
@@ -284,4 +282,21 @@ func main() {
 	if err := r.Run("127.0.0.1:8080"); err != nil {
 		log.Fatal("server failed", zap.Error(err))
 	}
+}
+
+func bind(req *http.Request, obj any) error {
+	if req == nil || req.Body == nil {
+		return errors.New("invalid request")
+	}
+	return decodeJSON(req.Body, obj)
+}
+
+func decodeJSON(r io.Reader, obj any) error {
+	decoder := json.NewDecoder(r)
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(obj); err != nil {
+		return err
+	}
+	return validate(obj)
 }
