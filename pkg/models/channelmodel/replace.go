@@ -81,8 +81,8 @@ func (r ReplaceZmuxChannelReq) ToDomain(id int64) (*ZmuxChannel, error) {
 		return nil, fieldNullErr("restart_sec")
 	}
 
-	in, _ := r.Input.Value()
-	out, _ := r.Output.Value()
+	in := *r.Input.Value()
+	out := *r.Output.Value()
 
 	// ---- nested presence: input ----
 	if !in.URL.IsSet() {
@@ -169,14 +169,14 @@ func (r ReplaceZmuxChannelReq) ToDomain(id int64) (*ZmuxChannel, error) {
 	// name (nullable)
 	if r.Name.IsNull() {
 		z.Name = nil
-	} else if v, _ := r.Name.Value(); true {
+	} else if v := *r.Name.Value(); true {
 		z.Name = &v
 	}
 
 	// input.url (nullable)
 	if in.URL.IsNull() {
 		z.Input.URL = nil
-	} else if s, _ := in.URL.Value(); true {
+	} else if s := *in.URL.Value(); true {
 		u, err := url.Parse(s)
 		if err != nil {
 			return nil, fieldParseErr("input.url", "valid URI", err)
@@ -185,7 +185,7 @@ func (r ReplaceZmuxChannelReq) ToDomain(id int64) (*ZmuxChannel, error) {
 	}
 
 	// input.avioflags (not nullable; value required)
-	if ss, _ := in.AVIOFlags.Value(); true {
+	if ss := *in.AVIOFlags.Value(); true {
 		z.Input.AVIOFlags = make([]AVIOFlag, len(ss))
 		for i, s := range ss {
 			z.Input.AVIOFlags[i] = AVIOFlag(s)
@@ -193,17 +193,17 @@ func (r ReplaceZmuxChannelReq) ToDomain(id int64) (*ZmuxChannel, error) {
 	}
 
 	// input.probesize
-	if v, _ := in.Probesize.Value(); true {
+	if v := *in.Probesize.Value(); true {
 		z.Input.Probesize = v
 	}
 
 	// input.analyzeduration
-	if v, _ := in.Analyzeduration.Value(); true {
+	if v := *in.Analyzeduration.Value(); true {
 		z.Input.Analyzeduration = v
 	}
 
 	// input.fflags (not nullable)
-	if ss, _ := in.FFlags.Value(); true {
+	if ss := *in.FFlags.Value(); true {
 		z.Input.FFlags = make([]FFlag, len(ss))
 		for i, s := range ss {
 			z.Input.FFlags[i] = FFlag(s)
@@ -211,14 +211,14 @@ func (r ReplaceZmuxChannelReq) ToDomain(id int64) (*ZmuxChannel, error) {
 	}
 
 	// input.max_delay
-	if v, _ := in.MaxDelay.Value(); true {
+	if v := *in.MaxDelay.Value(); true {
 		z.Input.MaxDelay = v
 	}
 
 	// input.localaddr (nullable)
 	if in.Localaddr.IsNull() {
 		z.Input.Localaddr = nil
-	} else if s, _ := in.Localaddr.Value(); true {
+	} else if s := *in.Localaddr.Value(); true {
 		addr, err := netip.ParseAddr(s)
 		if err != nil {
 			return nil, fieldParseErr("input.localaddr", "IPv4 address", err)
@@ -227,14 +227,14 @@ func (r ReplaceZmuxChannelReq) ToDomain(id int64) (*ZmuxChannel, error) {
 	}
 
 	// input.timeout
-	if v, _ := in.Timeout.Value(); true {
+	if v := *in.Timeout.Value(); true {
 		z.Input.Timeout = v
 	}
 
 	// input.rtsp_transport (nullable)
 	if in.RTSPTransport.IsNull() {
 		z.Input.RTSPTransport = nil
-	} else if s, _ := in.RTSPTransport.Value(); true {
+	} else if s := *in.RTSPTransport.Value(); true {
 		t := RTSPTransport(s)
 		z.Input.RTSPTransport = &t
 	}
@@ -242,7 +242,7 @@ func (r ReplaceZmuxChannelReq) ToDomain(id int64) (*ZmuxChannel, error) {
 	// output.url (nullable)
 	if out.URL.IsNull() {
 		z.Output.URL = nil
-	} else if s, _ := out.URL.Value(); true {
+	} else if s := *out.URL.Value(); true {
 		u, err := url.Parse(s)
 		if err != nil {
 			return nil, fieldParseErr("output.url", "valid URI", err)
@@ -253,7 +253,7 @@ func (r ReplaceZmuxChannelReq) ToDomain(id int64) (*ZmuxChannel, error) {
 	// output.localaddr (nullable)
 	if out.Localaddr.IsNull() {
 		z.Output.Localaddr = nil
-	} else if s, _ := out.Localaddr.Value(); true {
+	} else if s := *out.Localaddr.Value(); true {
 		addr, err := netip.ParseAddr(s)
 		if err != nil {
 			return nil, fieldParseErr("output.localaddr", "IPv4 address", err)
@@ -262,24 +262,24 @@ func (r ReplaceZmuxChannelReq) ToDomain(id int64) (*ZmuxChannel, error) {
 	}
 
 	// output fields (non-nullable)
-	if v, _ := out.PktSize.Value(); true {
+	if v := *out.PktSize.Value(); true {
 		z.Output.PktSize = v
 	}
-	if v, _ := out.MapVideo.Value(); true {
+	if v := *out.MapVideo.Value(); true {
 		z.Output.MapVideo = v
 	}
-	if v, _ := out.MapAudio.Value(); true {
+	if v := *out.MapAudio.Value(); true {
 		z.Output.MapAudio = v
 	}
-	if v, _ := out.MapData.Value(); true {
+	if v := *out.MapData.Value(); true {
 		z.Output.MapData = v
 	}
 
 	// systemd/process (non-nullable)
-	if v, _ := r.Enabled.Value(); true {
+	if v := *r.Enabled.Value(); true {
 		z.Enabled = v
 	}
-	if v, _ := r.RestartSec.Value(); true {
+	if v := *r.RestartSec.Value(); true {
 		z.RestartSec = v
 	}
 

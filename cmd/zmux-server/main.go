@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bufio"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -74,6 +77,7 @@ func main() {
 	logConfig.DisableCaller = true
 	log := zap.Must(logConfig.Build())
 	defer log.Sync()
+	log = log.Named("main")
 
 	// Enable strict JSON decoding (must be before binding happens)
 	binding.EnableDecoderDisallowUnknownFields = true
@@ -97,6 +101,8 @@ func main() {
 			RefreshTimeout: 500 * time.Millisecond,
 		},
 	)
+
+	gin.SetMode(gin.ReleaseMode)
 
 	// Create Gin router
 	r := gin.New()
@@ -160,19 +166,30 @@ func main() {
 		c.JSON(http.StatusOK, chs)
 	})
 
-	r.POST("/api/channels", func(c *gin.Context) {
-		// Content-Type guard
-		if requireContentType(c, "application/json", "application/json; charset=utf-8"); err != nil {
-			_ = c.Error(err) // <-- attach
-			c.JSON(http.StatusUnsupportedMediaType, gin.H{"message": err.Error()})
-			return
-		}
+	r.POST("/api/channelsCOPY", enforceContentType("application/json; charset=utf-8"), func(c *gin.Context) {
+		// Cap request size
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 5 /* 100*1024 100 KiB */)
+		defer c.Request.Body.Close()
+
+		dec := json.NewDecoder(c.Request.Body)
+		dec.DisallowUnknownFields()
 
 		var req channelmodel.CreateZmuxChannelReq
-		if err := jsonx.ParseStrictJSONBody(c.Request, &req); err != nil { /* schema mismatch: malformed JSON, unknown fields, missing required fields, wrong data type at JSON level */
-			_ = c.Error(err) // <-- attach
-			c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
-			return
+		for {
+			// Decode exactly one JSON value with unknown-field rejection
+			if err := dec.Decode(&req); err != nil {
+				if err == io.EOF {
+					break
+				}
+
+				if errors.As(err, new(*http.MaxBytesError)) {
+					c.JSON(http.StatusRequestEntityTooLarge, gin.H{"message": err.Error()})
+					return
+				}
+
+				c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+				return
+			}
 		}
 
 		ch, err := req.ToDomain()
@@ -187,6 +204,73 @@ func main() {
 			c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 			return
 		}
+
+		c.Header("Location", fmt.Sprintf("/api/channels/%d", ch.ID))
+		c.JSON(http.StatusCreated, ch)
+	})
+
+	r.POST("/api/channels1", enforceContentType("application/json; charset=utf-8"), func(c *gin.Context) {
+
+		// Cap request size
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 0)
+		defer func() {
+			// should i add here draining?
+			c.Request.Body.Close()
+		}()
+
+		dec := json.NewDecoder(c.Request.Body)
+		var req channelmodel.CreateZmuxChannelReq
+
+		// decode one JSON value;
+		// note: .Decode() skips leading and trailing whitespace
+		if err := dec.Decode(&req); err != nil {
+			if errors.As(err, new(*http.MaxBytesError)) {
+				c.Error(err)
+				c.Header("Connection", "close")
+				c.JSON(http.StatusRequestEntityTooLarge, gin.H{"message": err.Error()})
+				return
+			}
+
+			c.Error(err)
+			c.Header("Connection", "close")
+			c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+			return
+		}
+		// ensure EOF
+		if err := func() error {
+			// try to decode another JSON value; extra syntax is rejected
+			if dec.Decode(&struct{}{}) != io.EOF {
+				return errors.New("expected EOF (trailing content not allowed)")
+			}
+			return nil
+		}(); err != nil {
+			c.Error(err)
+			c.Header("Connection", "close")
+			c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+			return
+		}
+
+		// Business logic on req, then get chan
+		ch := channelmodel.NewZmuxChannel(0)
+		ch.Name = req.Name.Value()
+
+		c.Header("Location", fmt.Sprintf("/api/channels/%d", ch.ID))
+		c.JSON(http.StatusCreated, ch)
+	})
+
+	r.POST("/api/channels", withBodyCap(0), func(c *gin.Context) {
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 5)
+		_, err := io.ReadAll(c.Request.Body)
+
+		if err != nil {
+			c.Error(err)
+			c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+			return
+		}
+
+		// Business logic on req, then get chan
+		ch := channelmodel.NewZmuxChannel(0)
+		// ch.Name = req.Name.Value()
 
 		c.Header("Location", fmt.Sprintf("/api/channels/%d", ch.ID))
 		c.JSON(http.StatusCreated, ch)
@@ -209,7 +293,7 @@ func main() {
 		}
 
 		var req channelmodel.ReplaceZmuxChannelReq
-		if err := jsonx.ParseStrictJSONBody(c.Request, &req); err != nil { /* schema mismatch: malformed JSON, unknown fields, missing required fields, wrong data type at JSON level */
+		if err := jsonx.ParseJSONObject(io.Reader(c.Request.Body), &req); err != nil { /* schema mismatch: malformed JSON, unknown fields, missing required fields, wrong data type at JSON level */
 			_ = c.Error(err) // <-- attach
 			c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 			return
@@ -302,8 +386,24 @@ func main() {
 		c.JSON(http.StatusOK, res.Data)
 	})
 
+	httpserver := &http.Server{
+		Addr:    "127.0.0.1:8080",
+		Handler: r, // <- gin.Engine satisfies http.Handler
+
+		// Configure timeouts (by default: it’s all basically “infinite timeouts”)
+		ReadTimeout:  10 * time.Second, // → max time the server will wait to read the request (headers + body).
+		WriteTimeout: 15 * time.Second, // → max time the server will wait to write the response to the client.
+		IdleTimeout:  60 * time.Second, // → max time an idle keep-alive connection sits open between requests.
+
+		// Header size constraint
+		MaxHeaderBytes: 1 << 15, // 32 KB
+
+		// Attach zap's logger
+		ErrorLog: zap.NewStdLog(log.Named("http").WithOptions(zap.AddCallerSkip(1))),
+	}
+
 	log.Info("running HTTP server on 127.0.0.1:8080")
-	if err := r.Run("127.0.0.1:8080"); err != nil {
+	if err := httpserver.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatal("server failed", zap.Error(err))
 	}
 }
@@ -317,4 +417,63 @@ func requireContentType(c *gin.Context, allowedContentTypes ...string) error {
 		}
 	}
 	return fmt.Errorf("invalid Content-Type %q; must be one of: %v", contentType, allowedContentTypes)
+}
+
+func peekByte(br *bufio.Reader, allowed ...byte) error {
+	b, err := br.Peek(1)
+	if len(allowed) == 0 /* expecting EOF */ {
+		if err == io.EOF {
+			return nil
+		}
+		// unexpected read failure
+		if err != nil {
+			return err
+		}
+		// unexpected read success
+		return errors.New("trailing bytes not allowed")
+	}
+	// expecting allowed bytes
+
+	if err != nil {
+		return err // bubble up io.EOF or other error
+	}
+
+	next := b[0]
+	for _, ch := range allowed {
+		if next == ch {
+			return nil // valid byte
+		}
+	}
+
+	return errors.New("unexpected byte")
+}
+
+func enforceContentType(args ...string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		contentType := c.GetHeader("Content-Type")
+		if err := checkContentType(contentType, args...); err != nil {
+			_ = c.Error(err)
+			c.AbortWithStatusJSON(http.StatusUnsupportedMediaType, gin.H{"message": err.Error()})
+			return
+		}
+		c.Next()
+	}
+}
+
+func checkContentType(contentType string, args ...string) error {
+	// Optional: parse media type using `mime.ParseMediaType`; tolerate charset, etc.
+	// Match against allowed list
+	for _, allowed := range args {
+		if contentType == allowed {
+			return nil
+		}
+	}
+	return errors.New("invalid content type")
+}
+
+func withBodyCap(maxBodyBytes int64) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBodyBytes)
+		c.Next()
+	}
 }

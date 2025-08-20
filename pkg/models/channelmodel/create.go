@@ -50,6 +50,8 @@ type CreateOutput struct {
 	MapData   jsonx.Field[bool]   `json:"map_data"`  // optional (default: true). NOT nullable
 }
 
+// func (req *CreateZmuxChannelReq) validateRequired() {} // Could be implemented for required fields, currenly none are required.
+
 // ---------- Mapping to domain (defaults + overlays) ----------
 
 // ToDomain builds a ZmuxChannel with defaults applied and request values overlaid.
@@ -63,7 +65,7 @@ func (r CreateZmuxChannelReq) ToDomain() (*ZmuxChannel, error) {
 	if r.Name.IsSet() {
 		if r.Name.IsNull() {
 			z.Name = nil
-		} else if v, _ := r.Name.Value(); true {
+		} else if v := *r.Name.Value(); true {
 			// no trim here; domain handles length 1..100
 			z.Name = &v
 		}
@@ -74,12 +76,12 @@ func (r CreateZmuxChannelReq) ToDomain() (*ZmuxChannel, error) {
 		if r.Input.IsNull() {
 			return nil, fieldNullErr("input")
 		}
-		in, _ := r.Input.Value()
+		in := *r.Input.Value()
 		// URL
 		if in.URL.IsSet() {
 			if in.URL.IsNull() {
 				z.Input.URL = nil
-			} else if s, _ := in.URL.Value(); true {
+			} else if s := *in.URL.Value(); true {
 				u, err := url.Parse(s)
 				if err != nil {
 					return nil, fieldParseErr("input.url", "valid URI", err)
@@ -92,7 +94,7 @@ func (r CreateZmuxChannelReq) ToDomain() (*ZmuxChannel, error) {
 			if in.AVIOFlags.IsNull() {
 				return nil, fieldNullErr("input.avioflags")
 			}
-			ss, _ := in.AVIOFlags.Value()
+			ss := *in.AVIOFlags.Value()
 			z.Input.AVIOFlags = make([]AVIOFlag, len(ss))
 			for i, s := range ss {
 				z.Input.AVIOFlags[i] = AVIOFlag(s)
@@ -103,7 +105,7 @@ func (r CreateZmuxChannelReq) ToDomain() (*ZmuxChannel, error) {
 			if in.ProbeSize.IsNull() {
 				return nil, fieldNullErr("input.probesize")
 			}
-			if v, _ := in.ProbeSize.Value(); true {
+			if v := *in.ProbeSize.Value(); true {
 				z.Input.Probesize = v
 			}
 		}
@@ -112,7 +114,7 @@ func (r CreateZmuxChannelReq) ToDomain() (*ZmuxChannel, error) {
 			if in.AnalyzeDuration.IsNull() {
 				return nil, fieldNullErr("input.analyzeduration")
 			}
-			if v, _ := in.AnalyzeDuration.Value(); true {
+			if v := *in.AnalyzeDuration.Value(); true {
 				z.Input.Analyzeduration = v
 			}
 		}
@@ -121,7 +123,7 @@ func (r CreateZmuxChannelReq) ToDomain() (*ZmuxChannel, error) {
 			if in.FFlags.IsNull() {
 				return nil, fieldNullErr("input.fflags")
 			}
-			ss, _ := in.FFlags.Value()
+			ss := *in.FFlags.Value()
 			z.Input.FFlags = make([]FFlag, len(ss))
 			for i, s := range ss {
 				z.Input.FFlags[i] = FFlag(s)
@@ -132,7 +134,7 @@ func (r CreateZmuxChannelReq) ToDomain() (*ZmuxChannel, error) {
 			if in.MaxDelay.IsNull() {
 				return nil, fieldNullErr("input.max_delay")
 			}
-			if v, _ := in.MaxDelay.Value(); true {
+			if v := *in.MaxDelay.Value(); true {
 				z.Input.MaxDelay = v
 			}
 		}
@@ -140,7 +142,7 @@ func (r CreateZmuxChannelReq) ToDomain() (*ZmuxChannel, error) {
 		if in.LocalAddr.IsSet() {
 			if in.LocalAddr.IsNull() {
 				z.Input.Localaddr = nil
-			} else if s, _ := in.LocalAddr.Value(); true {
+			} else if s := *in.LocalAddr.Value(); true {
 				addr, err := netip.ParseAddr(s)
 				if err != nil {
 					return nil, fieldParseErr("input.localaddr", "IPv4 address", err)
@@ -154,7 +156,7 @@ func (r CreateZmuxChannelReq) ToDomain() (*ZmuxChannel, error) {
 			if in.Timeout.IsNull() {
 				return nil, fieldNullErr("input.timeout")
 			}
-			if v, _ := in.Timeout.Value(); true {
+			if v := *in.Timeout.Value(); true {
 				z.Input.Timeout = v
 			}
 		}
@@ -162,7 +164,7 @@ func (r CreateZmuxChannelReq) ToDomain() (*ZmuxChannel, error) {
 		if in.RTSPTransport.IsSet() {
 			if in.RTSPTransport.IsNull() {
 				z.Input.RTSPTransport = nil
-			} else if s, _ := in.RTSPTransport.Value(); true {
+			} else if s := *in.RTSPTransport.Value(); true {
 				t := RTSPTransport(s) // domain will check allowed values
 				z.Input.RTSPTransport = &t
 			}
@@ -174,12 +176,12 @@ func (r CreateZmuxChannelReq) ToDomain() (*ZmuxChannel, error) {
 		if r.Output.IsNull() {
 			return nil, fieldNullErr("output")
 		}
-		out, _ := r.Output.Value()
+		out := *r.Output.Value()
 		// URL
 		if out.URL.IsSet() {
 			if out.URL.IsNull() {
 				z.Output.URL = nil
-			} else if s, _ := out.URL.Value(); true {
+			} else if s := *out.URL.Value(); true {
 				u, err := url.Parse(s)
 				if err != nil {
 					return nil, fieldParseErr("output.url", "valid URI", err)
@@ -191,7 +193,7 @@ func (r CreateZmuxChannelReq) ToDomain() (*ZmuxChannel, error) {
 		if out.LocalAddr.IsSet() {
 			if out.LocalAddr.IsNull() {
 				z.Output.Localaddr = nil
-			} else if s, _ := out.LocalAddr.Value(); true {
+			} else if s := *out.LocalAddr.Value(); true {
 				addr, err := netip.ParseAddr(s)
 				if err != nil {
 					return nil, fieldParseErr("output.localaddr", "IPv4 address", err)
@@ -204,7 +206,7 @@ func (r CreateZmuxChannelReq) ToDomain() (*ZmuxChannel, error) {
 			if out.PktSize.IsNull() {
 				return nil, fieldNullErr("output.pkt_size")
 			}
-			if v, _ := out.PktSize.Value(); true {
+			if v := *out.PktSize.Value(); true {
 				z.Output.PktSize = v
 			}
 		}
@@ -213,7 +215,7 @@ func (r CreateZmuxChannelReq) ToDomain() (*ZmuxChannel, error) {
 			if out.MapVideo.IsNull() {
 				return nil, fieldNullErr("output.map_video")
 			}
-			if v, _ := out.MapVideo.Value(); true {
+			if v := *out.MapVideo.Value(); true {
 				z.Output.MapVideo = v
 			}
 		}
@@ -221,7 +223,7 @@ func (r CreateZmuxChannelReq) ToDomain() (*ZmuxChannel, error) {
 			if out.MapAudio.IsNull() {
 				return nil, fieldNullErr("output.map_audio")
 			}
-			if v, _ := out.MapAudio.Value(); true {
+			if v := *out.MapAudio.Value(); true {
 				z.Output.MapAudio = v
 			}
 		}
@@ -229,7 +231,7 @@ func (r CreateZmuxChannelReq) ToDomain() (*ZmuxChannel, error) {
 			if out.MapData.IsNull() {
 				return nil, fieldNullErr("output.map_data")
 			}
-			if v, _ := out.MapData.Value(); true {
+			if v := *out.MapData.Value(); true {
 				z.Output.MapData = v
 			}
 		}
@@ -240,7 +242,7 @@ func (r CreateZmuxChannelReq) ToDomain() (*ZmuxChannel, error) {
 		if r.Enabled.IsNull() {
 			return nil, fieldNullErr("enabled")
 		}
-		if v, _ := r.Enabled.Value(); true {
+		if v := *r.Enabled.Value(); true {
 			z.Enabled = v
 		}
 	}
@@ -248,7 +250,7 @@ func (r CreateZmuxChannelReq) ToDomain() (*ZmuxChannel, error) {
 		if r.RestartSec.IsNull() {
 			return nil, fieldNullErr("restart_sec")
 		}
-		if v, _ := r.RestartSec.Value(); true {
+		if v := *r.RestartSec.Value(); true {
 			z.RestartSec = v
 		}
 	}
