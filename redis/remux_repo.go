@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	models "github.com/edirooss/zmux-server/pkg/models/channel"
+	"github.com/edirooss/zmux-server/pkg/models"
 	"go.uber.org/zap"
 )
 

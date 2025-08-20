@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"sync"
 
-	models "github.com/edirooss/zmux-server/pkg/models/channel"
+	"github.com/edirooss/zmux-server/pkg/models/channelmodel"
 	"github.com/edirooss/zmux-server/redis"
 	"go.uber.org/zap"
 )
@@ -95,29 +95,30 @@ func (s *ChannelService) lock(id int64) func() {
 //
 // Postconditions on success
 //   - Unit committed; service enabled iff ch.Enabled=true; Redis reflects that.
-func (s *ChannelService) CreateChannel(ctx context.Context, req *models.CreateZmuxChannelReq) (*models.ZmuxChannel, error) {
+func (s *ChannelService) CreateChannel(ctx context.Context, ch *channelmodel.ZmuxChannel) error {
 	id, err := s.repo.GenerateID(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	unlock := s.lock(id)
 	defer unlock()
 
-	ch := req.ToChannel(id)
-
-	// Commit unit first so that the systemd definition exists.
-	if err := s.commitSystemdService(ch); err != nil {
-		// DEV: At this point nothing persisted; caller may retry safely.
-		return nil, fmt.Errorf("commit systemd service: %w", err)
-	}
+	// Attach ID
+	ch.ID = id
 
 	// If requested, enable the channel now. If this fails, abort without persisting.
 	if ch.Enabled {
+		// Commit unit first so that the systemd definition exists.
+		if err := s.commitSystemdService(ch); err != nil {
+			// DEV: At this point nothing persisted; caller may retry safely.
+			return fmt.Errorf("commit systemd service: %w", err)
+		}
+
 		if err := s.enableChannel(ch.ID); err != nil {
 			// DEV: Unit file exists but runtime is not enabled; we purposely do not
 			// persist to avoid Redis claiming Enabled=true when it is not. Skip ID
 			// reuse. Observability: handler logs the error.
-			return nil, fmt.Errorf("enable channel: %w", err)
+			return fmt.Errorf("enable channel: %w", err)
 		}
 	}
 
@@ -127,15 +128,15 @@ func (s *ChannelService) CreateChannel(ctx context.Context, req *models.CreateZm
 		if ch.Enabled {
 			_ = s.disableChannel(ch.ID) // best-effort rollback; do not mask Set error
 		}
-		return nil, fmt.Errorf("set: %w", err)
+		return fmt.Errorf("set: %w", err)
 	}
-	return ch, nil
+	return nil
 }
 
 // GetChannel returns a channel by ID (read-only, no locks).
 // Failure modes
 //   - redis.ErrChannelNotFound wrapped → callers should map to 404.
-func (s *ChannelService) GetChannel(ctx context.Context, id int64) (*models.ZmuxChannel, error) {
+func (s *ChannelService) GetChannel(ctx context.Context, id int64) (*channelmodel.ZmuxChannel, error) {
 	ch, err := s.repo.Get(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("get: %w", err)
@@ -146,7 +147,7 @@ func (s *ChannelService) GetChannel(ctx context.Context, id int64) (*models.Zmux
 // ListChannels returns all channels (read-only, no locks).
 // Failure modes
 //   - Any Redis error is returned as-is (wrapped) → callers map to 500.
-func (s *ChannelService) ListChannels(ctx context.Context) ([]*models.ZmuxChannel, error) {
+func (s *ChannelService) ListChannels(ctx context.Context) ([]*channelmodel.ZmuxChannel, error) {
 	chs, err := s.repo.List(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list: %w", err)
@@ -177,34 +178,31 @@ func (s *ChannelService) ListChannels(ctx context.Context) ([]*models.ZmuxChanne
 //
 // Postconditions on success
 //   - Runtime reflects desired config & enablement; Redis matches it.
-func (s *ChannelService) UpdateChannel(ctx context.Context, id int64, req *models.UpdateZmuxChannelReq) (*models.ZmuxChannel, error) {
-	unlock := s.lock(id)
+func (s *ChannelService) UpdateChannel(ctx context.Context, ch *channelmodel.ZmuxChannel) error {
+	unlock := s.lock(ch.ID)
 	defer unlock()
 
 	// Load current
-	ch, err := s.repo.Get(ctx, id)
+	ch, err := s.repo.Get(ctx, ch.ID)
 	if err != nil {
-		return nil, fmt.Errorf("get: %w", err)
+		return fmt.Errorf("get: %w", err)
 	}
 	prevEnabled := ch.Enabled
 
-	// Apply patch in-memory
-	req.ApplyTo(ch)
-
-	// Commit (idempotent) so the unit reflects new config.
-	if err := s.commitSystemdService(ch); err != nil {
-		return nil, fmt.Errorf("commit systemd service: %w", err)
-	}
-
 	// Reconcile enablement.
 	if ch.Enabled {
+		// Commit (idempotent) so the unit reflects new config.
+		if err := s.commitSystemdService(ch); err != nil {
+			return fmt.Errorf("commit systemd service: %w", err)
+		}
+
 		// DEV: Treat as restart semantics — (re)enable to pick up new config.
 		if err := s.enableChannel(ch.ID); err != nil {
-			return nil, fmt.Errorf("enable channel: %w", err)
+			return fmt.Errorf("enable channel: %w", err)
 		}
 	} else if prevEnabled {
 		if err := s.disableChannel(ch.ID); err != nil {
-			return nil, fmt.Errorf("disable channel: %w", err)
+			return fmt.Errorf("disable channel: %w", err)
 		}
 	}
 
@@ -214,9 +212,9 @@ func (s *ChannelService) UpdateChannel(ctx context.Context, id int64, req *model
 		// already changed and may be live. Rolling back could be more disruptive.
 		// If we want to require strict no-drift, we need to introduce a compensating write
 		// or a background reconciler.
-		return nil, fmt.Errorf("set: %w", err)
+		return fmt.Errorf("set: %w", err)
 	}
-	return ch, nil
+	return nil
 }
 
 // DeleteChannel disables the unit if needed and deletes the record.
@@ -363,7 +361,7 @@ func (s *ChannelService) disableChannel(channelID int64) error {
 // called for create and update flows, and also before enabling to ensure the
 // unit exists and is up-to-date. Consider this idempotent with respect to the
 // same inputs; repeated calls are cheap compared to failed starts at runtime.
-func (s *ChannelService) commitSystemdService(channel *models.ZmuxChannel) error {
+func (s *ChannelService) commitSystemdService(channel *channelmodel.ZmuxChannel) error {
 	cfg := SystemdServiceConfig{
 		ServiceName: fmt.Sprintf("zmux-channel-%d", channel.ID),
 		ExecStart:   BuildRemuxExecStart(channel),

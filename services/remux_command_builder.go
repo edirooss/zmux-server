@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	models "github.com/edirooss/zmux-server/pkg/models/channel"
+	"github.com/edirooss/zmux-server/pkg/models/channelmodel"
 )
 
 // RemuxCommandBuilder builds the final argv/command string for the `remux` binary.
@@ -83,7 +83,7 @@ func shQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-// BuildRemuxExecArgs maps models.ZmuxChannel → argv slice.
+// BuildRemuxExecArgs maps channelmodel.ZmuxChannel → argv slice.
 // ORDER MATCHES config.Config field order for maximum compatibility:
 //
 //	Top-level:        --id
@@ -95,7 +95,7 @@ func shQuote(s string) string {
 // Notes:
 //   - Bool defaults are true for map-* flags; we only emit when disabling.
 //   - Zero/empty values are omitted entirely (pflag won't receive "" values).
-func BuildRemuxExecArgs(ch *models.ZmuxChannel) []string {
+func BuildRemuxExecArgs(ch *channelmodel.ZmuxChannel) []string {
 	builder := NewRemuxCommandBuilder()
 
 	// --- Top-level ---
@@ -104,20 +104,20 @@ func BuildRemuxExecArgs(ch *models.ZmuxChannel) []string {
 
 	// --- Input (strings; omit if empty) ---
 	builder.
-		WithString("--input-url", ch.Input.URL).
-		WithString("--avioflags", ch.Input.AVIOFlags).
+		WithString("--input-url", ch.Input.URL.String()).
+		WithString("--avioflags", joinFlags(ch.Input.AVIOFlags)).
 		WithUint("--probesize", ch.Input.Probesize).
 		WithUint("--analyzeduration", ch.Input.Analyzeduration).
-		WithString("--fflags", ch.Input.FFlags).
+		WithString("--fflags", joinFlags(ch.Input.FFlags)).
 		WithInt("--max-delay", ch.Input.MaxDelay).
-		WithString("--input-localaddr", ch.Input.Localaddr).
+		WithString("--input-localaddr", ch.Input.Localaddr.String()).
 		WithUint("--timeout", ch.Input.Timeout).
-		WithString("--rtsp-transport", ch.Input.RTSPTransport)
+		WithString("--rtsp-transport", ch.Input.RTSPTransport.String())
 
 	// --- Output ---
 	builder.
-		WithString("--output-url", ch.Output.URL).
-		WithString("--output-localaddr", ch.Output.Localaddr).
+		WithString("--output-url", ch.Output.URL.String()).
+		WithString("--output-localaddr", ch.Output.Localaddr.String()).
 		WithUint("--pkt-size", ch.Output.PktSize)
 
 	// --- Stream mapping (bool defaults true) ---
@@ -130,7 +130,7 @@ func BuildRemuxExecArgs(ch *models.ZmuxChannel) []string {
 }
 
 // BuildRemuxExecStart is a convenience wrapper that returns a shell-safe ExecStart string.
-func BuildRemuxExecStart(ch *models.ZmuxChannel) string {
+func BuildRemuxExecStart(ch *channelmodel.ZmuxChannel) string {
 	return NewRemuxCommandBuilderFromArgs(BuildRemuxExecArgs(ch)).BuildString()
 }
 
@@ -144,4 +144,26 @@ func NewRemuxCommandBuilderFromArgs(args []string) *RemuxCommandBuilder {
 	cp := make([]string, len(args))
 	copy(cp, args)
 	return &RemuxCommandBuilder{args: cp}
+}
+
+// ---- Helpers -----
+func safeStrDeref(pStr *string) string {
+	if pStr == nil {
+		return ""
+	}
+	return *pStr
+}
+
+// Constraint: any type whose underlying type is string
+type stringAlias interface {
+	~string
+}
+
+// Generic joiner for any []T where T is based on string
+func joinFlags[T stringAlias](flags []T) string {
+	strFlags := make([]string, len(flags))
+	for i, f := range flags {
+		strFlags[i] = string(f)
+	}
+	return strings.Join(strFlags, "+")
 }

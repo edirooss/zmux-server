@@ -8,6 +8,17 @@ info:
     - **Transport**: HTTPS only.
     - **Auth**: HTTP Basic over TLS.
     - **Correlation**: Clients MAY send `X-Request-Id`; the server echoes it or generates one.
+  
+  contact:
+    name: Zmux Support
+  
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://zmux.local
+    description: Production server
 
 security:
   - basicAuth: []
@@ -95,14 +106,7 @@ paths:
         - Requires `Content-Type: application/merge-patch+json`.
 
       parameters:
-        - in: path
-          name: id
-          required: true
-          description: Unique numeric identifier of the channel.
-          schema:
-            type: integer
-            format: int64
-            minimum: 1
+        - $ref: '#/components/parameters/ChannelId'
         - $ref: '#/components/parameters/X-Request-Id'
       requestBody:
         required: true
@@ -229,6 +233,16 @@ components:
           value: 'Wed, 21 Oct 2015 07:28:00 GMT'
 
   parameters:
+    ChannelId:
+      name: id
+      in: path
+      required: true
+      description: Unique numeric identifier of the channel.
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+
     X-Request-Id:
       name: X-Request-Id
       in: header
@@ -283,6 +297,9 @@ components:
           - Unsupported enum value
           - Cross-field value dependency issues (e.g., `enabled: true` requires `name` and `input.url`)
           - Field value blocked by allowlist/denylist logic (use `422` instead of `403` to avoid exposing policy details)
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
 
     429TooManyRequests:
       description: Too Many Requests — rate limit exceeded.

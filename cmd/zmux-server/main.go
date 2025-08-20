@@ -8,7 +8,8 @@ import (
 	"strconv"
 	"time"
 
-	models "github.com/edirooss/zmux-server/pkg/models/channel"
+	"github.com/edirooss/zmux-server/pkg/jsonx"
+	"github.com/edirooss/zmux-server/pkg/models/channelmodel"
 	"github.com/edirooss/zmux-server/redis"
 	"github.com/edirooss/zmux-server/services"
 	"github.com/gin-contrib/cors"
@@ -124,26 +125,6 @@ func main() {
 		c.JSON(200, gin.H{"message": "pong"})
 	})
 
-	r.POST("/api/channels", func(c *gin.Context) {
-		req := models.NewCreateZmuxChannelReq()
-
-		if err := c.ShouldBindJSON(&req); err != nil {
-			_ = c.Error(err) // <-- attach
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"message": err.Error()})
-			return
-		}
-
-		ch, err := channelService.CreateChannel(c.Request.Context(), &req)
-		if err != nil {
-			_ = c.Error(err) // <-- attach
-			c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
-			return
-		}
-
-		c.Header("Location", fmt.Sprintf("/api/channels/%d", ch.ID))
-		c.JSON(http.StatusCreated, ch)
-	})
-
 	r.GET("/api/channels/:id", func(c *gin.Context) {
 		idStr := c.Param("id")
 		id, err := strconv.ParseInt(idStr, 10, 64)
@@ -179,7 +160,38 @@ func main() {
 		c.JSON(http.StatusOK, chs)
 	})
 
-	// main router setup (add)
+	r.POST("/api/channels", func(c *gin.Context) {
+		// Content-Type guard
+		if requireContentType(c, "application/json", "application/json; charset=utf-8"); err != nil {
+			_ = c.Error(err) // <-- attach
+			c.JSON(http.StatusUnsupportedMediaType, gin.H{"message": err.Error()})
+			return
+		}
+
+		var req channelmodel.CreateZmuxChannelReq
+		if err := jsonx.ParseStrictJSONBody(c.Request, &req); err != nil { /* schema mismatch: malformed JSON, unknown fields, missing required fields, wrong data type at JSON level */
+			_ = c.Error(err) // <-- attach
+			c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+			return
+		}
+
+		ch, err := req.ToDomain()
+		if err != nil { /* schema matched but misused (well-formed json, but content invalid: null in non-nullable / parse field format failure / invalid field values) */
+			_ = c.Error(err) // <-- attach
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"message": err.Error()})
+			return
+		}
+
+		if err := channelService.CreateChannel(c.Request.Context(), ch); err != nil {
+			_ = c.Error(err) // <-- attach
+			c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+			return
+		}
+
+		c.Header("Location", fmt.Sprintf("/api/channels/%d", ch.ID))
+		c.JSON(http.StatusCreated, ch)
+	})
+
 	r.PUT("/api/channels/:id", func(c *gin.Context) {
 		idStr := c.Param("id")
 		id, err := strconv.ParseInt(idStr, 10, 64)
@@ -189,15 +201,28 @@ func main() {
 			return
 		}
 
-		var req models.UpdateZmuxChannelReq
-		if err := c.ShouldBindJSON(&req); err != nil {
-			_ = c.Error(err)
+		// Content-Type guard
+		if err := requireContentType(c, "application/json", "application/json; charset=utf-8"); err != nil {
+			_ = c.Error(err) // <-- attach
+			c.JSON(http.StatusUnsupportedMediaType, gin.H{"message": err.Error()})
+			return
+		}
+
+		var req channelmodel.ReplaceZmuxChannelReq
+		if err := jsonx.ParseStrictJSONBody(c.Request, &req); err != nil { /* schema mismatch: malformed JSON, unknown fields, missing required fields, wrong data type at JSON level */
+			_ = c.Error(err) // <-- attach
+			c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+			return
+		}
+
+		ch, err := req.ToDomain(id)
+		if err != nil { /* schema matched but misused (well-formed json, but content invalid: null in non-nullable / parse field format failure / invalid field values) */
+			_ = c.Error(err) // <-- attach
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"message": err.Error()})
 			return
 		}
 
-		ch, err := channelService.UpdateChannel(c.Request.Context(), id, &req)
-		if err != nil {
+		if err := channelService.UpdateChannel(c.Request.Context(), ch); err != nil {
 			if errors.Is(err, redis.ErrChannelNotFound) {
 				_ = c.Error(err)
 				c.JSON(http.StatusNotFound, gin.H{"message": redis.ErrChannelNotFound.Error()})
@@ -281,4 +306,15 @@ func main() {
 	if err := r.Run("127.0.0.1:8080"); err != nil {
 		log.Fatal("server failed", zap.Error(err))
 	}
+}
+
+// requireContentType ensures the request's Content-Type header exactly matches one of the allowed values.
+func requireContentType(c *gin.Context, allowedContentTypes ...string) error {
+	contentType := c.GetHeader("Content-Type")
+	for _, allowed := range allowedContentTypes {
+		if contentType == allowed {
+			return nil
+		}
+	}
+	return fmt.Errorf("invalid Content-Type %q; must be one of: %v", contentType, allowedContentTypes)
 }

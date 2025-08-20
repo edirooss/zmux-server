@@ -9,7 +9,7 @@ import (
 
 	"golang.org/x/sync/singleflight"
 
-	models "github.com/edirooss/zmux-server/pkg/models/channel"
+	"github.com/edirooss/zmux-server/pkg/models"
 	"github.com/edirooss/zmux-server/redis"
 	"go.uber.org/zap"
 )

@@ -7,7 +7,6 @@ toolchain go1.23.12
 require (
 	github.com/gin-contrib/cors v1.7.6
 	github.com/gin-gonic/gin v1.10.1
-	github.com/mcuadros/go-defaults v1.2.0
 	github.com/redis/go-redis/v9 v9.12.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/sync v0.15.0

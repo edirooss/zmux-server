@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	models "github.com/edirooss/zmux-server/pkg/models/channel"
+	"github.com/edirooss/zmux-server/pkg/models/channelmodel"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -49,7 +49,7 @@ func (r *ChannelRepository) GenerateID(ctx context.Context) (int64, error) {
 
 const channelIDSetKey = "zmux:channels" // SET of string ids: {"1","2",...}
 
-func (r *ChannelRepository) Set(ctx context.Context, channel *models.ZmuxChannel) error {
+func (r *ChannelRepository) Set(ctx context.Context, channel *channelmodel.ZmuxChannel) error {
 	key := keyFor(channel.ID)
 
 	payload, err := json.Marshal(channel)
@@ -67,7 +67,7 @@ func (r *ChannelRepository) Set(ctx context.Context, channel *models.ZmuxChannel
 }
 
 // Get retrieves a channel by ID (returns redis.Nil if not found)
-func (r *ChannelRepository) Get(ctx context.Context, id int64) (*models.ZmuxChannel, error) {
+func (r *ChannelRepository) Get(ctx context.Context, id int64) (*channelmodel.ZmuxChannel, error) {
 	key := keyFor(id)
 
 	value, err := r.client.Get(ctx, key).Bytes()
@@ -78,7 +78,7 @@ func (r *ChannelRepository) Get(ctx context.Context, id int64) (*models.ZmuxChan
 		return nil, fmt.Errorf("get: %w", err)
 	}
 
-	var channel models.ZmuxChannel
+	var channel channelmodel.ZmuxChannel
 	if err := json.Unmarshal(value, &channel); err != nil {
 		return nil, fmt.Errorf("unmarshal: %w", err)
 	}
@@ -101,7 +101,7 @@ func (r *ChannelRepository) Delete(ctx context.Context, id int64) error {
 }
 
 // List retrieves all channels by using the maintained SET of IDs.
-func (r *ChannelRepository) List(ctx context.Context) ([]*models.ZmuxChannel, error) {
+func (r *ChannelRepository) List(ctx context.Context) ([]*channelmodel.ZmuxChannel, error) {
 	ids, err := r.client.SMembers(ctx, channelIDSetKey).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		return nil, fmt.Errorf("smembers: %w", err)
@@ -124,7 +124,7 @@ func (r *ChannelRepository) List(ctx context.Context) ([]*models.ZmuxChannel, er
 		return nil, fmt.Errorf("mget: %w", err)
 	}
 
-	result := make([]*models.ZmuxChannel, 0, len(vals))
+	result := make([]*channelmodel.ZmuxChannel, 0, len(vals))
 	for i, v := range vals {
 		if v == nil {
 			continue // key missing (possible if set drifted); harmless
@@ -138,7 +138,7 @@ func (r *ChannelRepository) List(ctx context.Context) ([]*models.ZmuxChannel, er
 		default:
 			return nil, fmt.Errorf("unexpected type for key %s at index %d", keys[i], i)
 		}
-		var ch models.ZmuxChannel
+		var ch channelmodel.ZmuxChannel
 		if err := json.Unmarshal(b, &ch); err != nil {
 			return nil, fmt.Errorf("unmarshal key %s: %w", keys[i], err)
 		}
