@@ -190,8 +190,8 @@ func (s *ChannelService) UpdateChannel(ctx context.Context, id int64, req *chann
 	}
 	prevEnabled := ch.Enabled
 
-	// Apply patch in-memory
-	req.ApplyTo(ch)
+	// Replace obj (i,e. update channel params)
+	ch = req.ToChannel(id)
 
 	// Commit (idempotent) so the unit reflects new config.
 	if err := s.commitSystemdService(ch); err != nil {

@@ -4,7 +4,7 @@ import (
 	"errors"
 )
 
-// CreateZmuxChannelReq is the JSON DTO for creating a Zmux channel.
+// CreateZmuxChannelReq is the JSON DTO for creating a Zmux channel via POST /api/channels.
 // Only Name and Input.URL are required. Everything else has sane defaults.
 type CreateZmuxChannelReq struct {
 	Name *string `json:"name"` // required

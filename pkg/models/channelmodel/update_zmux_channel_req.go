@@ -1,96 +1,130 @@
-// pkg/models/channel/update.go
 package channelmodel
 
-// UpdateZmuxChannelReq is a PATCH-style DTO: only provided (non-nil) fields are applied.
+import "errors"
+
+// UpdateZmuxChannelReq is the JSON DTO for replacing a Zmux channel via PUT /api/channels/{id}.
+// All fields are required (full-replacement).
 type UpdateZmuxChannelReq struct {
-	Name *string `json:"name,omitempty" binding:"omitempty,min=1,max=100"`
+	Name *string `json:"name"` // required
 
-	Input *struct {
-		URL             *string `json:"url,omitempty"`
-		AVIOFlags       *string `json:"avioflags,omitempty"`
-		ProbeSize       *uint   `json:"probesize,omitempty"`
-		AnalyzeDuration *uint   `json:"analyzeduration,omitempty"`
-		FFlags          *string `json:"fflags,omitempty"`
-		MaxDelay        *int    `json:"max_delay,omitempty"`
-		LocalAddr       *string `json:"localaddr,omitempty"`
-		Timeout         *uint   `json:"timeout,omitempty"`
-		RTSPTransport   *string `json:"rtsp_transport,omitempty"`
-	} `json:"input,omitempty"`
+	// --- Remux configuration ---
+	Input  *UpdateInput  `json:"input"`  // required
+	Output *UpdateOutput `json:"output"` // required
+	// ----------------------------
 
-	Output *struct {
-		URL       *string `json:"url,omitempty"`
-		LocalAddr *string `json:"localaddr,omitempty"`
-		PktSize   *uint   `json:"pkt_size,omitempty"`
-		MapVideo  *bool   `json:"map_video,omitempty"`
-		MapAudio  *bool   `json:"map_audio,omitempty"`
-		MapData   *bool   `json:"map_data,omitempty"`
-	} `json:"output,omitempty"`
-
-	Enabled    *bool `json:"enabled,omitempty"`
-	RestartSec *uint `json:"restart_sec,omitempty"`
+	// Systemd settings
+	Enabled    *bool `json:"enabled"`     // required
+	RestartSec *uint `json:"restart_sec"` // required
 }
 
-// ApplyTo copies non-nil fields from UpdateZmuxChannelReq into ch.
-func (u *UpdateZmuxChannelReq) ApplyTo(ch *ZmuxChannel) {
-	if u.Name != nil {
-		ch.Name = *u.Name
-	}
+type UpdateInput struct {
+	URL             *string `json:"url"`             // required
+	AVIOFlags       *string `json:"avioflags"`       // required
+	ProbeSize       *uint   `json:"probesize"`       // required
+	AnalyzeDuration *uint   `json:"analyzeduration"` // required
+	FFlags          *string `json:"fflags"`          // required
+	MaxDelay        *int    `json:"max_delay"`       // required
+	LocalAddr       *string `json:"localaddr"`       // required
+	Timeout         *uint   `json:"timeout"`         // required
+	RTSPTransport   *string `json:"rtsp_transport"`  // required
+}
 
-	if u.Input != nil {
-		if u.Input.URL != nil {
-			ch.Input.URL = *u.Input.URL
-		}
-		if u.Input.AVIOFlags != nil {
-			ch.Input.AVIOFlags = *u.Input.AVIOFlags
-		}
-		if u.Input.ProbeSize != nil {
-			ch.Input.Probesize = *u.Input.ProbeSize
-		}
-		if u.Input.AnalyzeDuration != nil {
-			ch.Input.Analyzeduration = *u.Input.AnalyzeDuration
-		}
-		if u.Input.FFlags != nil {
-			ch.Input.FFlags = *u.Input.FFlags
-		}
-		if u.Input.MaxDelay != nil {
-			ch.Input.MaxDelay = *u.Input.MaxDelay
-		}
-		if u.Input.LocalAddr != nil {
-			ch.Input.Localaddr = *u.Input.LocalAddr
-		}
-		if u.Input.Timeout != nil {
-			ch.Input.Timeout = *u.Input.Timeout
-		}
-		if u.Input.RTSPTransport != nil {
-			ch.Input.RTSPTransport = *u.Input.RTSPTransport
-		}
-	}
+type UpdateOutput struct {
+	URL       *string `json:"url"`       // required
+	LocalAddr *string `json:"localaddr"` // required
+	PktSize   *uint   `json:"pkt_size"`  // required
+	MapVideo  *bool   `json:"map_video"` // required
+	MapAudio  *bool   `json:"map_audio"` // required
+	MapData   *bool   `json:"map_data"`  // required
+}
 
-	if u.Output != nil {
-		if u.Output.URL != nil {
-			ch.Output.URL = *u.Output.URL
-		}
-		if u.Output.LocalAddr != nil {
-			ch.Output.Localaddr = *u.Output.LocalAddr
-		}
-		if u.Output.PktSize != nil {
-			ch.Output.PktSize = *u.Output.PktSize
-		}
-		if u.Output.MapVideo != nil {
-			ch.Output.MapVideo = *u.Output.MapVideo
-		}
-		if u.Output.MapAudio != nil {
-			ch.Output.MapAudio = *u.Output.MapAudio
-		}
-		if u.Output.MapData != nil {
-			ch.Output.MapData = *u.Output.MapData
-		}
+func (r *UpdateZmuxChannelReq) Validate() error {
+	if r.Name == nil {
+		return errors.New("name is required")
 	}
+	if r.Input == nil {
+		return errors.New("input is required")
+	}
+	if r.Input.URL == nil {
+		return errors.New("input.url is required")
+	}
+	if r.Input.AVIOFlags == nil {
+		return errors.New("input.avioflags is required")
+	}
+	if r.Input.ProbeSize == nil {
+		return errors.New("input.probesize is required")
+	}
+	if r.Input.AnalyzeDuration == nil {
+		return errors.New("input.analyzeduration is required")
+	}
+	if r.Input.FFlags == nil {
+		return errors.New("input.fflags is required")
+	}
+	if r.Input.MaxDelay == nil {
+		return errors.New("input.max_delay is required")
+	}
+	if r.Input.LocalAddr == nil {
+		return errors.New("input.localaddr is required")
+	}
+	if r.Input.Timeout == nil {
+		return errors.New("input.timeout is required")
+	}
+	if r.Input.RTSPTransport == nil {
+		return errors.New("input.rtsp_transport is required")
+	}
+	if r.Output == nil {
+		return errors.New("output is required")
+	}
+	if r.Output.URL == nil {
+		return errors.New("output.url is required")
+	}
+	if r.Output.LocalAddr == nil {
+		return errors.New("output.localaddr is required")
+	}
+	if r.Output.PktSize == nil {
+		return errors.New("output.pkt_size is required")
+	}
+	if r.Output.MapVideo == nil {
+		return errors.New("output.map_video is required")
+	}
+	if r.Output.MapAudio == nil {
+		return errors.New("output.map_audio is required")
+	}
+	if r.Output.MapData == nil {
+		return errors.New("output.map_data is required")
+	}
+	if r.Enabled == nil {
+		return errors.New("enabled is required")
+	}
+	if r.RestartSec == nil {
+		return errors.New("restart_sec is required")
+	}
+	return nil
+}
 
-	if u.Enabled != nil {
-		ch.Enabled = *u.Enabled
-	}
-	if u.RestartSec != nil {
-		ch.RestartSec = *u.RestartSec
-	}
+func (req UpdateZmuxChannelReq) ToChannel(id int64) *ZmuxChannel {
+	var ch ZmuxChannel
+	ch.ID = id
+	ch.Name = *req.Name
+
+	ch.Input.URL = *req.Input.URL
+	ch.Input.AVIOFlags = *req.Input.AVIOFlags
+	ch.Input.Probesize = *req.Input.ProbeSize
+	ch.Input.Analyzeduration = *req.Input.AnalyzeDuration
+	ch.Input.FFlags = *req.Input.FFlags
+	ch.Input.MaxDelay = *req.Input.MaxDelay
+	ch.Input.Localaddr = *req.Input.LocalAddr
+	ch.Input.Timeout = *req.Input.Timeout
+	ch.Input.RTSPTransport = *req.Input.RTSPTransport
+
+	ch.Output.URL = *req.Output.URL
+	ch.Output.Localaddr = *req.Output.LocalAddr
+	ch.Output.PktSize = *req.Output.PktSize
+	ch.Output.MapVideo = *req.Output.MapVideo
+	ch.Output.MapAudio = *req.Output.MapAudio
+	ch.Output.MapData = *req.Output.MapData
+
+	ch.Enabled = *req.Enabled
+	ch.RestartSec = *req.RestartSec
+	return &ch
 }

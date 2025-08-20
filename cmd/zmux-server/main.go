@@ -137,7 +137,6 @@ func main() {
 			c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 			return
 		}
-
 		req.ApplyDefaults()
 
 		ch, err := channelService.CreateChannel(c.Request.Context(), &req)
@@ -199,7 +198,12 @@ func main() {
 		var req channelmodel.UpdateZmuxChannelReq
 		if err := bind(c.Request, &req); err != nil {
 			_ = c.Error(err)
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"message": err.Error()})
+			c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+			return
+		}
+		if err := req.Validate(); err != nil {
+			_ = c.Error(err) // <-- attach
+			c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 			return
 		}
 
