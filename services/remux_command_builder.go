@@ -21,8 +21,13 @@ func NewRemuxCommandBuilder() *RemuxCommandBuilder {
 	return &RemuxCommandBuilder{args: []string{"remux"}}
 }
 
-// WithString adds a string flag if val is non-empty (after trimming spaces).
-func (b *RemuxCommandBuilder) WithString(flag, val string) *RemuxCommandBuilder {
+// WithStringP adds a string flag if val is non-empty (after trimming spaces).
+func (b *RemuxCommandBuilder) WithStringP(flag string, pVal *string) *RemuxCommandBuilder {
+	if pVal == nil {
+		return b
+	}
+	val := *pVal
+
 	if strings.TrimSpace(val) != "" {
 		b.args = append(b.args, flag, val)
 	}
@@ -32,6 +37,12 @@ func (b *RemuxCommandBuilder) WithString(flag, val string) *RemuxCommandBuilder 
 // WithInt adds a int flag.
 func (b *RemuxCommandBuilder) WithInt(flag string, val int) *RemuxCommandBuilder {
 	b.args = append(b.args, flag, strconv.FormatInt(int64(val), 10))
+	return b
+}
+
+// WithInt64 adds a int64 flag.
+func (b *RemuxCommandBuilder) WithInt64(flag string, val int64) *RemuxCommandBuilder {
+	b.args = append(b.args, flag, strconv.FormatInt(val, 10))
 	return b
 }
 
@@ -99,25 +110,25 @@ func BuildRemuxExecArgs(ch *channelmodel.ZmuxChannel) []string {
 	builder := NewRemuxCommandBuilder()
 
 	// --- Top-level ---
-	builder.WithString("--id", strconv.FormatInt(ch.ID, 10))
+	builder.WithInt64("--id", ch.ID)
 	// (LogLevel is part of Config, not ZmuxChannel; omit here.)
 
 	// --- Input (strings; omit if empty) ---
 	builder.
-		WithString("--input-url", ch.Input.URL).
-		WithString("--avioflags", ch.Input.AVIOFlags).
+		WithStringP("--input-url", &ch.Input.URL).
+		WithStringP("--avioflags", ch.Input.AVIOFlags).
 		WithUint("--probesize", ch.Input.Probesize).
 		WithUint("--analyzeduration", ch.Input.Analyzeduration).
-		WithString("--fflags", ch.Input.FFlags).
+		WithStringP("--fflags", ch.Input.FFlags).
 		WithInt("--max-delay", ch.Input.MaxDelay).
-		WithString("--input-localaddr", ch.Input.Localaddr).
+		WithStringP("--input-localaddr", ch.Input.Localaddr).
 		WithUint("--timeout", ch.Input.Timeout).
-		WithString("--rtsp-transport", ch.Input.RTSPTransport)
+		WithStringP("--rtsp-transport", ch.Input.RTSPTransport)
 
 	// --- Output ---
 	builder.
-		WithString("--output-url", ch.Output.URL).
-		WithString("--output-localaddr", ch.Output.Localaddr).
+		WithStringP("--output-url", ch.Output.URL).
+		WithStringP("--output-localaddr", ch.Output.Localaddr).
 		WithUint("--pkt-size", ch.Output.PktSize)
 
 	// --- Stream mapping (bool defaults true) ---

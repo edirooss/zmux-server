@@ -21,19 +21,19 @@ type CreateZmuxChannelReq struct {
 
 type CreateInput struct {
 	URL             *string `json:"url"`             // required
-	AVIOFlags       *string `json:"avioflags"`       // default: ""
+	AVIOFlags       *string `json:"avioflags"`       // default: null
 	ProbeSize       *uint   `json:"probesize"`       // default: 5000000
 	AnalyzeDuration *uint   `json:"analyzeduration"` // default: 0
-	FFlags          *string `json:"fflags"`          // default: "nobuffer"
+	FFlags          *string `json:"fflags"`          // default: "nobuffer" (note: overwrites explict null (i,e. defined field with null value) on create)
 	MaxDelay        *int    `json:"max_delay"`       // default: -1
-	LocalAddr       *string `json:"localaddr"`       // default: ""
+	LocalAddr       *string `json:"localaddr"`       // default: null
 	Timeout         *uint   `json:"timeout"`         // default: 3000000
-	RTSPTransport   *string `json:"rtsp_transport"`  // default: ""
+	RTSPTransport   *string `json:"rtsp_transport"`  // default: null
 }
 
 type CreateOutput struct {
-	URL       *string `json:"url"`       // default: "/dev/null"
-	LocalAddr *string `json:"localaddr"` // default: ""
+	URL       *string `json:"url"`       // default: null
+	LocalAddr *string `json:"localaddr"` // default: null
 	PktSize   *uint   `json:"pkt_size"`  // default: 1316
 	MapVideo  *bool   `json:"map_video"` // default: true
 	MapAudio  *bool   `json:"map_audio"` // default: true
@@ -51,12 +51,6 @@ func (r *CreateZmuxChannelReq) Validate() error {
 }
 
 func (r *CreateZmuxChannelReq) ApplyDefaults() {
-	if r.Input.AVIOFlags == nil {
-		r.Input.AVIOFlags = ptr("")
-	}
-	if r.Input.AVIOFlags == nil {
-		r.Input.AVIOFlags = ptr("")
-	}
 	if r.Input.ProbeSize == nil {
 		r.Input.ProbeSize = ptr(uint(5000000))
 	}
@@ -69,23 +63,14 @@ func (r *CreateZmuxChannelReq) ApplyDefaults() {
 	if r.Input.MaxDelay == nil {
 		r.Input.MaxDelay = ptr(int(-1))
 	}
-	if r.Input.LocalAddr == nil {
-		r.Input.LocalAddr = ptr("")
-	}
 	if r.Input.Timeout == nil {
 		r.Input.Timeout = ptr(uint(3000000))
-	}
-	if r.Input.RTSPTransport == nil {
-		r.Input.RTSPTransport = ptr("")
 	}
 	if r.Output == nil {
 		r.Output = &CreateOutput{}
 	}
 	if r.Output.URL == nil {
 		r.Output.URL = ptr("/dev/null")
-	}
-	if r.Output.LocalAddr == nil {
-		r.Output.LocalAddr = ptr("")
 	}
 	if r.Output.PktSize == nil {
 		r.Output.PktSize = ptr(uint(1316))
@@ -107,23 +92,24 @@ func (r *CreateZmuxChannelReq) ApplyDefaults() {
 	}
 }
 
+// Must be used on validated requests.
 func (req CreateZmuxChannelReq) ToChannel(id int64) *ZmuxChannel {
 	var ch ZmuxChannel
 	ch.ID = id
 	ch.Name = *req.Name
 
 	ch.Input.URL = *req.Input.URL
-	ch.Input.AVIOFlags = *req.Input.AVIOFlags
+	ch.Input.AVIOFlags = req.Input.AVIOFlags
 	ch.Input.Probesize = *req.Input.ProbeSize
 	ch.Input.Analyzeduration = *req.Input.AnalyzeDuration
-	ch.Input.FFlags = *req.Input.FFlags
+	ch.Input.FFlags = req.Input.FFlags
 	ch.Input.MaxDelay = *req.Input.MaxDelay
-	ch.Input.Localaddr = *req.Input.LocalAddr
+	ch.Input.Localaddr = req.Input.LocalAddr
 	ch.Input.Timeout = *req.Input.Timeout
-	ch.Input.RTSPTransport = *req.Input.RTSPTransport
+	ch.Input.RTSPTransport = req.Input.RTSPTransport
 
-	ch.Output.URL = *req.Output.URL
-	ch.Output.Localaddr = *req.Output.LocalAddr
+	ch.Output.URL = req.Output.URL
+	ch.Output.Localaddr = req.Output.LocalAddr
 	ch.Output.PktSize = *req.Output.PktSize
 	ch.Output.MapVideo = *req.Output.MapVideo
 	ch.Output.MapAudio = *req.Output.MapAudio
