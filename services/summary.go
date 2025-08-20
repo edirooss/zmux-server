@@ -9,7 +9,7 @@ import (
 
 	"golang.org/x/sync/singleflight"
 
-	models "github.com/edirooss/zmux-server/pkg/models/channel"
+	"github.com/edirooss/zmux-server/pkg/models/channelmodel"
 	"github.com/edirooss/zmux-server/redis"
 	"go.uber.org/zap"
 )
@@ -36,7 +36,7 @@ func (o *SummaryOptions) setDefaults() {
 
 // SummaryResult lets the handler set headers/telemetry.
 type SummaryResult struct {
-	Data        []models.ChannelSummary
+	Data        []channelmodel.ChannelSummary
 	CacheHit    bool
 	GeneratedAt time.Time // snapshot timestamp
 }
@@ -47,7 +47,7 @@ type SummaryService struct {
 	remuxRepo *redis.RemuxRepository
 
 	mu      sync.RWMutex
-	cache   []models.ChannelSummary
+	cache   []channelmodel.ChannelSummary
 	expires time.Time
 	genAt   time.Time
 
@@ -140,7 +140,7 @@ func (s *SummaryService) Invalidate() {
 }
 
 // refresh runs the Redis pipeline: channels -> statuses -> ifmt/metrics
-func (s *SummaryService) refresh(ctx context.Context) ([]models.ChannelSummary, error) {
+func (s *SummaryService) refresh(ctx context.Context) ([]channelmodel.ChannelSummary, error) {
 	chs, err := s.chanRepo.List(ctx)
 	if err != nil {
 		return nil, err
@@ -171,9 +171,9 @@ func (s *SummaryService) refresh(ctx context.Context) ([]models.ChannelSummary, 
 		s.log.Warn("bulk ifmt/metrics failed", zap.Error(err))
 	}
 
-	out := make([]models.ChannelSummary, 0, len(chs))
+	out := make([]channelmodel.ChannelSummary, 0, len(chs))
 	for _, ch := range chs {
-		sum := models.ChannelSummary{ZmuxChannel: *ch}
+		sum := channelmodel.ChannelSummary{ZmuxChannel: *ch}
 		if ch.Enabled {
 			if st, ok := statusMap[ch.ID]; ok {
 				sum.Status = st
@@ -188,11 +188,11 @@ func (s *SummaryService) refresh(ctx context.Context) ([]models.ChannelSummary, 
 	return out, nil
 }
 
-func cloneSummaries(in []models.ChannelSummary) []models.ChannelSummary {
+func cloneSummaries(in []channelmodel.ChannelSummary) []channelmodel.ChannelSummary {
 	if len(in) == 0 {
 		return nil
 	}
-	out := make([]models.ChannelSummary, len(in))
+	out := make([]channelmodel.ChannelSummary, len(in))
 	copy(out, in)
 	return out
 }

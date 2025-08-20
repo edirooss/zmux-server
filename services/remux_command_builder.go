@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	models "github.com/edirooss/zmux-server/pkg/models/channel"
+	"github.com/edirooss/zmux-server/pkg/models/channelmodel"
 )
 
 // RemuxCommandBuilder builds the final argv/command string for the `remux` binary.
@@ -83,7 +83,7 @@ func shQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-// BuildRemuxExecArgs maps models.ZmuxChannel → argv slice.
+// BuildRemuxExecArgs maps channelmodel.ZmuxChannel → argv slice.
 // ORDER MATCHES config.Config field order for maximum compatibility:
 //
 //	Top-level:        --id
@@ -95,7 +95,7 @@ func shQuote(s string) string {
 // Notes:
 //   - Bool defaults are true for map-* flags; we only emit when disabling.
 //   - Zero/empty values are omitted entirely (pflag won't receive "" values).
-func BuildRemuxExecArgs(ch *models.ZmuxChannel) []string {
+func BuildRemuxExecArgs(ch *channelmodel.ZmuxChannel) []string {
 	builder := NewRemuxCommandBuilder()
 
 	// --- Top-level ---
@@ -130,7 +130,7 @@ func BuildRemuxExecArgs(ch *models.ZmuxChannel) []string {
 }
 
 // BuildRemuxExecStart is a convenience wrapper that returns a shell-safe ExecStart string.
-func BuildRemuxExecStart(ch *models.ZmuxChannel) string {
+func BuildRemuxExecStart(ch *channelmodel.ZmuxChannel) string {
 	return NewRemuxCommandBuilderFromArgs(BuildRemuxExecArgs(ch)).BuildString()
 }
 

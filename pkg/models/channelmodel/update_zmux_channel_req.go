@@ -1,5 +1,5 @@
 // pkg/models/channel/update.go
-package models
+package channelmodel
 
 // UpdateZmuxChannelReq is a PATCH-style DTO: only provided (non-nil) fields are applied.
 type UpdateZmuxChannelReq struct {

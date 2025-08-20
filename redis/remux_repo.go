@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	models "github.com/edirooss/zmux-server/pkg/models/channel"
+	"github.com/edirooss/zmux-server/pkg/models/channelmodel"
 	"go.uber.org/zap"
 )
 
@@ -27,8 +27,8 @@ func NewRemuxRepository(log *zap.Logger) *RemuxRepository {
 }
 
 // BulkStatus fetches remux:<id>:status for all ids in one MGET. Missing keys are ignored.
-func (r *RemuxRepository) BulkStatus(ctx context.Context, ids []int64) (map[int64]*models.RemuxStatus, error) {
-	out := make(map[int64]*models.RemuxStatus, len(ids))
+func (r *RemuxRepository) BulkStatus(ctx context.Context, ids []int64) (map[int64]*channelmodel.RemuxStatus, error) {
+	out := make(map[int64]*channelmodel.RemuxStatus, len(ids))
 	if len(ids) == 0 {
 		return out, nil
 	}
@@ -57,7 +57,7 @@ func (r *RemuxRepository) BulkStatus(ctx context.Context, ids []int64) (map[int6
 			r.log.Warn("unexpected redis type for status", zap.Any("type", t))
 			continue
 		}
-		var st models.RemuxStatus
+		var st channelmodel.RemuxStatus
 		if err := json.Unmarshal([]byte(raw), &st); err != nil {
 			r.log.Warn("bad status json", zap.String("key", keys[i]), zap.Error(err))
 			continue

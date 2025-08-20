@@ -1,4 +1,4 @@
-package models
+package channelmodel
 
 import "github.com/mcuadros/go-defaults"
 
@@ -7,8 +7,8 @@ import "github.com/mcuadros/go-defaults"
 //
 // Usage with Gin + go-defaults:
 //
-//	var req models.CreateZmuxChannelReq
-//	req.ApplyDefaults()          // or req = models.NewCreateZmuxChannelReq()
+//	var req channelmodel.CreateZmuxChannelReq
+//	req.ApplyDefaults()          // or req = channelmodel.NewCreateZmuxChannelReq()
 //	if err := c.ShouldBindJSON(&req); err != nil { ... } // provided fields override defaults
 //	// req.Name and req.Input.InputURL must be set by the client.
 type CreateZmuxChannelReq struct {

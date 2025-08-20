@@ -1,4 +1,4 @@
-package models
+package channelmodel
 
 import "encoding/json"
 

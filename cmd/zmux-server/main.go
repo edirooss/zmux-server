@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	models "github.com/edirooss/zmux-server/pkg/models/channel"
+	"github.com/edirooss/zmux-server/pkg/models/channelmodel"
 	"github.com/edirooss/zmux-server/redis"
 	"github.com/edirooss/zmux-server/services"
 	"github.com/gin-contrib/cors"
@@ -126,7 +126,7 @@ func main() {
 	})
 
 	r.POST("/api/channels", func(c *gin.Context) {
-		req := models.NewCreateZmuxChannelReq()
+		req := channelmodel.NewCreateZmuxChannelReq()
 
 		if err := c.ShouldBindJSON(&req); err != nil {
 			_ = c.Error(err) // <-- attach
@@ -190,7 +190,7 @@ func main() {
 			return
 		}
 
-		var req models.UpdateZmuxChannelReq
+		var req channelmodel.UpdateZmuxChannelReq
 		if err := c.ShouldBindJSON(&req); err != nil {
 			_ = c.Error(err)
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"message": err.Error()})

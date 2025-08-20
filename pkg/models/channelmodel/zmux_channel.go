@@ -1,5 +1,5 @@
-// models/models.go
-package models
+// models/channelmodel.go
+package channelmodel
 
 type ZmuxChannel struct {
 	ID   int64  `json:"id"`
