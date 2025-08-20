@@ -24,7 +24,7 @@ type CreateInput struct {
 	AVIOFlags       *string `json:"avioflags"`       // default: ""
 	ProbeSize       *uint   `json:"probesize"`       // default: 5000000
 	AnalyzeDuration *uint   `json:"analyzeduration"` // default: 0
-	FFlags          *string `json:"fflags"`          // default: ""
+	FFlags          *string `json:"fflags"`          // default: "nobuffer"
 	MaxDelay        *int    `json:"max_delay"`       // default: -1
 	LocalAddr       *string `json:"localaddr"`       // default: ""
 	Timeout         *uint   `json:"timeout"`         // default: 3000000
@@ -64,7 +64,7 @@ func (r *CreateZmuxChannelReq) ApplyDefaults() {
 		r.Input.AnalyzeDuration = ptr(uint(0))
 	}
 	if r.Input.FFlags == nil {
-		r.Input.FFlags = ptr("")
+		r.Input.FFlags = ptr("nobuffer")
 	}
 	if r.Input.MaxDelay == nil {
 		r.Input.MaxDelay = ptr(int(-1))
