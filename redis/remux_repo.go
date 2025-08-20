@@ -20,9 +20,10 @@ type RemuxRepository struct {
 }
 
 func NewRemuxRepository(log *zap.Logger) *RemuxRepository {
+	log = log.Named("remux_repo")
 	return &RemuxRepository{
 		client: NewClient("localhost:6379", 0, log),
-		log:    log.Named("remux_repository"),
+		log:    log,
 	}
 }
 

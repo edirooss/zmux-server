@@ -59,12 +59,14 @@ type SummaryService struct {
 
 // NewSummaryService wires repositories and cache policy.
 // Reuse a single instance per process (handlers call Get()).
-func NewSummaryService(log *zap.Logger, chanRepo *redis.ChannelRepository, remuxRepo *redis.RemuxRepository, opts SummaryOptions) *SummaryService {
+func NewSummaryService(log *zap.Logger, opts SummaryOptions) *SummaryService {
+	log = log.Named("summary_service")
 	opts.setDefaults()
+
 	return &SummaryService{
-		log:       log.Named("summary_service"),
-		chanRepo:  chanRepo,
-		remuxRepo: remuxRepo,
+		log:       log,
+		chanRepo:  redis.NewChannelRepository(log),
+		remuxRepo: redis.NewRemuxRepository(log),
 		opts:      opts,
 		now:       time.Now,
 	}

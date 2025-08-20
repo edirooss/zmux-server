@@ -56,6 +56,8 @@ type ChannelService struct {
 
 // NewChannelService constructs the ChannelService with its dependencies.
 func NewChannelService(log *zap.Logger) (*ChannelService, error) {
+	log = log.Named("channel_service")
+
 	systemd, err := NewSystemdService(log)
 	if err != nil {
 		return nil, fmt.Errorf("new systemd service: %w", err)

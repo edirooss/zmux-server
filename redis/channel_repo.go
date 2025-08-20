@@ -23,14 +23,15 @@ const (
 // ChannelRepository handles Redis operations for channels
 type ChannelRepository struct {
 	client *Client
-	logger *zap.Logger
+	log    *zap.Logger
 }
 
 // NewChannelRepository creates a new channel repository
 func NewChannelRepository(log *zap.Logger) *ChannelRepository {
+	log = log.Named("channel_repo")
 	return &ChannelRepository{
 		client: NewClient("localhost:6379", 0, log),
-		logger: log.Named("channel_repository"),
+		log:    log,
 	}
 }
 

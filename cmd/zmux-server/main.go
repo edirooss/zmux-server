@@ -13,6 +13,7 @@ import (
 	"github.com/edirooss/zmux-server/services"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -70,6 +71,7 @@ func main() {
 	logConfig.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
 	logConfig.DisableStacktrace = true
 	logConfig.DisableCaller = true
+	logConfig.Level.SetLevel(zap.DebugLevel)
 	log := zap.Must(logConfig.Build())
 	defer log.Sync()
 	log = log.Named("main")
@@ -86,16 +88,17 @@ func main() {
 	// Service for generating channel summaries
 	summarySvc := services.NewSummaryService(
 		log,
-		redis.NewChannelRepository(log),
-		redis.NewRemuxRepository(log),
 		services.SummaryOptions{
 			TTL:            1000 * time.Millisecond, // tune as needed
 			RefreshTimeout: 500 * time.Millisecond,
 		},
 	)
 
-	// Configure Gin's JSON decoder to reject payloads with fields not in the target struct
-	gin.EnableJsonDecoderDisallowUnknownFields()
+	// Configure Gin's logger
+	gin.DefaultWriter = zap.NewStdLog(log.Named("gin")).Writer()
+
+	// Configure Gin's binding JSON decoder to reject payloads with fields not in the target struct
+	binding.EnableDecoderDisallowUnknownFields = true
 
 	// Create Gin router
 	r := gin.New()

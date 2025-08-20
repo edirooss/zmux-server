@@ -32,11 +32,6 @@ func NewClient(addr string, db int, log *zap.Logger) *Client {
 		log:    log.Named("Redis"),
 	}
 
-	log.Info("Redis client initilized",
-		zap.String("addr", addr),
-		zap.Int("db", db),
-	)
-
 	client.Ping(context.TODO())
 
 	return client
