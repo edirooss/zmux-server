@@ -13,7 +13,6 @@ import (
 	"github.com/edirooss/zmux-server/services"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"github.com/gin-gonic/gin/binding"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -75,9 +74,6 @@ func main() {
 	defer log.Sync()
 	log = log.Named("main")
 
-	// Enable strict JSON decoding (must be before binding happens)
-	binding.EnableDecoderDisallowUnknownFields = true
-
 	// Service for channel CRUD
 	channelService, err := services.NewChannelService(log)
 	if err != nil {
@@ -97,6 +93,9 @@ func main() {
 			RefreshTimeout: 500 * time.Millisecond,
 		},
 	)
+
+	// Configure Gin's JSON decoder to reject payloads with fields not in the target struct
+	gin.EnableJsonDecoderDisallowUnknownFields()
 
 	// Create Gin router
 	r := gin.New()
