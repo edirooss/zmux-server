@@ -139,8 +139,8 @@ func main() {
 		}
 		req.ApplyDefaults()
 
-		ch, err := channelService.CreateChannel(c.Request.Context(), &req)
-		if err != nil {
+		ch := req.ToChannel(0)
+		if err := channelService.CreateChannel(c.Request.Context(), ch); err != nil {
 			_ = c.Error(err) // <-- attach
 			c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 			return
@@ -207,8 +207,10 @@ func main() {
 			return
 		}
 
-		ch, err := channelService.UpdateChannel(c.Request.Context(), id, &req)
-		if err != nil {
+		// Replace obj (i,e. update channel params)
+		ch := req.ToChannel(id)
+
+		if err := channelService.UpdateChannel(c.Request.Context(), ch); err != nil {
 			if errors.Is(err, redis.ErrChannelNotFound) {
 				_ = c.Error(err)
 				c.JSON(http.StatusNotFound, gin.H{"message": redis.ErrChannelNotFound.Error()})

@@ -96,29 +96,30 @@ func (s *ChannelService) lock(id int64) func() {
 //
 // Postconditions on success
 //   - Unit committed; service enabled iff ch.Enabled=true; Redis reflects that.
-func (s *ChannelService) CreateChannel(ctx context.Context, req *channelmodel.CreateZmuxChannelReq) (*channelmodel.ZmuxChannel, error) {
+func (s *ChannelService) CreateChannel(ctx context.Context, ch *channelmodel.ZmuxChannel) error {
 	id, err := s.repo.GenerateID(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	unlock := s.lock(id)
 	defer unlock()
 
-	ch := req.ToChannel(id)
+	// Write id to obj
+	ch.ID = id
 
 	// If requested, enable the channel now. If this fails, abort without persisting.
 	if ch.Enabled {
 		// Commit unit first so that the systemd definition exists.
 		if err := s.commitSystemdService(ch); err != nil {
 			// DEV: At this point nothing persisted; caller may retry safely.
-			return nil, fmt.Errorf("commit systemd service: %w", err)
+			return fmt.Errorf("commit systemd service: %w", err)
 		}
 
 		if err := s.enableChannel(ch.ID); err != nil {
 			// DEV: Unit file exists but runtime is not enabled; we purposely do not
 			// persist to avoid Redis claiming Enabled=true when it is not. Skip ID
 			// reuse. Observability: handler logs the error.
-			return nil, fmt.Errorf("enable channel: %w", err)
+			return fmt.Errorf("enable channel: %w", err)
 		}
 	}
 
@@ -128,9 +129,9 @@ func (s *ChannelService) CreateChannel(ctx context.Context, req *channelmodel.Cr
 		if ch.Enabled {
 			_ = s.disableChannel(ch.ID) // best-effort rollback; do not mask Set error
 		}
-		return nil, fmt.Errorf("set: %w", err)
+		return fmt.Errorf("set: %w", err)
 	}
-	return ch, nil
+	return nil
 }
 
 // GetChannel returns a channel by ID (read-only, no locks).
@@ -155,16 +156,15 @@ func (s *ChannelService) ListChannels(ctx context.Context) ([]*channelmodel.Zmux
 	return chs, nil
 }
 
-// UpdateChannel loads the current channel, applies the replacement,
-// toggles enablement and commits the unit as needed, and persists the resulting state.
+// UpdateChannel loads the prev channel config,
+// toggles enablement and commits the unit if updated channel is enabled, and persists the resulting state.
 //
 // Happy path
 //  1. Load current → prevEnabled snapshot.
-//  2. Apply replacement.
-//  3. If Enabled=true → commit systemd unit (ensure definition reflects new config).
-//  4. If Enabled=true → (re)enable service (treat as restart if already running).
+//  2. If Enabled=true → commit systemd unit (ensure definition reflects new config).
+//  3. If Enabled=true → (re)enable service (treat as restart if already running).
 //     If Enabled=false & was enabled → disable service.
-//  5. Persist the final object to Redis.
+//  4. Persist the final object to Redis.
 //
 // Failure modes & resulting state
 //   - repo.Get fails → nothing changed; error returned.
@@ -178,34 +178,31 @@ func (s *ChannelService) ListChannels(ctx context.Context) ([]*channelmodel.Zmux
 //
 // Postconditions on success
 //   - Runtime reflects desired config & enablement; Redis matches it.
-func (s *ChannelService) UpdateChannel(ctx context.Context, id int64, req *channelmodel.UpdateZmuxChannelReq) (*channelmodel.ZmuxChannel, error) {
-	unlock := s.lock(id)
+func (s *ChannelService) UpdateChannel(ctx context.Context, ch *channelmodel.ZmuxChannel) error {
+	unlock := s.lock(ch.ID)
 	defer unlock()
 
-	// Load current
-	ch, err := s.repo.Get(ctx, id)
+	// Load current from Redis
+	cur, err := s.repo.Get(ctx, ch.ID)
 	if err != nil {
-		return nil, fmt.Errorf("get: %w", err)
+		return fmt.Errorf("get: %w", err)
 	}
-	prevEnabled := ch.Enabled
-
-	// Replace obj (i,e. update channel params)
-	ch = req.ToChannel(id)
+	prevEnabled := cur.Enabled
 
 	// Reconcile enablement.
 	if ch.Enabled {
 		// Commit (idempotent) so the unit reflects new config.
 		if err := s.commitSystemdService(ch); err != nil {
-			return nil, fmt.Errorf("commit systemd service: %w", err)
+			return fmt.Errorf("commit systemd service: %w", err)
 		}
 
 		// DEV: Treat as restart semantics — (re)enable to pick up new config.
 		if err := s.enableChannel(ch.ID); err != nil {
-			return nil, fmt.Errorf("enable channel: %w", err)
+			return fmt.Errorf("enable channel: %w", err)
 		}
 	} else if prevEnabled {
 		if err := s.disableChannel(ch.ID); err != nil {
-			return nil, fmt.Errorf("disable channel: %w", err)
+			return fmt.Errorf("disable channel: %w", err)
 		}
 	}
 
@@ -215,9 +212,9 @@ func (s *ChannelService) UpdateChannel(ctx context.Context, id int64, req *chann
 		// already changed and may be live. Rolling back could be more disruptive.
 		// If we want to require strict no-drift, we need to introduce a compensating write
 		// or a background reconciler.
-		return nil, fmt.Errorf("set: %w", err)
+		return fmt.Errorf("set: %w", err)
 	}
-	return ch, nil
+	return nil
 }
 
 // DeleteChannel disables the unit if needed and deletes the record.
