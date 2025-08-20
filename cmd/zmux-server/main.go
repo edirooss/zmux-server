@@ -73,6 +73,7 @@ func main() {
 	logConfig.DisableCaller = true
 	log := zap.Must(logConfig.Build())
 	defer log.Sync()
+	log = log.Named("main")
 
 	// Enable strict JSON decoding (must be before binding happens)
 	binding.EnableDecoderDisallowUnknownFields = true
