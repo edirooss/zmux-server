@@ -77,22 +77,21 @@ func (s *ChannelService) lock(id int64) func() {
 	return func() { m.Unlock() }
 }
 
-// CreateChannel creates a new channel, commits its systemd unit, optionally
-// enables it, and only then persists the channel document to Redis.
+// CreateChannel creates a new channel, optionally
+// commits its systemd unit and enables it, and only then persists the channel document to Redis.
 //
 // Happy path
 //  1. Generate ID (atomic via Redis INCR), acquire per-ID lock.
-//  2. Commit systemd unit (definition exists/updated for this channel).
-//  3. If ch.Enabled is true → enable the service (runtime change).
-//  4. Persist final object to Redis (reflecting the runtime state).
+//  2. If ch.Enabled is true → commit systemd unit (definition exists/updated for this channel) and enable the service (runtime change).
+//  3. Persist final object to Redis (reflecting the runtime state).
 //
 // Failure modes & resulting state
 //   - ID generation fails → nothing happened (no side-effects), error returned.
-//   - commitSystemdService fails → NO Redis write; NO enable attempt. Unit may be
+//   - If ch.Enabled is true → commitSystemdService fails → NO Redis write; NO enable attempt. Unit may be
 //     absent or partially written per systemd layer’s semantics. Caller gets err.
-//   - enableChannel fails → unit file was created/updated, service NOT enabled;
+//   - If ch.Enabled is true → enableChannel fails → unit file was created/updated, service NOT enabled;
 //     NO Redis write. An ID has been consumed (gap is acceptable). Caller gets err.
-//   - repo.Set fails after enabling → service may be running with no record.
+//   - repo.Set fails after optionally enabling the channel → service running with no record.
 //     We best‑effort DISABLE the service to remove drift, then return error.
 //
 // Postconditions on success
@@ -107,14 +106,14 @@ func (s *ChannelService) CreateChannel(ctx context.Context, req *channelmodel.Cr
 
 	ch := req.ToChannel(id)
 
-	// Commit unit first so that the systemd definition exists.
-	if err := s.commitSystemdService(ch); err != nil {
-		// DEV: At this point nothing persisted; caller may retry safely.
-		return nil, fmt.Errorf("commit systemd service: %w", err)
-	}
-
 	// If requested, enable the channel now. If this fails, abort without persisting.
 	if ch.Enabled {
+		// Commit unit first so that the systemd definition exists.
+		if err := s.commitSystemdService(ch); err != nil {
+			// DEV: At this point nothing persisted; caller may retry safely.
+			return nil, fmt.Errorf("commit systemd service: %w", err)
+		}
+
 		if err := s.enableChannel(ch.ID); err != nil {
 			// DEV: Unit file exists but runtime is not enabled; we purposely do not
 			// persist to avoid Redis claiming Enabled=true when it is not. Skip ID
@@ -156,13 +155,13 @@ func (s *ChannelService) ListChannels(ctx context.Context) ([]*channelmodel.Zmux
 	return chs, nil
 }
 
-// UpdateChannel loads the current channel, applies the patch, commits the unit,
-// toggles enablement as needed, and persists the resulting state.
+// UpdateChannel loads the current channel, applies the replacement,
+// toggles enablement and commits the unit as needed, and persists the resulting state.
 //
 // Happy path
 //  1. Load current → prevEnabled snapshot.
-//  2. Apply patch in-memory.
-//  3. Commit systemd unit (ensure definition reflects new config).
+//  2. Apply replacement.
+//  3. If Enabled=true → commit systemd unit (ensure definition reflects new config).
 //  4. If Enabled=true → (re)enable service (treat as restart if already running).
 //     If Enabled=false & was enabled → disable service.
 //  5. Persist the final object to Redis.
@@ -193,13 +192,13 @@ func (s *ChannelService) UpdateChannel(ctx context.Context, id int64, req *chann
 	// Replace obj (i,e. update channel params)
 	ch = req.ToChannel(id)
 
-	// Commit (idempotent) so the unit reflects new config.
-	if err := s.commitSystemdService(ch); err != nil {
-		return nil, fmt.Errorf("commit systemd service: %w", err)
-	}
-
 	// Reconcile enablement.
 	if ch.Enabled {
+		// Commit (idempotent) so the unit reflects new config.
+		if err := s.commitSystemdService(ch); err != nil {
+			return nil, fmt.Errorf("commit systemd service: %w", err)
+		}
+
 		// DEV: Treat as restart semantics — (re)enable to pick up new config.
 		if err := s.enableChannel(ch.ID); err != nil {
 			return nil, fmt.Errorf("enable channel: %w", err)
