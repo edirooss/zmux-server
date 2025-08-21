@@ -19,52 +19,6 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// Custom Gin middleware that logs using Zap
-func ZapLogger(log *zap.Logger) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		start := time.Now()
-		c.Next()
-
-		status := c.Writer.Status()
-		latency := time.Since(start)
-		route := c.FullPath()
-		if route == "" {
-			route = c.Request.URL.Path
-		}
-
-		// collect all errors from Gin context
-		var errs []error
-		for _, ge := range c.Errors {
-			if ge.Err != nil {
-				errs = append(errs, ge.Err)
-			}
-		}
-		// errors.Join returns nil if errs is empty
-		joinedErr := errors.Join(errs...)
-
-		fields := []zap.Field{
-			zap.String("method", c.Request.Method),
-			zap.String("route", route),
-			zap.Int("status", status),
-			zap.String("client_ip", c.ClientIP()),
-			zap.String("user_agent", c.Request.UserAgent()),
-			zap.Duration("latency", latency),
-		}
-		if joinedErr != nil {
-			fields = append(fields, zap.Error(joinedErr))
-		}
-
-		switch {
-		case status >= 500:
-			log.Error("request", fields...)
-		case status >= 400:
-			log.Warn("request", fields...)
-		default:
-			log.Info("request", fields...)
-		}
-	}
-}
-
 func main() {
 	// Read env
 	isDev := os.Getenv("ENV") == "dev"
@@ -126,7 +80,7 @@ func main() {
 		}))
 	}
 
-	r.Use(ZapLogger(log)) // Observability after that (logger, tracing)
+	r.Use(accessLog(log)) // Observability after that (logger, tracing)
 
 	r.GET("/api/ping", func(c *gin.Context) {
 		c.JSON(200, gin.H{"message": "pong"})
@@ -135,27 +89,26 @@ func main() {
 	r.POST("/api/channels", func(c *gin.Context) {
 		var req channelmodel.CreateZmuxChannelReq
 		if err := bind(c.Request, &req); err != nil {
-			_ = c.Error(err) // <-- attach
+			c.Error(err)
 			c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 			return
 		}
 		if err := req.Validate(); err != nil {
-			_ = c.Error(err) // <-- attach
+			c.Error(err)
 			c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 			return
 		}
 		req.ApplyDefaults()
 
 		ch := req.ToChannel(0)
-
 		if err := ch.Validate(); err != nil {
-			_ = c.Error(err) // <-- attach
+			c.Error(err)
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"message": err.Error()})
 			return
 		}
 
 		if err := channelService.CreateChannel(c.Request.Context(), ch); err != nil {
-			_ = c.Error(err) // <-- attach
+			c.Error(err)
 			c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 			return
 		}
@@ -168,19 +121,18 @@ func main() {
 		idStr := c.Param("id")
 		id, err := strconv.ParseInt(idStr, 10, 64)
 		if err != nil {
-			_ = c.Error(err) // <-- attach parse error too (helps observability)
+			c.Error(err)
 			c.JSON(http.StatusBadRequest, gin.H{"message": "invalid id"})
 			return
 		}
 
 		ch, err := channelService.GetChannel(c.Request.Context(), id)
 		if err != nil {
+			c.Error(err)
 			if errors.Is(err, redis.ErrChannelNotFound) {
-				_ = c.Error(err) // <-- attach 404 cause as well (optional)
 				c.JSON(http.StatusNotFound, gin.H{"message": redis.ErrChannelNotFound.Error()})
 				return
 			}
-			_ = c.Error(err) // <-- attach
 			c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 			return
 		}
@@ -191,7 +143,7 @@ func main() {
 	r.GET("/api/channels", func(c *gin.Context) {
 		chs, err := channelService.ListChannels(c.Request.Context())
 		if err != nil {
-			_ = c.Error(err) // <-- attach
+			c.Error(err)
 			c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 			return
 		}
@@ -204,19 +156,19 @@ func main() {
 		idStr := c.Param("id")
 		id, err := strconv.ParseInt(idStr, 10, 64)
 		if err != nil {
-			_ = c.Error(err)
+			c.Error(err)
 			c.JSON(http.StatusBadRequest, gin.H{"message": "invalid id"})
 			return
 		}
 
 		var req channelmodel.UpdateZmuxChannelReq
 		if err := bind(c.Request, &req); err != nil {
-			_ = c.Error(err)
+			c.Error(err)
 			c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 			return
 		}
 		if err := req.Validate(); err != nil {
-			_ = c.Error(err) // <-- attach
+			c.Error(err) // <-- attach
 			c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 			return
 		}
@@ -225,18 +177,17 @@ func main() {
 		ch := req.ToChannel(id)
 
 		if err := ch.Validate(); err != nil {
-			_ = c.Error(err) // <-- attach
+			c.Error(err) // <-- attach
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"message": err.Error()})
 			return
 		}
 
 		if err := channelService.UpdateChannel(c.Request.Context(), ch); err != nil {
+			c.Error(err)
 			if errors.Is(err, redis.ErrChannelNotFound) {
-				_ = c.Error(err)
 				c.JSON(http.StatusNotFound, gin.H{"message": redis.ErrChannelNotFound.Error()})
 				return
 			}
-			_ = c.Error(err)
 			c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 			return
 		}
@@ -248,18 +199,17 @@ func main() {
 		idStr := c.Param("id")
 		id, err := strconv.ParseInt(idStr, 10, 64)
 		if err != nil {
-			_ = c.Error(err)
+			c.Error(err)
 			c.JSON(http.StatusBadRequest, gin.H{"message": "invalid id"})
 			return
 		}
 
 		if err := channelService.DeleteChannel(c.Request.Context(), id); err != nil {
+			c.Error(err)
 			if errors.Is(err, redis.ErrChannelNotFound) {
-				_ = c.Error(err)
 				c.JSON(http.StatusNotFound, gin.H{"message": redis.ErrChannelNotFound.Error()})
 				return
 			}
-			_ = c.Error(err)
 			c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 			return
 		}
@@ -271,7 +221,7 @@ func main() {
 	r.GET("/api/system/net/localaddrs", func(c *gin.Context) {
 		localAddrs, err := localaddrLister.GetLocalAddrs(c.Request.Context())
 		if err != nil {
-			_ = c.Error(err) // <-- attach
+			c.Error(err) // <-- attach
 			c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 			return
 		}
@@ -297,7 +247,7 @@ func main() {
 
 		res, err = summarySvc.Get(c.Request.Context())
 		if err != nil {
-			_ = c.Error(err)
+			c.Error(err)
 			c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 			return
 		}
@@ -313,6 +263,52 @@ func main() {
 	log.Info("running HTTP server on 127.0.0.1:8080")
 	if err := r.Run("127.0.0.1:8080"); err != nil {
 		log.Fatal("server failed", zap.Error(err))
+	}
+}
+
+// accessLog is a Gin middleware that records HTTP request/response details with Zap after handling.
+func accessLog(log *zap.Logger) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		c.Next()
+
+		status := c.Writer.Status()
+		latency := time.Since(start)
+		route := c.FullPath()
+		if route == "" {
+			route = c.Request.URL.Path
+		}
+
+		// collect all errors from Gin context
+		var errs []error
+		for _, ge := range c.Errors {
+			if ge.Err != nil {
+				errs = append(errs, ge.Err)
+			}
+		}
+		// errors.Join returns nil if errs is empty
+		joinedErr := errors.Join(errs...)
+
+		fields := []zap.Field{
+			zap.String("method", c.Request.Method),
+			zap.String("route", route),
+			zap.Int("status", status),
+			zap.String("client_ip", c.ClientIP()),
+			zap.String("user_agent", c.Request.UserAgent()),
+			zap.Duration("latency", latency),
+		}
+		if joinedErr != nil {
+			fields = append(fields, zap.Error(joinedErr))
+		}
+
+		switch {
+		case status >= 500:
+			log.Error("request", fields...)
+		case status >= 400:
+			log.Warn("request", fields...)
+		default:
+			log.Info("request", fields...)
+		}
 	}
 }
 
