@@ -123,12 +123,27 @@ paths:
           headers:
             Cache-Control:
               $ref: '#/components/headers/Cache-Control-NoStore'
-
+            Quota-Limit:
+              $ref: '#/components/headers/Quota-Limit'
+            Quota-Remaining:
+              $ref: '#/components/headers/Quota-Remaining'
             X-Request-Id:
               $ref: '#/components/headers/X-Request-Id'
         '400': { $ref: '#/components/responses/400BadRequest' }
         '401': { $ref: '#/components/responses/401Unauthorized' }
         '404': { $ref: '#/components/responses/404NotFound' }
+        '409':
+          description: |
+            Conflict — The requested change would exceed the client's quota for concurrently enabled channels.
+             The entire patch was discarded. No partial updates occurred.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+            Quota-Limit:
+              $ref: '#/components/headers/Quota-Limit'
+            Quota-Remaining:
+              $ref: '#/components/headers/Quota-Remaining'
+
         '415':
           description: Unsupported Media Type — only `application/merge-patch+json` is accepted for patch operations.
           headers:
@@ -185,6 +200,41 @@ paths:
         '429': { $ref: '#/components/responses/429TooManyRequests' }
         '500': { $ref: '#/components/responses/500InternalServerError' }
         '503': { $ref: '#/components/responses/503ServiceUnavailable' }
+  
+  /api/quota:
+    get:
+      tags: [Channels]
+      summary: Get enabled-channels quota
+      operationId: getQuota
+      description: |
+        Returns the client's quota for concurrently enabled channels,
+        plus current usage.
+
+        - `limit` is the maximum number of channels that may be `enabled: true` at once.
+        - `used` is the current count of channels with `enabled: true`.
+        - `remaining` = `limit - used`, floored at `0`.
+        - **Unlimited quota**: when unlimited, `limit` and `remaining` are `null`. In this case the server never returns `409` for quota.
+
+      parameters:
+        - $ref: '#/components/parameters/X-Request-Id'
+      responses:
+        '200':
+          description: OK — Quota info for the client.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+            Cache-Control:
+              $ref: '#/components/headers/Cache-Control-NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Quota'
+        '401': { $ref: '#/components/responses/401Unauthorized' }
+        '404': { $ref: '#/components/responses/404NotFound' }
+        '429': { $ref: '#/components/responses/429TooManyRequests' }
+        '500': { $ref: '#/components/responses/500InternalServerError' }
+        '503': { $ref: '#/components/responses/503ServiceUnavailable' }
+
 
 components:
   securitySchemes:
@@ -211,6 +261,7 @@ components:
       schema:
         type: string
       example: Basic realm="Restricted"
+    
     Retry-After:
       description: |
         Advises clients when to retry after a rate limit (`429`) or temporary downtime (`503`).
@@ -229,6 +280,29 @@ components:
         httpDate:
           summary: Specific retry date/time
           value: 'Wed, 21 Oct 2015 07:28:00 GMT'
+
+    Quota-Limit:
+      description: >
+        Maximum number of channels that may be enabled concurrently for the authenticated client.
+        When quota is unlimited, this header MAY be set to the token "unbounded".
+      schema:
+        oneOf:
+          - type: integer
+            format: int64
+            minimum: 0
+          - type: string
+            enum: ["unbounded"]
+    Quota-Remaining:
+      description: >
+        Remaining number of channels that may be enabled before hitting the quota.
+        When quota is unlimited, this header MAY be set to the token "unbounded".
+      schema:
+        oneOf:
+          - type: integer
+            format: int64
+            minimum: 0
+          - type: string
+            enum: ["unbounded"]
 
   parameters:
     ChannelId:
@@ -472,3 +546,29 @@ components:
       items:
         $ref: '#/components/schemas/ChannelStatus'
 
+    Quota:
+      type: object
+      description: Quota information for the authenticated client.
+      properties:
+        limit:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+          description: |
+            Maximum concurrently enabled channels allowed for this client.
+            `null` indicates unlimited quota.
+        used:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Current number of enabled channels.
+        remaining:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+          description: |
+            `limit - used`, floored at 0.
+            `null` when quota is unlimited.
+      required: [limit, used, remaining]
