@@ -49,7 +49,7 @@ paths:
           description: OK — array of authorized `Channel` objects, each representing a single channel as defined by its configuration; empty if none.
           headers:
             Cache-Control:
-              $ref: '#/components/headers/Cache-Control-Channels'
+              $ref: '#/components/headers/Cache-Control-NoStore'
             X-Request-Id:
               $ref: '#/components/headers/X-Request-Id'
 
@@ -200,11 +200,6 @@ components:
         type: string
         minLength: 1
         maxLength: 64
-    Cache-Control-Channels:
-      description: Cache-Control policy for /channels endpoint.
-      schema:
-        type: string
-        default: private, max-age=60, must-revalidate
     Cache-Control-NoStore:
       description: Cache-Control policy for sensitive/dynamic endpoints.
       schema:
