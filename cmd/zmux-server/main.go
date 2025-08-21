@@ -66,6 +66,9 @@ func ZapLogger(log *zap.Logger) gin.HandlerFunc {
 }
 
 func main() {
+	// Read env
+	isDev := os.Getenv("ENV") == "dev"
+
 	// Create Zap logger
 	logConfig := zap.NewDevelopmentConfig()
 	logConfig.EncoderConfig.TimeKey = ""
@@ -95,6 +98,10 @@ func main() {
 		},
 	)
 
+	if !isDev {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
 	// Configure Gin's logger
 	gin.DefaultWriter = zap.NewStdLog(log.Named("gin")).Writer()
 
@@ -107,8 +114,8 @@ func main() {
 	// Apply middlewares
 	r.Use(gin.Recovery()) // Recovery first (outermost)
 
-	// CORS (dev only)
-	if os.Getenv("ENV") == "dev" {
+	if isDev {
+		// Configure CORS
 		r.Use(cors.New(cors.Config{
 			AllowOrigins:     []string{"http://localhost:5173"},
 			AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
