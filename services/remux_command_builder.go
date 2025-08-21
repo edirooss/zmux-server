@@ -115,7 +115,7 @@ func BuildRemuxExecArgs(ch *channelmodel.ZmuxChannel) []string {
 
 	// --- Input (strings; omit if empty) ---
 	builder.
-		WithStringP("--input-url", &ch.Input.URL).
+		WithStringP("--input-url", ch.Input.URL).
 		WithStringP("--avioflags", ch.Input.AVIOFlags).
 		WithUint("--probesize", ch.Input.Probesize).
 		WithUint("--analyzeduration", ch.Input.Analyzeduration).

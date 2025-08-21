@@ -1,26 +1,22 @@
 package channelmodel
 
-import (
-	"errors"
-)
-
 // CreateZmuxChannelReq is the JSON DTO for creating a Zmux channel via POST /api/channels.
-// Only Name and Input.URL are required. Everything else has sane defaults.
+// Everything has sane defaults.
 type CreateZmuxChannelReq struct {
-	Name *string `json:"name"` // required
+	Name *string `json:"name"` // default: null
 
 	// --- Remux configuration ---
-	Input  *CreateInput  `json:"input"`  // required
+	Input  *CreateInput  `json:"input"`  // default: CreateInput{}
 	Output *CreateOutput `json:"output"` // default: CreateOutput{}
 	// ----------------------------
 
 	// Systemd settings
-	Enabled    *bool `json:"enabled"`     // default: true
+	Enabled    *bool `json:"enabled"`     // default: false
 	RestartSec *uint `json:"restart_sec"` // default: 3
 }
 
 type CreateInput struct {
-	URL             *string `json:"url"`             // required
+	URL             *string `json:"url"`             // default: null
 	AVIOFlags       *string `json:"avioflags"`       // default: null
 	ProbeSize       *uint   `json:"probesize"`       // default: 5000000
 	AnalyzeDuration *uint   `json:"analyzeduration"` // default: 0
@@ -42,15 +38,21 @@ type CreateOutput struct {
 
 func (r *CreateZmuxChannelReq) Validate() error {
 	if r.Name == nil {
-		return errors.New("name is required")
+		// return errors.New("name is required"); name is no longer required prop. nullable on domain
 	}
 	if r.Input == nil || r.Input.URL == nil {
-		return errors.New("input.url is required")
+		// return errors.New("input.url is required"); input.url is not longer required prop. nullable on domain
 	}
 	return nil
 }
 
+// Must be used on validated requests.
+// The . derefs assume Validate() ran and ensure all required fields exists.
+// If a caller forgets Validate() before ApplyDefaults(), this may panic.
 func (r *CreateZmuxChannelReq) ApplyDefaults() {
+	if r.Input == nil {
+		r.Input = &CreateInput{}
+	}
 	if r.Input.ProbeSize == nil {
 		r.Input.ProbeSize = ptr(uint(5000000))
 	}
@@ -82,20 +84,22 @@ func (r *CreateZmuxChannelReq) ApplyDefaults() {
 		r.Output.MapData = ptr(true)
 	}
 	if r.Enabled == nil {
-		r.Enabled = ptr(true)
+		r.Enabled = ptr(false)
 	}
 	if r.RestartSec == nil {
 		r.RestartSec = ptr(uint(3))
 	}
 }
 
-// Must be used on validated requests.
+// Must be used on validated and filled requests.
+// The * derefs assume ApplyDefaults() ran and filled all optional fields.
+// If a caller forgets ApplyDefaults() before ToChannel(), this may panic.
 func (req CreateZmuxChannelReq) ToChannel(id int64) *ZmuxChannel {
 	var ch ZmuxChannel
 	ch.ID = id
-	ch.Name = *req.Name
+	ch.Name = req.Name
 
-	ch.Input.URL = *req.Input.URL
+	ch.Input.URL = req.Input.URL
 	ch.Input.AVIOFlags = req.Input.AVIOFlags
 	ch.Input.Probesize = *req.Input.ProbeSize
 	ch.Input.Analyzeduration = *req.Input.AnalyzeDuration

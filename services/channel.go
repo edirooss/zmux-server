@@ -361,6 +361,8 @@ func (s *ChannelService) disableChannel(channelID int64) error {
 // called for create and update flows, and also before enabling to ensure the
 // unit exists and is up-to-date. Consider this idempotent with respect to the
 // same inputs; repeated calls are cheap compared to failed starts at runtime.
+//
+// Note: Channel has to be enabled (i,e. forces input.URL to be non-null)
 func (s *ChannelService) commitSystemdService(channel *channelmodel.ZmuxChannel) error {
 	cfg := SystemdServiceConfig{
 		ServiceName: fmt.Sprintf("zmux-channel-%d", channel.ID),

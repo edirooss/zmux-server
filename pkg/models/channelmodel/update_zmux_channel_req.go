@@ -3,12 +3,12 @@ package channelmodel
 import "errors"
 
 // UpdateZmuxChannelReq is the JSON DTO for replacing a Zmux channel via PUT /api/channels/{id}.
-// All fields are required (full-replacement).
+// All fields are required (full-replacement, as per RFC 9110).
 // Note: The Go standard library’s json.Decoder does not differentiate
 // between undefined and null values. As a result, we treat omitted
 // properties (i.e., undefined fields) as null when handling nullable fields.
 type UpdateZmuxChannelReq struct {
-	Name *string `json:"name"` // required
+	Name *string `json:"name"` // nullable
 
 	// --- Remux configuration ---
 	Input  *UpdateInput  `json:"input"`  // required
@@ -21,7 +21,7 @@ type UpdateZmuxChannelReq struct {
 }
 
 type UpdateInput struct {
-	URL             *string `json:"url"`             // required
+	URL             *string `json:"url"`             // nullable
 	AVIOFlags       *string `json:"avioflags"`       // nullable
 	ProbeSize       *uint   `json:"probesize"`       // required
 	AnalyzeDuration *uint   `json:"analyzeduration"` // required
@@ -43,13 +43,13 @@ type UpdateOutput struct {
 
 func (r *UpdateZmuxChannelReq) Validate() error {
 	if r.Name == nil {
-		return errors.New("name is required")
+		// return errors.New("name is required"); name is no longer required; undefined/null for clearing value
 	}
 	if r.Input == nil {
 		return errors.New("input is required")
 	}
 	if r.Input.URL == nil {
-		return errors.New("input.url is required")
+		// return errors.New("input.url is required"); input.url is no longer required; undefined/null for clearing value
 	}
 	if r.Input.ProbeSize == nil {
 		return errors.New("input.probesize is required")
@@ -88,12 +88,14 @@ func (r *UpdateZmuxChannelReq) Validate() error {
 }
 
 // Must be used on validated requests.
+// The * derefs assume Validate() ran and ensure all required fields exists.
+// If a caller forgets Validate() before ToChannel(), this may panic.
 func (req UpdateZmuxChannelReq) ToChannel(id int64) *ZmuxChannel {
 	var ch ZmuxChannel
 	ch.ID = id
-	ch.Name = *req.Name
+	ch.Name = req.Name
 
-	ch.Input.URL = *req.Input.URL
+	ch.Input.URL = req.Input.URL
 	ch.Input.AVIOFlags = req.Input.AVIOFlags
 	ch.Input.Probesize = *req.Input.ProbeSize
 	ch.Input.Analyzeduration = *req.Input.AnalyzeDuration

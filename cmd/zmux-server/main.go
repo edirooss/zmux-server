@@ -140,6 +140,13 @@ func main() {
 		req.ApplyDefaults()
 
 		ch := req.ToChannel(0)
+
+		if err := ch.Validate(); err != nil {
+			_ = c.Error(err) // <-- attach
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"message": err.Error()})
+			return
+		}
+
 		if err := channelService.CreateChannel(c.Request.Context(), ch); err != nil {
 			_ = c.Error(err) // <-- attach
 			c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
@@ -209,6 +216,12 @@ func main() {
 
 		// Replace obj (i,e. update channel params)
 		ch := req.ToChannel(id)
+
+		if err := ch.Validate(); err != nil {
+			_ = c.Error(err) // <-- attach
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"message": err.Error()})
+			return
+		}
 
 		if err := channelService.UpdateChannel(c.Request.Context(), ch); err != nil {
 			if errors.Is(err, redis.ErrChannelNotFound) {
