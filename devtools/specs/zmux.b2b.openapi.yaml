@@ -261,6 +261,7 @@ components:
         - Malformed JSON (e.g., bad tokens, truncated body)
         - JSON schema **shape** violation:
           - Incorrect data type (i.e., field-type mismatch)
+          - Non-nullable property explicitly set to null (i.e., invalid field `null` assignment)
           - Disallowed additional properties (i.e., unknown/unexpected fields)
           - Omitted mandatory properties (i.e., missing required fields)
         - Field access policy violation:
@@ -290,7 +291,6 @@ components:
         Unprocessable Content (422) — The request was syntactically valid and successfully parsed, 
         but failed validation due to semantically invalid data that violates domain rules or business logic, including:
 
-          - Non-nullable field set to null
           - Invalid string length or format (e.g., not a valid uuid or uri)
           - Numeric value out of range
           - Unsupported enum value
