@@ -1,9 +1,12 @@
 openapi: 3.0.3
 info:
-  title: Zmux Channels – Client API
-  version: 1.0.0
+  title: Zmux Channels – B2B Client API (DRAFT – INTERNAL USE ONLY)
+  version: 0.0.1
   description: |
-    B2B API for reading Zmux channels configuration and performing partial updates.
+    B2B client API for reading Zmux channels configuration and performing partial updates.
+
+    This API specification is proprietary and confidential.
+    Distribution or disclosure is prohibited unless explicitly authorized.
 
     - **Transport**: HTTPS only.
     - **Auth**: HTTP Basic over TLS.
@@ -13,11 +16,11 @@ info:
     name: Zmux Support
   
   license:
-    name: MIT
-    url: https://opensource.org/licenses/MIT
+    name: Private License – Do Not Distribute
+    url: https://internal.zmux/license-info
 
 servers:
-  - url: https://zmux.local
+  - url: https://internal.zmux
     description: Production server
 
 security:
