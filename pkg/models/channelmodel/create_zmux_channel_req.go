@@ -69,9 +69,6 @@ func (r *CreateZmuxChannelReq) ApplyDefaults() {
 	if r.Output == nil {
 		r.Output = &CreateOutput{}
 	}
-	if r.Output.URL == nil {
-		r.Output.URL = ptr("/dev/null")
-	}
 	if r.Output.PktSize == nil {
 		r.Output.PktSize = ptr(uint(1316))
 	}
