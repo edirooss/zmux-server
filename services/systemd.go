@@ -71,6 +71,14 @@ func (s *SystemdService) CommitService(cfg SystemdServiceConfig) error {
 	return nil
 }
 
+// RestartService restarts a systemd service
+func (s *SystemdService) RestartService(serviceName string) error {
+	if err := s.execSystemctl(context.TODO(), "restart", serviceName+".service"); err != nil {
+		return fmt.Errorf("restart: %w", err)
+	}
+	return nil
+}
+
 // EnableService starts and enables a systemd service
 func (s *SystemdService) EnableService(serviceName string) error {
 	// pass args as separate elements

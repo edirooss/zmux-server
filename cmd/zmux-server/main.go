@@ -69,14 +69,14 @@ func main() {
 	r.Use(gin.Recovery()) // Recovery first (outermost)
 
 	if isDev {
-		// Configure CORS
+		// Configure permissive CORS (dev only)
 		r.Use(cors.New(cors.Config{
-			AllowOrigins:     []string{"http://localhost:5173"},
-			AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-			AllowHeaders:     []string{"Content-Type", "Authorization"},
-			ExposeHeaders:    []string{"X-Total-Count", "Location"},
-			AllowCredentials: false,
-			MaxAge:           12 * time.Hour, // cache preflight
+			AllowOrigins:     []string{"*"},
+			AllowMethods:     []string{"*"},
+			AllowHeaders:     []string{"*"},
+			ExposeHeaders:    []string{"*"},
+			AllowCredentials: true,
+			MaxAge:           12 * time.Hour,
 		}))
 	}
 

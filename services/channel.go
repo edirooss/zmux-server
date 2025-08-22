@@ -196,11 +196,20 @@ func (s *ChannelService) UpdateChannel(ctx context.Context, ch *channelmodel.Zmu
 			return fmt.Errorf("commit systemd service: %w", err)
 		}
 
-		// DEV: Treat as restart semantics — (re)enable to pick up new config.
-		if err := s.enableChannel(ch.ID); err != nil {
-			return fmt.Errorf("enable channel: %w", err)
+		if prevEnabled {
+			// On prev enabled, we should restart the service
+			if err := s.restartChannel(ch.ID); err != nil {
+				return fmt.Errorf("re-enable channel: %w", err)
+			}
+		} else {
+			// On prev disabled, plain enable channel call
+			if err := s.enableChannel(ch.ID); err != nil {
+				return fmt.Errorf("enable channel: %w", err)
+			}
 		}
+
 	} else if prevEnabled {
+		// On currently disabled and prev enabled, we just disable the service
 		if err := s.disableChannel(ch.ID); err != nil {
 			return fmt.Errorf("disable channel: %w", err)
 		}
@@ -334,6 +343,17 @@ func (s *ChannelService) DisableChannel(ctx context.Context, id int64) error {
 		// rollback runtime effect so Redis/API and systemd do not drift
 		_ = s.enableChannel(ch.ID)
 		return fmt.Errorf("set: %w", err)
+	}
+	return nil
+}
+
+// restartChannel is a thin wrapper around systemd.RestartService for a channel.
+// Kept private to make higher-level flows explicit and testable.
+// Should be called on already-enabled services to provide restart semantics.
+func (s *ChannelService) restartChannel(channelID int64) error {
+	serviceName := fmt.Sprintf("zmux-channel-%d", channelID)
+	if err := s.systemd.RestartService(serviceName); err != nil {
+		return fmt.Errorf("enable systemd service: %w", err)
 	}
 	return nil
 }
