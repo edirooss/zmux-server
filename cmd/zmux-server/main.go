@@ -106,6 +106,25 @@ func main() {
 		c.JSON(200, url)
 	})
 
+	r.POST("/api/url/parse/raw", func(c *gin.Context) {
+		var req struct {
+			URL string `json:"url"`
+		}
+		if err := bind(c.Request, &req); err != nil {
+			c.Error(err)
+			c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+			return
+		}
+		url, err := avurl.RawParse(req.URL)
+		if err != nil {
+			c.Error(err)
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"message": err.Error()})
+			return
+		}
+
+		c.JSON(200, url)
+	})
+
 	r.POST("/api/channels", func(c *gin.Context) {
 		var req channelmodel.CreateZmuxChannelReq
 		if err := bind(c.Request, &req); err != nil {

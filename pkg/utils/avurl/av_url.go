@@ -15,6 +15,8 @@ type URL struct {
 	Path     string `json:"path"`
 }
 
+// Parse takes a URL string, splits it into components, and validates
+// the host and port. Returns a structured URL object on success.
 func Parse(url string) (*URL, error) {
 	schema, userinfo, host, port, path, _md := avurlSplit(url)
 
@@ -35,6 +37,25 @@ func Parse(url string) (*URL, error) {
 
 	if port != "" && !isPort(port) {
 		return nil, fmt.Errorf("bad port: '%s'", port)
+	}
+
+	return &URL{
+		Schema:   schema,
+		Userinfo: userinfo,
+		Host:     host,
+		Port:     port,
+		Path:     path,
+	}, nil
+}
+
+// RawParse splits a URL string into components without applying
+// host and port validation checks.
+func RawParse(url string) (*URL, error) {
+	schema, userinfo, host, port, path, _md := avurlSplit(url)
+
+	/* invariant: url must equal re-joined parts; failure here means the split/join logic is broken */
+	if url != avurlJoin(schema, userinfo, host, port, path, _md) {
+		return nil, errors.New("unable to parse URL")
 	}
 
 	return &URL{
