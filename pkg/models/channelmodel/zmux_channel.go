@@ -1,7 +1,12 @@
 // models/channelmodel.go
 package channelmodel
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+
+	"github.com/edirooss/zmux-server/pkg/models/channelmodel/validate"
+)
 
 type ZmuxChannel struct {
 	ID   int64   `json:"id"`   //
@@ -41,6 +46,18 @@ func (ch *ZmuxChannel) Validate() error {
 
 	if ch.Input.URL != nil && ch.Name == nil {
 		return errors.New("input.URL requires non-null name")
+	}
+
+	if ch.Input.URL != nil {
+		if err := validate.ValidateInputURL(*ch.Input.URL); err != nil {
+			return fmt.Errorf("invalid input.URL: %s", err)
+		}
+	}
+
+	if ch.Output.URL != nil {
+		if err := validate.ValidateOutputURL(*ch.Output.URL); err != nil {
+			return fmt.Errorf("invalid output.URL: %s", err)
+		}
 	}
 
 	return nil

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/edirooss/zmux-server/pkg/models/channelmodel"
+	"github.com/edirooss/zmux-server/pkg/utils/avurl"
 	"github.com/edirooss/zmux-server/redis"
 	"github.com/edirooss/zmux-server/services"
 	"github.com/gin-contrib/cors"
@@ -84,6 +85,25 @@ func main() {
 
 	r.GET("/api/ping", func(c *gin.Context) {
 		c.JSON(200, gin.H{"message": "pong"})
+	})
+
+	r.POST("/api/url/parse", func(c *gin.Context) {
+		var req struct {
+			URL string `json:"url"`
+		}
+		if err := bind(c.Request, &req); err != nil {
+			c.Error(err)
+			c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+			return
+		}
+		url, err := avurl.Parse(req.URL)
+		if err != nil {
+			c.Error(err)
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"message": err.Error()})
+			return
+		}
+
+		c.JSON(200, url)
 	})
 
 	r.POST("/api/channels", func(c *gin.Context) {
