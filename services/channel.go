@@ -77,6 +77,18 @@ func (s *ChannelService) lock(id int64) func() {
 	return func() { m.Unlock() }
 }
 
+// ChannelExists returns true if the channel ID exists in Redis, false otherwise.
+// Failure modes:
+//   - Redis error → returned as wrapped error.
+//   - Missing ID → (false, nil).
+func (s *ChannelService) ChannelExists(ctx context.Context, id int64) (bool, error) {
+	exists, err := s.repo.Exists(ctx, id)
+	if err != nil {
+		return false, fmt.Errorf("exists: %w", err)
+	}
+	return exists, nil
+}
+
 // CreateChannel creates a new channel, optionally
 // commits its systemd unit and enables it, and only then persists the channel document to Redis.
 //

@@ -48,6 +48,16 @@ func (r *ChannelRepository) GenerateID(ctx context.Context) (int64, error) {
 	return id, nil
 }
 
+// Exists checks whether a channel ID exists in Redis.
+// Uses the maintained SET of channel IDs for efficiency.
+func (r *ChannelRepository) Exists(ctx context.Context, id int64) (bool, error) {
+	ok, err := r.client.SIsMember(ctx, channelIDSetKey, strconv.FormatInt(id, 10)).Result()
+	if err != nil {
+		return false, fmt.Errorf("sismember: %w", err)
+	}
+	return ok, nil
+}
+
 const channelIDSetKey = "zmux:channels" // SET of string ids: {"1","2",...}
 
 func (r *ChannelRepository) Set(ctx context.Context, channel *channel.ZmuxChannel) error {

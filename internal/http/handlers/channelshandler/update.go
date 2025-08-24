@@ -19,6 +19,17 @@ func (h *ChannelsHandler) UpdateChannel(c *gin.Context) {
 		return
 	}
 
+	exists, err := h.svc.ChannelExists(c.Request.Context(), id)
+	if err != nil {
+		c.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		return
+	}
+	if !exists {
+		c.Status(http.StatusNotFound)
+		return
+	}
+
 	var req channelsdto.UpdateChannel
 	if err := bind(c.Request, &req); err != nil {
 		c.Error(err)

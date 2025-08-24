@@ -41,9 +41,8 @@ type CreateChannelOutput struct {
 // ToChannel maps CreateChannel → channel.ZmuxChannel
 // Disallows explicit null assignment to non-nullable fields.
 // Fills unset fields with defaults.
-func (req *CreateChannel) ToChannel(id int64) (*channel.ZmuxChannel, error) {
+func (req *CreateChannel) ToChannel() (*channel.ZmuxChannel, error) {
 	ch := &channel.ZmuxChannel{}
-	ch.ID = id
 
 	// name
 	// optional; string | null (default: null)

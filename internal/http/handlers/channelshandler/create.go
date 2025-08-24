@@ -16,7 +16,7 @@ func (h *ChannelsHandler) CreateChannel(c *gin.Context) {
 		return
 	}
 
-	ch, err := req.ToChannel(0)
+	ch, err := req.ToChannel()
 	if err != nil {
 		c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
