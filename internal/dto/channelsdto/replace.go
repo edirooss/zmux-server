@@ -7,7 +7,7 @@ import (
 	"github.com/edirooss/zmux-server/internal/domain/channel"
 )
 
-// ReplaceChannel is the DTO for replacing a Zmux channel via
+// ReplaceChannel is the DTO for updating a Zmux channel via
 // PUT /api/channels/{id}. Full-replacement semantics (RFC 9110):
 //   - All fields are required.
 type ReplaceChannel struct {

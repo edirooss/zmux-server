@@ -126,12 +126,12 @@ func main() {
 	}
 
 	{
-		r.POST("/api/channels", channelshndlr.CreateChannel)
-		r.GET("/api/channels/:id", channelshndlr.GetChannel)
-		r.PUT("/api/channels/:id", channelshndlr.ReplaceChannel)
-		r.PATCH("/api/channels/:id", channelshndlr.UpdateChannel)
-		r.DELETE("/api/channels/:id", channelshndlr.DeleteChannel)
-		r.GET("/api/channels", channelshndlr.GetChannelList)
+		r.GET("/api/channels", channelshndlr.GetChannelList)       // Get all (Collection)
+		r.POST("/api/channels", channelshndlr.CreateChannel)       // Create new (Collection)
+		r.GET("/api/channels/:id", channelshndlr.GetChannel)       // Get one
+		r.PUT("/api/channels/:id", channelshndlr.ReplaceChannel)   // Replace one (full update)
+		r.PATCH("/api/channels/:id", channelshndlr.ModifyChannel)  // Modify one (partial update)
+		r.DELETE("/api/channels/:id", channelshndlr.DeleteChannel) // Delete one
 	}
 
 	r.GET("/api/system/net/localaddrs", func(c *gin.Context) {

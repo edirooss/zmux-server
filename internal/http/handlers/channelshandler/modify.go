@@ -10,7 +10,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func (h *ChannelsHandler) UpdateChannel(c *gin.Context) {
+// partial update via PATCH (all fields optional)
+func (h *ChannelsHandler) ModifyChannel(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil || id <= 0 {
@@ -31,7 +32,7 @@ func (h *ChannelsHandler) UpdateChannel(c *gin.Context) {
 		return
 	}
 
-	var req channelsdto.UpdateChannel
+	var req channelsdto.ModifyChannel
 	if err := bind(c.Request, &req); err != nil {
 		c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})

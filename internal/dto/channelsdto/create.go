@@ -6,7 +6,7 @@ import (
 	"github.com/edirooss/zmux-server/internal/domain/channel"
 )
 
-// CreateChannel is the DTO for creating a Zmux channel via
+// CreateChannel is the DTO for creating a new Zmux channel via
 // POST /api/channels.
 //   - All fields are optional. Defaults applied.
 type CreateChannel struct {
