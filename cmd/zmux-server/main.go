@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/edirooss/zmux-server/internal/http/handlers"
 	"github.com/edirooss/zmux-server/pkg/models/channelmodel"
 	"github.com/edirooss/zmux-server/pkg/utils/avurl"
 	"github.com/edirooss/zmux-server/redis"
@@ -190,7 +191,6 @@ func main() {
 		c.JSON(http.StatusOK, chs)
 	})
 
-	// main router setup (add)
 	r.PUT("/api/channels/:id", func(c *gin.Context) {
 		idStr := c.Param("id")
 		id, err := strconv.ParseInt(idStr, 10, 64)
@@ -233,6 +233,8 @@ func main() {
 
 		c.JSON(http.StatusOK, ch)
 	})
+
+	r.PATCH("/api/channels/:id", func(c *gin.Context) { handlers.PatchChannel(c, channelService) })
 
 	r.DELETE("/api/channels/:id", func(c *gin.Context) {
 		idStr := c.Param("id")
