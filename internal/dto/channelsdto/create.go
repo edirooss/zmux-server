@@ -8,34 +8,34 @@ import (
 
 // CreateChannel is the DTO for creating a Zmux channel via
 // POST /api/channels.
-//   - All fields are optional.
+//   - All fields are optional. Defaults applied.
 type CreateChannel struct {
-	Name       F[string]              `json:"name"`        //  optional; string | null   (default: null)
-	Input      F[CreateChannelInput]  `json:"input"`       //  optional; object          (default: {})
-	Output     F[CreateChannelOutput] `json:"output"`      //  optional; object          (default: {})
-	Enabled    F[bool]                `json:"enabled"`     //  optional; bool            (default: false)
-	RestartSec F[uint]                `json:"restart_sec"` //  optional; uint            (default: 3)
+	Name       W[string]              `json:"name"`        //   optional; string | null   (default: null)
+	Input      W[CreateChannelInput]  `json:"input"`       //   optional; object          (default: {})
+	Output     W[CreateChannelOutput] `json:"output"`      //   optional; object          (default: {})
+	Enabled    W[bool]                `json:"enabled"`     //   optional; bool            (default: false)
+	RestartSec W[uint]                `json:"restart_sec"` //   optional; uint            (default: 3)
 }
 
 type CreateChannelInput struct {
-	URL             F[string] `json:"url"`             //      optional; string | null   (default: null)
-	AVIOFlags       F[string] `json:"avioflags"`       //      optional; string | null   (default: null)
-	Probesize       F[uint]   `json:"probesize"`       //      optional; uint            (default: 5000000)
-	Analyzeduration F[uint]   `json:"analyzeduration"` //      optional; uint            (default: 0)
-	FFlags          F[string] `json:"fflags"`          //      optional; string | null   (default: "nobuffer")
-	MaxDelay        F[int]    `json:"max_delay"`       //      optional; int             (default: -1)
-	Localaddr       F[string] `json:"localaddr"`       //      optional; string | null   (default: null)
-	Timeout         F[uint]   `json:"timeout"`         //      optional; uint            (default: 3000000)
-	RTSPTransport   F[string] `json:"rtsp_transport"`  //      optional; string | null   (default: null)
+	URL             W[string] `json:"url"`             //       optional; string | null   (default: null)
+	AVIOFlags       W[string] `json:"avioflags"`       //       optional; string | null   (default: null)
+	Probesize       W[uint]   `json:"probesize"`       //       optional; uint            (default: 5000000)
+	Analyzeduration W[uint]   `json:"analyzeduration"` //       optional; uint            (default: 0)
+	FFlags          W[string] `json:"fflags"`          //       optional; string | null   (default: "nobuffer")
+	MaxDelay        W[int]    `json:"max_delay"`       //       optional; int             (default: -1)
+	Localaddr       W[string] `json:"localaddr"`       //       optional; string | null   (default: null)
+	Timeout         W[uint]   `json:"timeout"`         //       optional; uint            (default: 3000000)
+	RTSPTransport   W[string] `json:"rtsp_transport"`  //       optional; string | null   (default: null)
 }
 
 type CreateChannelOutput struct {
-	URL       F[string] `json:"url"`       //                  optional; string | null   (default: null)
-	Localaddr F[string] `json:"localaddr"` //                  optional; string | null   (default: null)
-	PktSize   F[uint]   `json:"pkt_size"`  //                  optional; uint            (default: 1316)
-	MapVideo  F[bool]   `json:"map_video"` //                  optional; bool            (default: true)
-	MapAudio  F[bool]   `json:"map_audio"` //                  optional; bool            (default: true)
-	MapData   F[bool]   `json:"map_data"`  //                  optional; bool            (default: true)
+	URL       W[string] `json:"url"`       //                   optional; string | null   (default: null)
+	Localaddr W[string] `json:"localaddr"` //                   optional; string | null   (default: null)
+	PktSize   W[uint]   `json:"pkt_size"`  //                   optional; uint            (default: 1316)
+	MapVideo  W[bool]   `json:"map_video"` //                   optional; bool            (default: true)
+	MapAudio  W[bool]   `json:"map_audio"` //                   optional; bool            (default: true)
+	MapData   W[bool]   `json:"map_data"`  //                   optional; bool            (default: true)
 }
 
 // ToChannel maps CreateChannel → channel.ZmuxChannel

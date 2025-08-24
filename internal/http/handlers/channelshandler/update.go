@@ -25,14 +25,14 @@ func (h *ChannelsHandler) UpdateChannel(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
-	if err := req.Validate(); err != nil {
+
+	// Replace obj (i,e. update channel params)
+	ch, err := req.ToChannel(id)
+	if err != nil {
 		c.Error(err) // <-- attach
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
-
-	// Replace obj (i,e. update channel params)
-	ch := req.ToChannel(id)
 
 	if err := ch.Validate(); err != nil {
 		c.Error(err) // <-- attach
