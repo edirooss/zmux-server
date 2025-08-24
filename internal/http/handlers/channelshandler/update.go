@@ -19,7 +19,7 @@ func (h *ChannelsHandler) UpdateChannel(c *gin.Context) {
 		return
 	}
 
-	var req channelsdto.UpdateZmuxChannelReq
+	var req channelsdto.UpdateChannel
 	if err := bind(c.Request, &req); err != nil {
 		c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
