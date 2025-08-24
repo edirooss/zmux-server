@@ -3,8 +3,6 @@ package channel
 import (
 	"errors"
 	"fmt"
-
-	"github.com/edirooss/zmux-server/pkg/models/channelmodel/validate"
 )
 
 type ZmuxChannel struct {
@@ -48,13 +46,13 @@ func (ch *ZmuxChannel) Validate() error {
 	}
 
 	if ch.Input.URL != nil {
-		if err := validate.ValidateInputURL(*ch.Input.URL); err != nil {
+		if err := validateInputURL(*ch.Input.URL); err != nil {
 			return fmt.Errorf("invalid input.URL: %s", err)
 		}
 	}
 
 	if ch.Output.URL != nil {
-		if err := validate.ValidateOutputURL(*ch.Output.URL); err != nil {
+		if err := validateOutputURL(*ch.Output.URL); err != nil {
 			return fmt.Errorf("invalid output.URL: %s", err)
 		}
 	}
