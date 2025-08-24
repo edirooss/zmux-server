@@ -32,3 +32,13 @@ func (f F[T]) ValueOrNil() *T {
 	}
 	return &f.V
 }
+
+// Wrap creates an F[T] containing a non-null value.
+func Wrap[T any](v T) F[T] {
+	return F[T]{V: v, Set: true, Null: false}
+}
+
+// NullF creates an F[T] explicitly set to null.
+func NullF[T any]() F[T] {
+	return F[T]{Set: true, Null: true}
+}

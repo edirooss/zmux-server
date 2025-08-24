@@ -1,129 +1,207 @@
 package channelsdto
 
-import "github.com/edirooss/zmux-server/internal/domain/channel"
+import (
+	"errors"
 
-// CreateZmuxChannelReq is the JSON DTO for creating a Zmux channel via POST /api/channels.
-// Everything has sane defaults.
-type CreateZmuxChannelReq struct {
-	Name *string `json:"name"` // default: null
+	"github.com/edirooss/zmux-server/internal/domain/channel"
+)
 
-	// --- Remux configuration ---
-	Input  *CreateInput  `json:"input"`  // default: CreateInput{}
-	Output *CreateOutput `json:"output"` // default: CreateOutput{}
-	// ----------------------------
-
-	// Systemd settings
-	Enabled    *bool `json:"enabled"`     // default: false
-	RestartSec *uint `json:"restart_sec"` // default: 3
+// CreateChannel is the DTO for creating a Zmux channel via
+// POST /api/channels.
+//   - All fields are optional.
+type CreateChannel struct {
+	Name       F[string]       `json:"name"`        // optional; string | null (default: null)
+	Input      F[CreateInput]  `json:"input"`       // optional; object (default: {})
+	Output     F[CreateOutput] `json:"output"`      // optional; object (default: {})
+	Enabled    F[bool]         `json:"enabled"`     // optional; bool (default: false)
+	RestartSec F[uint]         `json:"restart_sec"` // optional; uint (default: 3)
 }
 
 type CreateInput struct {
-	URL             *string `json:"url"`             // default: null
-	AVIOFlags       *string `json:"avioflags"`       // default: null
-	ProbeSize       *uint   `json:"probesize"`       // default: 5000000
-	AnalyzeDuration *uint   `json:"analyzeduration"` // default: 0
-	FFlags          *string `json:"fflags"`          // default: "nobuffer" (note: overwrites explict null (i,e. defined field with null value) on create)
-	MaxDelay        *int    `json:"max_delay"`       // default: -1
-	LocalAddr       *string `json:"localaddr"`       // default: null
-	Timeout         *uint   `json:"timeout"`         // default: 3000000
-	RTSPTransport   *string `json:"rtsp_transport"`  // default: null
+	URL             F[string] `json:"url"`             // optional; string | null (default: null)
+	AVIOFlags       F[string] `json:"avioflags"`       // optional; string | null (default: null)
+	ProbeSize       F[uint]   `json:"probesize"`       // optional; uint (default: 5000000)
+	AnalyzeDuration F[uint]   `json:"analyzeduration"` // optional; uint (default: 0)
+	FFlags          F[string] `json:"fflags"`          // optional; string | null (default: "nobuffer")
+	MaxDelay        F[int]    `json:"max_delay"`       // optional; int (default: -1)
+	LocalAddr       F[string] `json:"localaddr"`       // optional; string | null (default: null)
+	Timeout         F[uint]   `json:"timeout"`         // optional; uint (default: 3000000)
+	RTSPTransport   F[string] `json:"rtsp_transport"`  // optional; string | null (default: null)
 }
 
 type CreateOutput struct {
-	URL       *string `json:"url"`       // default: null
-	LocalAddr *string `json:"localaddr"` // default: null
-	PktSize   *uint   `json:"pkt_size"`  // default: 1316
-	MapVideo  *bool   `json:"map_video"` // default: true
-	MapAudio  *bool   `json:"map_audio"` // default: true
-	MapData   *bool   `json:"map_data"`  // default: true
+	URL       F[string] `json:"url"`       // optional; string | null (default: null)
+	LocalAddr F[string] `json:"localaddr"` // optional; string | null (default: null)
+	PktSize   F[uint]   `json:"pkt_size"`  // optional; uint (default: 1316)
+	MapVideo  F[bool]   `json:"map_video"` // optional; bool (default: true)
+	MapAudio  F[bool]   `json:"map_audio"` // optional; bool (default: true)
+	MapData   F[bool]   `json:"map_data"`  // optional; bool (default: true)
 }
 
-func (r *CreateZmuxChannelReq) Validate() error {
-	if r.Name == nil {
-		// return errors.New("name is required"); name is no longer required prop. nullable on domain
+// Validate ensures no non-nullable field is explicitly set to null.
+func (r *CreateChannel) Validate() error {
+	if r.Input.Set {
+		if r.Input.Null {
+			return errors.New("input cannot be null")
+		}
+		if err := r.Input.V.Validate(); err != nil {
+			return err
+		}
 	}
-	if r.Input == nil || r.Input.URL == nil {
-		// return errors.New("input.url is required"); input.url is not longer required prop. nullable on domain
+	if r.Output.Set {
+		if r.Output.Null {
+			return errors.New("output cannot be null")
+		}
+		if err := r.Output.V.Validate(); err != nil {
+			return err
+		}
+	}
+
+	if r.Enabled.Set && r.Enabled.Null {
+		return errors.New("enabled cannot be null")
+	}
+	if r.RestartSec.Set && r.RestartSec.Null {
+		return errors.New("restart_sec cannot be null")
+	}
+
+	return nil
+}
+
+// Validate ensures no non-nullable field is explicitly set to null.
+func (c *CreateInput) Validate() error {
+	if c.ProbeSize.Set && c.ProbeSize.Null {
+		return errors.New("input.probesize cannot be null")
+	}
+	if c.AnalyzeDuration.Set && c.AnalyzeDuration.Null {
+		return errors.New("input.analyzeduration cannot be null")
+	}
+	if c.MaxDelay.Set && c.MaxDelay.Null {
+		return errors.New("input.max_delay cannot be null")
+	}
+	if c.Timeout.Set && c.Timeout.Null {
+		return errors.New("input.timeout cannot be null")
 	}
 	return nil
 }
 
-// Must be used on validated requests.
-// The . derefs assume Validate() ran and ensure all required fields exists.
-// If a caller forgets Validate() before ApplyDefaults(), this may panic.
-func (r *CreateZmuxChannelReq) ApplyDefaults() {
-	if r.Input == nil {
-		r.Input = &CreateInput{}
+func (c *CreateOutput) Validate() error {
+	if c.PktSize.Set && c.PktSize.Null {
+		return errors.New("output.pkt_size cannot be null")
 	}
-	if r.Input.ProbeSize == nil {
-		r.Input.ProbeSize = ptr(uint(5000000))
+	if c.MapVideo.Set && c.MapVideo.Null {
+		return errors.New("output.map_video cannot be null")
 	}
-	if r.Input.AnalyzeDuration == nil {
-		r.Input.AnalyzeDuration = ptr(uint(0))
+	if c.MapAudio.Set && c.MapAudio.Null {
+		return errors.New("output.map_audio cannot be null")
 	}
-	if r.Input.FFlags == nil {
-		r.Input.FFlags = ptr("nobuffer")
+	if c.MapData.Set && c.MapData.Null {
+		return errors.New("output.map_data cannot be null")
 	}
-	if r.Input.MaxDelay == nil {
-		r.Input.MaxDelay = ptr(int(-1))
+	return nil
+}
+
+// ApplyDefaults fills unset fields with explicit defaults.
+func (r *CreateChannel) ApplyDefaults() {
+	// top-level
+	if !r.Name.Set {
+		r.Name = NullF[string]()
 	}
-	if r.Input.Timeout == nil {
-		r.Input.Timeout = ptr(uint(3000000))
+	if !r.Input.Set {
+		r.Input = Wrap(CreateInput{})
 	}
-	if r.Output == nil {
-		r.Output = &CreateOutput{}
+	if !r.Output.Set {
+		r.Output = Wrap(CreateOutput{})
 	}
-	if r.Output.PktSize == nil {
-		r.Output.PktSize = ptr(uint(1316))
+	if !r.Enabled.Set {
+		r.Enabled = Wrap(false)
 	}
-	if r.Output.MapVideo == nil {
-		r.Output.MapVideo = ptr(true)
+	if !r.RestartSec.Set {
+		r.RestartSec = Wrap(uint(3))
 	}
-	if r.Output.MapAudio == nil {
-		r.Output.MapAudio = ptr(true)
+
+	// input defaults
+	in := &r.Input.V
+	if !in.URL.Set {
+		in.URL = NullF[string]()
 	}
-	if r.Output.MapData == nil {
-		r.Output.MapData = ptr(true)
+	if !in.AVIOFlags.Set {
+		in.AVIOFlags = NullF[string]()
 	}
-	if r.Enabled == nil {
-		r.Enabled = ptr(false)
+	if !in.ProbeSize.Set {
+		in.ProbeSize = Wrap(uint(5000000))
 	}
-	if r.RestartSec == nil {
-		r.RestartSec = ptr(uint(3))
+	if !in.AnalyzeDuration.Set {
+		in.AnalyzeDuration = Wrap(uint(0))
+	}
+	if !in.FFlags.Set {
+		in.FFlags = Wrap("nobuffer")
+	}
+	if !in.MaxDelay.Set {
+		in.MaxDelay = Wrap(int(-1))
+	}
+	if !in.LocalAddr.Set {
+		in.LocalAddr = NullF[string]()
+	}
+	if !in.Timeout.Set {
+		in.Timeout = Wrap(uint(3000000))
+	}
+	if !in.RTSPTransport.Set {
+		in.RTSPTransport = NullF[string]()
+	}
+
+	// output defaults
+	out := &r.Output.V
+	if !out.URL.Set {
+		out.URL = NullF[string]()
+	}
+	if !out.LocalAddr.Set {
+		out.LocalAddr = NullF[string]()
+	}
+	if !out.PktSize.Set {
+		out.PktSize = Wrap(uint(1316))
+	}
+	if !out.MapVideo.Set {
+		out.MapVideo = Wrap(true)
+	}
+	if !out.MapAudio.Set {
+		out.MapAudio = Wrap(true)
+	}
+	if !out.MapData.Set {
+		out.MapData = Wrap(true)
 	}
 }
 
-// Must be used on validated and filled requests.
-// The * derefs assume ApplyDefaults() ran and filled all optional fields.
-// If a caller forgets ApplyDefaults() before ToChannel(), this may panic.
-func (req CreateZmuxChannelReq) ToChannel(id int64) *channel.ZmuxChannel {
+// ToChannel maps CreateChannel → channel.ZmuxChannel
+// Safe to call only after ApplyDefaults().
+func (req CreateChannel) ToChannel(id int64) *channel.ZmuxChannel {
 	var ch channel.ZmuxChannel
 	ch.ID = id
-	ch.Name = req.Name
 
-	ch.Input.URL = req.Input.URL
-	ch.Input.AVIOFlags = req.Input.AVIOFlags
-	ch.Input.Probesize = *req.Input.ProbeSize
-	ch.Input.Analyzeduration = *req.Input.AnalyzeDuration
-	ch.Input.FFlags = req.Input.FFlags
-	ch.Input.MaxDelay = *req.Input.MaxDelay
-	ch.Input.Localaddr = req.Input.LocalAddr
-	ch.Input.Timeout = *req.Input.Timeout
-	ch.Input.RTSPTransport = req.Input.RTSPTransport
+	// top-level
+	ch.Name = req.Name.ValueOrNil()
+	ch.Enabled = req.Enabled.V
+	ch.RestartSec = req.RestartSec.V
 
-	ch.Output.URL = req.Output.URL
-	ch.Output.Localaddr = req.Output.LocalAddr
-	ch.Output.PktSize = *req.Output.PktSize
-	ch.Output.MapVideo = *req.Output.MapVideo
-	ch.Output.MapAudio = *req.Output.MapAudio
-	ch.Output.MapData = *req.Output.MapData
+	// input
+	in := &ch.Input
+	in.URL = req.Input.V.URL.ValueOrNil()
+	in.AVIOFlags = req.Input.V.AVIOFlags.ValueOrNil()
+	in.Probesize = req.Input.V.ProbeSize.V
+	in.Analyzeduration = req.Input.V.AnalyzeDuration.V
+	in.FFlags = req.Input.V.FFlags.ValueOrNil()
+	in.MaxDelay = req.Input.V.MaxDelay.V
+	in.Localaddr = req.Input.V.LocalAddr.ValueOrNil()
+	in.Timeout = req.Input.V.Timeout.V
+	in.RTSPTransport = req.Input.V.RTSPTransport.ValueOrNil()
 
-	ch.Enabled = *req.Enabled
-	ch.RestartSec = *req.RestartSec
+	// output
+	out := &ch.Output
+	out.URL = req.Output.V.URL.ValueOrNil()
+	out.Localaddr = req.Output.V.LocalAddr.ValueOrNil()
+	out.PktSize = req.Output.V.PktSize.V
+	out.MapVideo = req.Output.V.MapVideo.V
+	out.MapAudio = req.Output.V.MapAudio.V
+	out.MapData = req.Output.V.MapData.V
+
 	return &ch
-}
-
-// ptr returns a pointer to the given value.
-func ptr[T any](v T) *T {
-	return &v
 }

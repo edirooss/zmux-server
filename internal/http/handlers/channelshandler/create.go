@@ -9,7 +9,7 @@ import (
 )
 
 func (h *ChannelsHandler) CreateChannel(c *gin.Context) {
-	var req channelsdto.CreateZmuxChannelReq
+	var req channelsdto.CreateChannel
 	if err := bind(c.Request, &req); err != nil {
 		c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
