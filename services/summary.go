@@ -9,7 +9,7 @@ import (
 
 	"golang.org/x/sync/singleflight"
 
-	"github.com/edirooss/zmux-server/pkg/models/channelmodel"
+	"github.com/edirooss/zmux-server/pkg/models"
 	"github.com/edirooss/zmux-server/redis"
 	"go.uber.org/zap"
 )
@@ -36,7 +36,7 @@ func (o *SummaryOptions) setDefaults() {
 
 // SummaryResult lets the handler set headers/telemetry.
 type SummaryResult struct {
-	Data        []channelmodel.ChannelSummary
+	Data        []models.ChannelSummary
 	CacheHit    bool
 	GeneratedAt time.Time // snapshot timestamp
 }
@@ -47,7 +47,7 @@ type SummaryService struct {
 	remuxRepo *redis.RemuxRepository
 
 	mu      sync.RWMutex
-	cache   []channelmodel.ChannelSummary
+	cache   []models.ChannelSummary
 	expires time.Time
 	genAt   time.Time
 
@@ -142,7 +142,7 @@ func (s *SummaryService) Invalidate() {
 }
 
 // refresh runs the Redis pipeline: channels -> statuses -> ifmt/metrics
-func (s *SummaryService) refresh(ctx context.Context) ([]channelmodel.ChannelSummary, error) {
+func (s *SummaryService) refresh(ctx context.Context) ([]models.ChannelSummary, error) {
 	chs, err := s.chanRepo.List(ctx)
 	if err != nil {
 		return nil, err
@@ -173,9 +173,9 @@ func (s *SummaryService) refresh(ctx context.Context) ([]channelmodel.ChannelSum
 		s.log.Warn("bulk ifmt/metrics failed", zap.Error(err))
 	}
 
-	out := make([]channelmodel.ChannelSummary, 0, len(chs))
+	out := make([]models.ChannelSummary, 0, len(chs))
 	for _, ch := range chs {
-		sum := channelmodel.ChannelSummary{ZmuxChannel: *ch}
+		sum := models.ChannelSummary{ZmuxChannel: *ch}
 		if ch.Enabled {
 			if st, ok := statusMap[ch.ID]; ok {
 				sum.Status = st
@@ -190,11 +190,11 @@ func (s *SummaryService) refresh(ctx context.Context) ([]channelmodel.ChannelSum
 	return out, nil
 }
 
-func cloneSummaries(in []channelmodel.ChannelSummary) []channelmodel.ChannelSummary {
+func cloneSummaries(in []models.ChannelSummary) []models.ChannelSummary {
 	if len(in) == 0 {
 		return nil
 	}
-	out := make([]channelmodel.ChannelSummary, len(in))
+	out := make([]models.ChannelSummary, len(in))
 	copy(out, in)
 	return out
 }
