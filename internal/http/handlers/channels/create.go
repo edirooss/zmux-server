@@ -5,11 +5,10 @@ import (
 	"net/http"
 
 	"github.com/edirooss/zmux-server/pkg/models/channelmodel"
-	"github.com/edirooss/zmux-server/services"
 	"github.com/gin-gonic/gin"
 )
 
-func CreateChannel(c *gin.Context, channelService *services.ChannelService) {
+func (h *ChannelsHandler) CreateChannel(c *gin.Context) {
 	var req channelmodel.CreateZmuxChannelReq
 	if err := bind(c.Request, &req); err != nil {
 		c.Error(err)
@@ -30,7 +29,7 @@ func CreateChannel(c *gin.Context, channelService *services.ChannelService) {
 		return
 	}
 
-	if err := channelService.CreateChannel(c.Request.Context(), ch); err != nil {
+	if err := h.svc.CreateChannel(c.Request.Context(), ch); err != nil {
 		c.Error(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 		return

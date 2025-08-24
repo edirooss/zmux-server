@@ -4,12 +4,11 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/edirooss/zmux-server/services"
 	"github.com/gin-gonic/gin"
 )
 
-func GetChannelList(c *gin.Context, channelService *services.ChannelService) {
-	chs, err := channelService.ListChannels(c.Request.Context())
+func (h *ChannelsHandler) GetChannelList(c *gin.Context) {
+	chs, err := h.svc.ListChannels(c.Request.Context())
 	if err != nil {
 		c.Error(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})

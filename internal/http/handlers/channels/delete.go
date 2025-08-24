@@ -6,11 +6,10 @@ import (
 	"strconv"
 
 	"github.com/edirooss/zmux-server/redis"
-	"github.com/edirooss/zmux-server/services"
 	"github.com/gin-gonic/gin"
 )
 
-func DeleteChannel(c *gin.Context, channelService *services.ChannelService) {
+func (h *ChannelsHandler) DeleteChannel(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -19,7 +18,7 @@ func DeleteChannel(c *gin.Context, channelService *services.ChannelService) {
 		return
 	}
 
-	if err := channelService.DeleteChannel(c.Request.Context(), id); err != nil {
+	if err := h.svc.DeleteChannel(c.Request.Context(), id); err != nil {
 		c.Error(err)
 		if errors.Is(err, redis.ErrChannelNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"message": redis.ErrChannelNotFound.Error()})

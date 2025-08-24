@@ -7,11 +7,10 @@ import (
 
 	"github.com/edirooss/zmux-server/pkg/models/channelmodel"
 	"github.com/edirooss/zmux-server/redis"
-	"github.com/edirooss/zmux-server/services"
 	"github.com/gin-gonic/gin"
 )
 
-func UpdateChannel(c *gin.Context, channelService *services.ChannelService) {
+func (h *ChannelsHandler) UpdateChannel(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -41,7 +40,7 @@ func UpdateChannel(c *gin.Context, channelService *services.ChannelService) {
 		return
 	}
 
-	if err := channelService.UpdateChannel(c.Request.Context(), ch); err != nil {
+	if err := h.svc.UpdateChannel(c.Request.Context(), ch); err != nil {
 		c.Error(err)
 		if errors.Is(err, redis.ErrChannelNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"message": redis.ErrChannelNotFound.Error()})

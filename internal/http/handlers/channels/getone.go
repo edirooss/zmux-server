@@ -6,11 +6,10 @@ import (
 	"strconv"
 
 	"github.com/edirooss/zmux-server/redis"
-	"github.com/edirooss/zmux-server/services"
 	"github.com/gin-gonic/gin"
 )
 
-func GetChannel(c *gin.Context, channelService *services.ChannelService) {
+func (h *ChannelsHandler) GetChannel(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -19,7 +18,7 @@ func GetChannel(c *gin.Context, channelService *services.ChannelService) {
 		return
 	}
 
-	ch, err := channelService.GetChannel(c.Request.Context(), id)
+	ch, err := h.svc.GetChannel(c.Request.Context(), id)
 	if err != nil {
 		c.Error(err)
 		if errors.Is(err, redis.ErrChannelNotFound) {

@@ -33,10 +33,10 @@ func main() {
 	defer log.Sync()
 	log = log.Named("main")
 
-	// Service for channel CRUD
-	channelService, err := services.NewChannelService(log)
+	// HTTP Handler for channel CRUD
+	channelshnd, err := channelshndlr.NewChannelsHandler(log)
 	if err != nil {
-		log.Fatal("channel service creation failed", zap.Error(err))
+		log.Fatal("channels http handler creation failed", zap.Error(err))
 	}
 
 	// Service for reading local addresses
@@ -85,51 +85,53 @@ func main() {
 		c.JSON(200, gin.H{"message": "pong"})
 	})
 
-	r.POST("/api/url/parse", func(c *gin.Context) {
-		var req struct {
-			URL string `json:"url"`
-		}
-		if err := bind(c.Request, &req); err != nil {
-			c.Error(err)
-			c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
-			return
-		}
-		url, err := avurl.Parse(req.URL)
-		if err != nil {
-			c.Error(err)
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"message": err.Error()})
-			return
-		}
+	{
+		r.POST("/api/url/parse", func(c *gin.Context) {
+			var req struct {
+				URL string `json:"url"`
+			}
+			if err := bind(c.Request, &req); err != nil {
+				c.Error(err)
+				c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+				return
+			}
+			url, err := avurl.Parse(req.URL)
+			if err != nil {
+				c.Error(err)
+				c.JSON(http.StatusUnprocessableEntity, gin.H{"message": err.Error()})
+				return
+			}
 
-		c.JSON(200, url)
-	})
+			c.JSON(200, url)
+		})
 
-	r.POST("/api/url/parse/raw", func(c *gin.Context) {
-		var req struct {
-			URL string `json:"url"`
-		}
-		if err := bind(c.Request, &req); err != nil {
-			c.Error(err)
-			c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
-			return
-		}
-		url, err := avurl.RawParse(req.URL)
-		if err != nil {
-			c.Error(err)
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"message": err.Error()})
-			return
-		}
+		r.POST("/api/url/parse/raw", func(c *gin.Context) {
+			var req struct {
+				URL string `json:"url"`
+			}
+			if err := bind(c.Request, &req); err != nil {
+				c.Error(err)
+				c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+				return
+			}
+			url, err := avurl.RawParse(req.URL)
+			if err != nil {
+				c.Error(err)
+				c.JSON(http.StatusUnprocessableEntity, gin.H{"message": err.Error()})
+				return
+			}
 
-		c.JSON(200, url)
-	})
+			c.JSON(200, url)
+		})
+	}
 
 	{
-		r.POST("/api/channels", func(c *gin.Context) { channelshndlr.CreateChannel(c, channelService) })
-		r.GET("/api/channels/:id", func(c *gin.Context) { channelshndlr.GetChannel(c, channelService) })
-		r.PUT("/api/channels/:id", func(c *gin.Context) { channelshndlr.UpdateChannel(c, channelService) })
-		r.PATCH("/api/channels/:id", func(c *gin.Context) { channelshndlr.PartialUpdateChannel(c, channelService) })
-		r.DELETE("/api/channels/:id", func(c *gin.Context) { channelshndlr.DeleteChannel(c, channelService) })
-		r.GET("/api/channels", func(c *gin.Context) { channelshndlr.GetChannelList(c, channelService) })
+		r.POST("/api/channels", channelshnd.CreateChannel)
+		r.GET("/api/channels/:id", channelshnd.GetChannel)
+		r.PUT("/api/channels/:id", channelshnd.UpdateChannel)
+		r.PATCH("/api/channels/:id", channelshnd.PartialUpdateChannel)
+		r.DELETE("/api/channels/:id", channelshnd.DeleteChannel)
+		r.GET("/api/channels", channelshnd.GetChannelList)
 	}
 
 	r.GET("/api/system/net/localaddrs", func(c *gin.Context) {

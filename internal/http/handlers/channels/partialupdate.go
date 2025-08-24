@@ -14,13 +14,12 @@ import (
 
 	"github.com/edirooss/zmux-server/pkg/models/channelmodel"
 	"github.com/edirooss/zmux-server/redis"
-	"github.com/edirooss/zmux-server/services"
 	"github.com/gin-gonic/gin"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
 )
 
-func PartialUpdateChannel(c *gin.Context, channelService *services.ChannelService) {
+func (h *ChannelsHandler) PartialUpdateChannel(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil || id <= 0 {
@@ -63,7 +62,7 @@ func PartialUpdateChannel(c *gin.Context, channelService *services.ChannelServic
 	}
 
 	// 4) Load current resource
-	current, err := channelService.GetChannel(c.Request.Context(), id)
+	current, err := h.svc.GetChannel(c.Request.Context(), id)
 	if err != nil {
 		c.Error(err)
 		if errors.Is(err, redis.ErrChannelNotFound) {
@@ -124,7 +123,7 @@ func PartialUpdateChannel(c *gin.Context, channelService *services.ChannelServic
 	}
 
 	// 10) Persist
-	if err := channelService.UpdateChannel(c.Request.Context(), &candidate); err != nil {
+	if err := h.svc.UpdateChannel(c.Request.Context(), &candidate); err != nil {
 		c.Error(err)
 		if errors.Is(err, redis.ErrChannelNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"message": redis.ErrChannelNotFound.Error()})
