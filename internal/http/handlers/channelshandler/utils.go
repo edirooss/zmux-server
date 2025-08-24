@@ -1,4 +1,4 @@
-package channelshndlr
+package channelshandler
 
 import (
 	"encoding/json"

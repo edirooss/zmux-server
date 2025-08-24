@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	channelshndlr "github.com/edirooss/zmux-server/internal/http/handlers/channels"
+	"github.com/edirooss/zmux-server/internal/http/handlers/channelshandler"
 	"github.com/edirooss/zmux-server/pkg/utils/avurl"
 	"github.com/edirooss/zmux-server/services"
 	"github.com/gin-contrib/cors"
@@ -34,7 +34,7 @@ func main() {
 	log = log.Named("main")
 
 	// HTTP Handler for channel CRUD
-	channelshnd, err := channelshndlr.NewChannelsHandler(log)
+	channelshndlr, err := channelshandler.NewChannelsHandler(log)
 	if err != nil {
 		log.Fatal("channels http handler creation failed", zap.Error(err))
 	}
@@ -126,12 +126,12 @@ func main() {
 	}
 
 	{
-		r.POST("/api/channels", channelshnd.CreateChannel)
-		r.GET("/api/channels/:id", channelshnd.GetChannel)
-		r.PUT("/api/channels/:id", channelshnd.UpdateChannel)
-		r.PATCH("/api/channels/:id", channelshnd.PartialUpdateChannel)
-		r.DELETE("/api/channels/:id", channelshnd.DeleteChannel)
-		r.GET("/api/channels", channelshnd.GetChannelList)
+		r.POST("/api/channels", channelshndlr.CreateChannel)
+		r.GET("/api/channels/:id", channelshndlr.GetChannel)
+		r.PUT("/api/channels/:id", channelshndlr.UpdateChannel)
+		r.PATCH("/api/channels/:id", channelshndlr.PartialUpdateChannel)
+		r.DELETE("/api/channels/:id", channelshndlr.DeleteChannel)
+		r.GET("/api/channels", channelshndlr.GetChannelList)
 	}
 
 	r.GET("/api/system/net/localaddrs", func(c *gin.Context) {

@@ -1,4 +1,4 @@
-package channelshndlr
+package channelshandler
 
 import (
 	"errors"
@@ -9,7 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func (h *ChannelsHandler) GetChannel(c *gin.Context) {
+func (h *ChannelsHandler) DeleteChannel(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -18,8 +18,7 @@ func (h *ChannelsHandler) GetChannel(c *gin.Context) {
 		return
 	}
 
-	ch, err := h.svc.GetChannel(c.Request.Context(), id)
-	if err != nil {
+	if err := h.svc.DeleteChannel(c.Request.Context(), id); err != nil {
 		c.Error(err)
 		if errors.Is(err, redis.ErrChannelNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"message": redis.ErrChannelNotFound.Error()})
@@ -29,5 +28,6 @@ func (h *ChannelsHandler) GetChannel(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, ch)
+	// RA-friendly response
+	c.JSON(http.StatusOK, gin.H{"id": id})
 }
