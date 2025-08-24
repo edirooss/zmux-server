@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/edirooss/zmux-server/internal/http/handlers"
+	channelshndlr "github.com/edirooss/zmux-server/internal/http/handlers/channels"
 	"github.com/edirooss/zmux-server/pkg/models/channelmodel"
 	"github.com/edirooss/zmux-server/pkg/utils/avurl"
 	"github.com/edirooss/zmux-server/redis"
@@ -126,138 +126,140 @@ func main() {
 		c.JSON(200, url)
 	})
 
-	r.POST("/api/channels", func(c *gin.Context) {
-		var req channelmodel.CreateZmuxChannelReq
-		if err := bind(c.Request, &req); err != nil {
-			c.Error(err)
-			c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
-			return
-		}
-		if err := req.Validate(); err != nil {
-			c.Error(err)
-			c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
-			return
-		}
-		req.ApplyDefaults()
-
-		ch := req.ToChannel(0)
-		if err := ch.Validate(); err != nil {
-			c.Error(err)
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"message": err.Error()})
-			return
-		}
-
-		if err := channelService.CreateChannel(c.Request.Context(), ch); err != nil {
-			c.Error(err)
-			c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
-			return
-		}
-
-		c.Header("Location", fmt.Sprintf("/api/channels/%d", ch.ID))
-		c.JSON(http.StatusCreated, ch)
-	})
-
-	r.GET("/api/channels/:id", func(c *gin.Context) {
-		idStr := c.Param("id")
-		id, err := strconv.ParseInt(idStr, 10, 64)
-		if err != nil {
-			c.Error(err)
-			c.JSON(http.StatusBadRequest, gin.H{"message": "invalid id"})
-			return
-		}
-
-		ch, err := channelService.GetChannel(c.Request.Context(), id)
-		if err != nil {
-			c.Error(err)
-			if errors.Is(err, redis.ErrChannelNotFound) {
-				c.JSON(http.StatusNotFound, gin.H{"message": redis.ErrChannelNotFound.Error()})
+	{
+		r.POST("/api/channels", func(c *gin.Context) {
+			var req channelmodel.CreateZmuxChannelReq
+			if err := bind(c.Request, &req); err != nil {
+				c.Error(err)
+				c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 				return
 			}
-			c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
-			return
-		}
-
-		c.JSON(http.StatusOK, ch)
-	})
-
-	r.GET("/api/channels", func(c *gin.Context) {
-		chs, err := channelService.ListChannels(c.Request.Context())
-		if err != nil {
-			c.Error(err)
-			c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
-			return
-		}
-		c.Header("X-Total-Count", strconv.Itoa(len(chs))) // RA needs this
-		c.JSON(http.StatusOK, chs)
-	})
-
-	r.PUT("/api/channels/:id", func(c *gin.Context) {
-		idStr := c.Param("id")
-		id, err := strconv.ParseInt(idStr, 10, 64)
-		if err != nil {
-			c.Error(err)
-			c.JSON(http.StatusBadRequest, gin.H{"message": "invalid id"})
-			return
-		}
-
-		var req channelmodel.UpdateZmuxChannelReq
-		if err := bind(c.Request, &req); err != nil {
-			c.Error(err)
-			c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
-			return
-		}
-		if err := req.Validate(); err != nil {
-			c.Error(err) // <-- attach
-			c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
-			return
-		}
-
-		// Replace obj (i,e. update channel params)
-		ch := req.ToChannel(id)
-
-		if err := ch.Validate(); err != nil {
-			c.Error(err) // <-- attach
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"message": err.Error()})
-			return
-		}
-
-		if err := channelService.UpdateChannel(c.Request.Context(), ch); err != nil {
-			c.Error(err)
-			if errors.Is(err, redis.ErrChannelNotFound) {
-				c.JSON(http.StatusNotFound, gin.H{"message": redis.ErrChannelNotFound.Error()})
+			if err := req.Validate(); err != nil {
+				c.Error(err)
+				c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 				return
 			}
-			c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
-			return
-		}
+			req.ApplyDefaults()
 
-		c.JSON(http.StatusOK, ch)
-	})
-
-	r.PATCH("/api/channels/:id", func(c *gin.Context) { handlers.PatchChannel(c, channelService) })
-
-	r.DELETE("/api/channels/:id", func(c *gin.Context) {
-		idStr := c.Param("id")
-		id, err := strconv.ParseInt(idStr, 10, 64)
-		if err != nil {
-			c.Error(err)
-			c.JSON(http.StatusBadRequest, gin.H{"message": "invalid id"})
-			return
-		}
-
-		if err := channelService.DeleteChannel(c.Request.Context(), id); err != nil {
-			c.Error(err)
-			if errors.Is(err, redis.ErrChannelNotFound) {
-				c.JSON(http.StatusNotFound, gin.H{"message": redis.ErrChannelNotFound.Error()})
+			ch := req.ToChannel(0)
+			if err := ch.Validate(); err != nil {
+				c.Error(err)
+				c.JSON(http.StatusUnprocessableEntity, gin.H{"message": err.Error()})
 				return
 			}
-			c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
-			return
-		}
 
-		// RA-friendly response
-		c.JSON(http.StatusOK, gin.H{"id": id})
-	})
+			if err := channelService.CreateChannel(c.Request.Context(), ch); err != nil {
+				c.Error(err)
+				c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+				return
+			}
+
+			c.Header("Location", fmt.Sprintf("/api/channels/%d", ch.ID))
+			c.JSON(http.StatusCreated, ch)
+		})
+
+		r.GET("/api/channels/:id", func(c *gin.Context) {
+			idStr := c.Param("id")
+			id, err := strconv.ParseInt(idStr, 10, 64)
+			if err != nil {
+				c.Error(err)
+				c.JSON(http.StatusBadRequest, gin.H{"message": "invalid id"})
+				return
+			}
+
+			ch, err := channelService.GetChannel(c.Request.Context(), id)
+			if err != nil {
+				c.Error(err)
+				if errors.Is(err, redis.ErrChannelNotFound) {
+					c.JSON(http.StatusNotFound, gin.H{"message": redis.ErrChannelNotFound.Error()})
+					return
+				}
+				c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+				return
+			}
+
+			c.JSON(http.StatusOK, ch)
+		})
+
+		r.PUT("/api/channels/:id", func(c *gin.Context) {
+			idStr := c.Param("id")
+			id, err := strconv.ParseInt(idStr, 10, 64)
+			if err != nil {
+				c.Error(err)
+				c.JSON(http.StatusBadRequest, gin.H{"message": "invalid id"})
+				return
+			}
+
+			var req channelmodel.UpdateZmuxChannelReq
+			if err := bind(c.Request, &req); err != nil {
+				c.Error(err)
+				c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+				return
+			}
+			if err := req.Validate(); err != nil {
+				c.Error(err) // <-- attach
+				c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+				return
+			}
+
+			// Replace obj (i,e. update channel params)
+			ch := req.ToChannel(id)
+
+			if err := ch.Validate(); err != nil {
+				c.Error(err) // <-- attach
+				c.JSON(http.StatusUnprocessableEntity, gin.H{"message": err.Error()})
+				return
+			}
+
+			if err := channelService.UpdateChannel(c.Request.Context(), ch); err != nil {
+				c.Error(err)
+				if errors.Is(err, redis.ErrChannelNotFound) {
+					c.JSON(http.StatusNotFound, gin.H{"message": redis.ErrChannelNotFound.Error()})
+					return
+				}
+				c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+				return
+			}
+
+			c.JSON(http.StatusOK, ch)
+		})
+
+		r.PATCH("/api/channels/:id", func(c *gin.Context) { channelshndlr.PatchChannel(c, channelService) })
+
+		r.DELETE("/api/channels/:id", func(c *gin.Context) {
+			idStr := c.Param("id")
+			id, err := strconv.ParseInt(idStr, 10, 64)
+			if err != nil {
+				c.Error(err)
+				c.JSON(http.StatusBadRequest, gin.H{"message": "invalid id"})
+				return
+			}
+
+			if err := channelService.DeleteChannel(c.Request.Context(), id); err != nil {
+				c.Error(err)
+				if errors.Is(err, redis.ErrChannelNotFound) {
+					c.JSON(http.StatusNotFound, gin.H{"message": redis.ErrChannelNotFound.Error()})
+					return
+				}
+				c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+				return
+			}
+
+			// RA-friendly response
+			c.JSON(http.StatusOK, gin.H{"id": id})
+		})
+
+		r.GET("/api/channels", func(c *gin.Context) {
+			chs, err := channelService.ListChannels(c.Request.Context())
+			if err != nil {
+				c.Error(err)
+				c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+				return
+			}
+			c.Header("X-Total-Count", strconv.Itoa(len(chs))) // RA needs this
+			c.JSON(http.StatusOK, chs)
+		})
+	}
 
 	r.GET("/api/system/net/localaddrs", func(c *gin.Context) {
 		localAddrs, err := localaddrLister.GetLocalAddrs(c.Request.Context())
