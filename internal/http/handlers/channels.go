@@ -123,8 +123,7 @@ func (h *ChannelsHandler) CreateChannel(c *gin.Context) {
 func (h *ChannelsHandler) GetChannel(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		c.Error(err)
+	if err != nil || id <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid id"})
 		return
 	}
@@ -159,7 +158,6 @@ func (h *ChannelsHandler) ModifyChannel(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil || id <= 0 {
-		c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid id"})
 		return
 	}
@@ -224,8 +222,7 @@ func (h *ChannelsHandler) ModifyChannel(c *gin.Context) {
 func (h *ChannelsHandler) ReplaceChannel(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		c.Error(err)
+	if err != nil || id <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid id"})
 		return
 	}
@@ -288,8 +285,7 @@ func (h *ChannelsHandler) ReplaceChannel(c *gin.Context) {
 func (h *ChannelsHandler) DeleteChannel(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		c.Error(err)
+	if err != nil || id <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid id"})
 		return
 	}
