@@ -1,0 +1,12 @@
+// full_update_patch.http
+// username=zmuxUser password=Aa1234/!@#$
+PATCH http://localhost:8080/api/channels/1
+Content-Type: application/merge-patch+json
+
+{
+  "name": "Live1",
+  "input": {
+    "url": "rtsp://zmuxUser:Aa1234%2F%21%40%23%24@172.16.5.20/live.sdp",
+  },
+  "enabled": true
+}

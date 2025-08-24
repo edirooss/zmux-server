@@ -1,0 +1,12 @@
+// update_name_and _input_url.http
+// username=administrator, password=Bb/&%!
+// enabled=true from prev `full_update_patch.http`
+PATCH http://localhost:8080/api/channels/1
+Content-Type: application/merge-patch+json
+
+{
+  "name": "Live2",
+  "input": {
+    "url": "rtsp://administrator:Bb%2F%26%25%21@203.0.113.45:5544/streaming/video1",
+  }
+}
