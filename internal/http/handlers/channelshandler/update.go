@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/edirooss/zmux-server/pkg/models/channelmodel"
+	"github.com/edirooss/zmux-server/internal/dto/channelsdto"
 	"github.com/edirooss/zmux-server/redis"
 	"github.com/gin-gonic/gin"
 )
@@ -19,7 +19,7 @@ func (h *ChannelsHandler) UpdateChannel(c *gin.Context) {
 		return
 	}
 
-	var req channelmodel.UpdateZmuxChannelReq
+	var req channelsdto.UpdateZmuxChannelReq
 	if err := bind(c.Request, &req); err != nil {
 		c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})

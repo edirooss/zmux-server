@@ -1,6 +1,10 @@
 package channelmodel
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/edirooss/zmux-server/internal/domain/channel"
+)
 
 // RemuxStatus mirrors the JSON stored at remux:<id>:status
 // Example stored value (string):
@@ -24,7 +28,7 @@ type RemuxStatus struct {
 //   - status is present only if channel.Enabled == true AND status key exists.
 //   - ifmt/metrics are present only if status.liveness == "Live" and keys exist.
 type ChannelSummary struct {
-	ZmuxChannel
+	channel.ZmuxChannel
 	Status  *RemuxStatus    `json:"status,omitempty"`
 	Ifmt    json.RawMessage `json:"ifmt,omitempty"`
 	Metrics json.RawMessage `json:"metrics,omitempty"`

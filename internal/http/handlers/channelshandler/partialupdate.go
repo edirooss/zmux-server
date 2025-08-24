@@ -12,7 +12,7 @@ import (
 	"regexp"
 	"strconv"
 
-	"github.com/edirooss/zmux-server/pkg/models/channelmodel"
+	"github.com/edirooss/zmux-server/internal/domain/channel"
 	"github.com/edirooss/zmux-server/redis"
 	"github.com/gin-gonic/gin"
 
@@ -88,7 +88,7 @@ func (h *ChannelsHandler) PartialUpdateChannel(c *gin.Context) {
 	}
 
 	// 6) Unmarshal into domain model
-	var candidate channelmodel.ZmuxChannel
+	var candidate channel.ZmuxChannel
 	if err := json.Unmarshal(patchedJSON, &candidate); err != nil {
 		c.Error(err)
 		// This typically hits when a field was set to null but the domain type is non-nullable.

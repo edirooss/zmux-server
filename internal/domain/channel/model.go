@@ -1,5 +1,4 @@
-// models/channelmodel.go
-package channelmodel
+package channel
 
 import (
 	"errors"

@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/edirooss/zmux-server/pkg/models/channelmodel"
+	"github.com/edirooss/zmux-server/internal/dto/channelsdto"
 	"github.com/gin-gonic/gin"
 )
 
 func (h *ChannelsHandler) CreateChannel(c *gin.Context) {
-	var req channelmodel.CreateZmuxChannelReq
+	var req channelsdto.CreateZmuxChannelReq
 	if err := bind(c.Request, &req); err != nil {
 		c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})

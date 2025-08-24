@@ -1,6 +1,10 @@
-package channelmodel
+package channelsdto
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/edirooss/zmux-server/internal/domain/channel"
+)
 
 // UpdateZmuxChannelReq is the JSON DTO for replacing a Zmux channel via PUT /api/channels/{id}.
 // All fields are required (full-replacement, as per RFC 9110).
@@ -90,8 +94,8 @@ func (r *UpdateZmuxChannelReq) Validate() error {
 // Must be used on validated requests.
 // The * derefs assume Validate() ran and ensure all required fields exists.
 // If a caller forgets Validate() before ToChannel(), this may panic.
-func (req UpdateZmuxChannelReq) ToChannel(id int64) *ZmuxChannel {
-	var ch ZmuxChannel
+func (req UpdateZmuxChannelReq) ToChannel(id int64) *channel.ZmuxChannel {
+	var ch channel.ZmuxChannel
 	ch.ID = id
 	ch.Name = req.Name
 

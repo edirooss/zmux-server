@@ -1,4 +1,6 @@
-package channelmodel
+package channelsdto
+
+import "github.com/edirooss/zmux-server/internal/domain/channel"
 
 // CreateZmuxChannelReq is the JSON DTO for creating a Zmux channel via POST /api/channels.
 // Everything has sane defaults.
@@ -94,8 +96,8 @@ func (r *CreateZmuxChannelReq) ApplyDefaults() {
 // Must be used on validated and filled requests.
 // The * derefs assume ApplyDefaults() ran and filled all optional fields.
 // If a caller forgets ApplyDefaults() before ToChannel(), this may panic.
-func (req CreateZmuxChannelReq) ToChannel(id int64) *ZmuxChannel {
-	var ch ZmuxChannel
+func (req CreateZmuxChannelReq) ToChannel(id int64) *channel.ZmuxChannel {
+	var ch channel.ZmuxChannel
 	ch.ID = id
 	ch.Name = req.Name
 
