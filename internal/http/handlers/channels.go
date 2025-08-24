@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/edirooss/zmux-server/internal/dto/channelsdto"
+	"github.com/edirooss/zmux-server/internal/dto"
 	"github.com/edirooss/zmux-server/redis"
 	"github.com/edirooss/zmux-server/services"
 	"github.com/gin-gonic/gin"
@@ -18,8 +18,8 @@ import (
 // ChannelsHandler provides RESTful HTTP handlers for Channel resources.
 //
 // Supported operations:
-//   - POST   /channels       → Create a new channel
 //   - GET    /channels       → List all channels
+//   - POST   /channels       → Create a new channel
 //   - GET    /channels/{id}  → Retrieve a channel by ID
 //   - PUT    /channels/{id}  → Replace an existing channel (full update)
 //   - PATCH  /channels/{id}  → Modify an existing channel (partial update)
@@ -79,7 +79,7 @@ func (h *ChannelsHandler) GetChannelList(c *gin.Context) {
 //   - 422 Unprocessable Entity → Validation failed
 //   - 500 Internal Server Error
 func (h *ChannelsHandler) CreateChannel(c *gin.Context) {
-	var req channelsdto.CreateChannel
+	var req dto.CreateChannel
 	if err := bind(c.Request, &req); err != nil {
 		c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
@@ -174,7 +174,7 @@ func (h *ChannelsHandler) ModifyChannel(c *gin.Context) {
 		return
 	}
 
-	var req channelsdto.ModifyChannel
+	var req dto.ModifyChannel
 	if err := bind(c.Request, &req); err != nil {
 		c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
@@ -238,7 +238,7 @@ func (h *ChannelsHandler) ReplaceChannel(c *gin.Context) {
 		return
 	}
 
-	var req channelsdto.ReplaceChannel
+	var req dto.ReplaceChannel
 	if err := bind(c.Request, &req); err != nil {
 		c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})

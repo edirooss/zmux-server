@@ -1,4 +1,4 @@
-package channelsdto
+package dto
 
 import "encoding/json"
 

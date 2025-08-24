@@ -126,8 +126,8 @@ func main() {
 	}
 
 	{
-		r.POST("/api/channels", channelshndlr.CreateChannel)       // Create new (Collection)
 		r.GET("/api/channels", channelshndlr.GetChannelList)       // Get all (Collection)
+		r.POST("/api/channels", channelshndlr.CreateChannel)       // Create new (Collection)
 		r.GET("/api/channels/:id", channelshndlr.GetChannel)       // Get one
 		r.PUT("/api/channels/:id", channelshndlr.ReplaceChannel)   // Replace one (full update)
 		r.PATCH("/api/channels/:id", channelshndlr.ModifyChannel)  // Modify one (partial update)

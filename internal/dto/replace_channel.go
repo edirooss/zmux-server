@@ -1,5 +1,5 @@
 // update.go
-package channelsdto
+package dto
 
 import (
 	"errors"
