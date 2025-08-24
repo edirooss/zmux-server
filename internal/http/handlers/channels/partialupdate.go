@@ -20,7 +20,7 @@ import (
 	jsonpatch "github.com/evanphx/json-patch/v5"
 )
 
-func PatchChannel(c *gin.Context, channelService *services.ChannelService) {
+func PartialUpdateChannel(c *gin.Context, channelService *services.ChannelService) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil || id <= 0 {
