@@ -15,14 +15,14 @@ func (h *ChannelsHandler) CreateChannel(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
-	if err := req.Validate(); err != nil {
+
+	ch, err := req.ToChannel(0)
+	if err != nil {
 		c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
-	req.ApplyDefaults()
 
-	ch := req.ToChannel(0)
 	if err := ch.Validate(); err != nil {
 		c.Error(err)
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"message": err.Error()})
