@@ -6,18 +6,18 @@ import (
 	"github.com/edirooss/zmux-server/internal/domain/channel"
 )
 
-// PartialUpdateChannel is the DTO for updating a Zmux channel via
+// UpdateChannel is the DTO for updating a Zmux channel via
 // PATCH /api/channels/{id}. Partial-update semantics (RFC 7386):
 //   - All fields are optional.
-type PartialUpdateChannel struct {
-	Name       W[string]                     `json:"name"`        //   optional; string | null
-	Input      W[PartialUpdateChannelInput]  `json:"input"`       //   optional; object
-	Output     W[PartialUpdateChannelOutput] `json:"output"`      //   optional; object
-	Enabled    W[bool]                       `json:"enabled"`     //   optional; bool
-	RestartSec W[uint]                       `json:"restart_sec"` //   optional; uint
+type UpdateChannel struct {
+	Name       W[string]              `json:"name"`        //   optional; string | null
+	Input      W[UpdateChannelInput]  `json:"input"`       //   optional; object
+	Output     W[UpdateChannelOutput] `json:"output"`      //   optional; object
+	Enabled    W[bool]                `json:"enabled"`     //   optional; bool
+	RestartSec W[uint]                `json:"restart_sec"` //   optional; uint
 }
 
-type PartialUpdateChannelInput struct {
+type UpdateChannelInput struct {
 	URL             W[string] `json:"url"`             //              optional; string | null
 	AVIOFlags       W[string] `json:"avioflags"`       //              optional; string | null
 	Probesize       W[uint]   `json:"probesize"`       //              optional; uint
@@ -29,7 +29,7 @@ type PartialUpdateChannelInput struct {
 	RTSPTransport   W[string] `json:"rtsp_transport"`  //              optional; string | null
 }
 
-type PartialUpdateChannelOutput struct {
+type UpdateChannelOutput struct {
 	URL       W[string] `json:"url"`       //                          optional; string | null
 	Localaddr W[string] `json:"localaddr"` //                          optional; string | null
 	PktSize   W[uint]   `json:"pkt_size"`  //                          optional; uint
@@ -38,10 +38,10 @@ type PartialUpdateChannelOutput struct {
 	MapData   W[bool]   `json:"map_data"`  //                          optional; bool
 }
 
-// MergePatch applies PartialUpdateChannel to channel.ZmuxChannel (in-memory)
+// MergePatch applies UpdateChannel to channel.ZmuxChannel (in-memory)
 // Disallows explicit null assignment to non-nullable fields.
 // Unset fields remain unchanged.
-func (req *PartialUpdateChannel) MergePatch(prev *channel.ZmuxChannel) error {
+func (req *UpdateChannel) MergePatch(prev *channel.ZmuxChannel) error {
 	// name
 	// optional; string | null
 	if req.Name.Set {
@@ -95,10 +95,10 @@ func (req *PartialUpdateChannel) MergePatch(prev *channel.ZmuxChannel) error {
 	return nil
 }
 
-// MergePatch applies PartialUpdateChannelInput to channel.ZmuxChannelInput (in-memory)
+// MergePatch applies UpdateChannelInput to channel.ZmuxChannelInput (in-memory)
 // Disallows explicit null assignment to non-nullable fields.
 // Unset fields remain unchanged.
-func (req *PartialUpdateChannelInput) MergePatch(prev *channel.ZmuxChannelInput) error {
+func (req *UpdateChannelInput) MergePatch(prev *channel.ZmuxChannelInput) error {
 	// url
 	// optional; string | null
 	if req.URL.Set {
@@ -188,10 +188,10 @@ func (req *PartialUpdateChannelInput) MergePatch(prev *channel.ZmuxChannelInput)
 	return nil
 }
 
-// MergePatch applies PartialUpdateChannelOutput to channel.ZmuxChannelOutput (in-memory)
+// MergePatch applies UpdateChannelOutput to channel.ZmuxChannelOutput (in-memory)
 // Disallows explicit null assignment to non-nullable fields.
 // Unset fields remain unchanged.
-func (req *PartialUpdateChannelOutput) MergePatch(prev *channel.ZmuxChannelOutput) error {
+func (req *UpdateChannelOutput) MergePatch(prev *channel.ZmuxChannelOutput) error {
 	// url
 	// optional; string | null
 	if req.URL.Set {

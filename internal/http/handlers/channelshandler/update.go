@@ -10,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func (h *ChannelsHandler) PartialUpdateChannel(c *gin.Context) {
+func (h *ChannelsHandler) UpdateChannel(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil || id <= 0 {
@@ -31,7 +31,7 @@ func (h *ChannelsHandler) PartialUpdateChannel(c *gin.Context) {
 		return
 	}
 
-	var req channelsdto.PartialUpdateChannel
+	var req channelsdto.UpdateChannel
 	if err := bind(c.Request, &req); err != nil {
 		c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
@@ -40,13 +40,13 @@ func (h *ChannelsHandler) PartialUpdateChannel(c *gin.Context) {
 
 	// Patch obj
 	if err := req.MergePatch(ch); err != nil {
-		c.Error(err) // <-- attach
+		c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
 
 	if err := ch.Validate(); err != nil {
-		c.Error(err) // <-- attach
+		c.Error(err)
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"message": err.Error()})
 		return
 	}

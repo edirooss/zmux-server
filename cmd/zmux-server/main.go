@@ -129,7 +129,7 @@ func main() {
 		r.POST("/api/channels", channelshndlr.CreateChannel)
 		r.GET("/api/channels/:id", channelshndlr.GetChannel)
 		r.PUT("/api/channels/:id", channelshndlr.ReplaceChannel)
-		r.PATCH("/api/channels/:id", channelshndlr.PartialUpdateChannel)
+		r.PATCH("/api/channels/:id", channelshndlr.UpdateChannel)
 		r.DELETE("/api/channels/:id", channelshndlr.DeleteChannel)
 		r.GET("/api/channels", channelshndlr.GetChannelList)
 	}
