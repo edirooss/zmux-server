@@ -10,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func (h *ChannelsHandler) UpdateChannel(c *gin.Context) {
+func (h *ChannelsHandler) ReplaceChannel(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -30,23 +30,23 @@ func (h *ChannelsHandler) UpdateChannel(c *gin.Context) {
 		return
 	}
 
-	var req channelsdto.UpdateChannel
+	var req channelsdto.ReplaceChannel
 	if err := bind(c.Request, &req); err != nil {
 		c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
 
-	// Replace obj (i,e. update channel params)
+	// Replace obj
 	ch, err := req.ToChannel(id)
 	if err != nil {
-		c.Error(err) // <-- attach
+		c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
 
 	if err := ch.Validate(); err != nil {
-		c.Error(err) // <-- attach
+		c.Error(err)
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"message": err.Error()})
 		return
 	}
