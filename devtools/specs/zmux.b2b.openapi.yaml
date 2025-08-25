@@ -59,7 +59,7 @@ paths:
                 $ref: '#/components/schemas/ChannelList'
               examples:
                 authorizedChannels:
-                  summary: Multiple channels with enabled, disabled and cleared (null/disabled) states
+                  summary: Authorized channels
                   value:
                     - id: 1
                       name: Live1
@@ -117,6 +117,31 @@ paths:
           application/merge-patch+json:
             schema:
               $ref: '#/components/schemas/ChannelPatchRequest'
+            examples:
+              updateChannel:
+                summary: Update channel properties
+                description: Sets `name`, `input.url` and enables the channel.
+                value:
+                  name: "Live1"
+                  input:
+                    url: "rtsp://zmuxUser:Aa1234%2F%21%40%23%24@172.16.5.20/live.sdp"
+                  enabled: true
+              disableChannel:
+                summary: Pause/deactivate a channel
+                value:
+                  enabled: false
+              enableChannel:
+                summary: Resume/activate a channel
+                value:
+                  enabled: true
+              clearChannel:
+                summary: Clear/reset channel to null/disabled
+                description: Sets `name` and `input.url` to null and disables the channel.
+                value:
+                  name: null
+                  input:
+                    url: null
+                  enabled: false
       responses:
         '204':
           description: No Content — Channel updated successfully.
@@ -183,7 +208,7 @@ paths:
                 $ref: '#/components/schemas/ChannelStatusList'
               examples:
                 authorizedChannels:
-                  summary: Example status list
+                  summary: Authorized channels
                   value:
                     - id: 1
                       online: true
@@ -230,12 +255,34 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Quota'
+              examples:
+                limitedQuota:
+                  summary: Limited quota with available capacity
+                  value:
+                    limit: 3
+                    used: 1
+                    remaining: 2
+
+                limitedQuotaExhausted:
+                  summary: Limited quota fully used
+                  description: No more channels can be enabled until one is disabled.
+                  value:
+                    limit: 3
+                    used: 3
+                    remaining: 0
+
+                unlimitedQuota:
+                  summary: Unlimited quota
+                  description: The client can enable an unlimited number of channels.
+                  value:
+                    limit: null
+                    used: 12
+                    remaining: null  
         '401': { $ref: '#/components/responses/401Unauthorized' }
         '404': { $ref: '#/components/responses/404NotFound' }
         '429': { $ref: '#/components/responses/429TooManyRequests' }
         '500': { $ref: '#/components/responses/500InternalServerError' }
         '503': { $ref: '#/components/responses/503ServiceUnavailable' }
-
 
 components:
   securitySchemes:
