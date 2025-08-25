@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Zmux Channels – B2B Client API (DRAFT – INTERNAL USE ONLY)
-  version: 0.0.1
+  version: 0.0.2
   description: |
     B2B client API for reading Zmux channels configuration and performing partial updates.
 
