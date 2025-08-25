@@ -21,7 +21,7 @@ info:
 
 servers:
   - url: https://internal.zmux
-    description: Production server
+    description: Production
 
 security:
   - basicAuth: []
@@ -58,9 +58,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ChannelList'
               examples:
-                emptyList:
-                  summary: No authorized channels
-                  value: []
                 authorizedChannels:
                   summary: Multiple channels with enabled, disabled and cleared (null/disabled) states
                   value:
@@ -84,6 +81,9 @@ paths:
                       input:
                         url: null
                       enabled: false
+                emptyList:
+                  summary: No authorized channels
+                  value: []
         '401': { $ref: '#/components/responses/401Unauthorized' }
         '404': { $ref: '#/components/responses/404NotFound' }
         '429': { $ref: '#/components/responses/429TooManyRequests' }
@@ -100,10 +100,10 @@ paths:
 
         ### RFC 7396 behavior quick brief
         - Omitting a field → the field **remains unchanged**.
-        - Setting a field to `null` → the field is **cleared/removed**.
+        - Setting a nullable field to `null` → the field is **cleared/removed**.
         - Setting an **object** field to `{}`:
           - If the current value is an object → **no-op** (unchanged).
-          - If the current value is `null` → it becomes `{}` (created).
+          - If the field is nullable and the current value is `null` → it becomes `{}` (created).
         - Successful patches return `204 No Content` even if nothing changed.
         - Objects are merged recursively; nested fields follow the same rules.
         - Requires `Content-Type: application/merge-patch+json`.
@@ -135,7 +135,8 @@ paths:
         '409':
           description: |
             Conflict — The requested change would exceed the client's quota for concurrently enabled channels.
-             The entire patch was discarded. No partial updates occurred.
+            The entire patch was discarded. No partial updates occurred.
+            This status is **never** returned when quota is unlimited.
           headers:
             X-Request-Id:
               $ref: '#/components/headers/X-Request-Id'
@@ -181,9 +182,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ChannelStatusList'
               examples:
-                emptyList:
-                  summary: No authorized channels
-                  value: []
                 authorizedChannels:
                   summary: Example status list
                   value:
@@ -195,6 +193,9 @@ paths:
                       online: false
                     - id: 8
                       online: false
+                emptyList:
+                  summary: No authorized channels
+                  value: []
         '401': { $ref: '#/components/responses/401Unauthorized' }
         '404': { $ref: '#/components/responses/404NotFound' }
         '429': { $ref: '#/components/responses/429TooManyRequests' }
@@ -284,25 +285,22 @@ components:
     Quota-Limit:
       description: >
         Maximum number of channels that may be enabled concurrently for the authenticated client.
-        When quota is unlimited, this header MAY be set to the token "unbounded".
+        When quota is unlimited or not enforced, this header is **omitted**.
       schema:
-        oneOf:
-          - type: integer
-            format: int64
-            minimum: 0
-          - type: string
-            enum: ["unbounded"]
+        type: integer
+        format: int64
+        minimum: 0
+      required: false
+
     Quota-Remaining:
       description: >
         Remaining number of channels that may be enabled before hitting the quota.
-        When quota is unlimited, this header MAY be set to the token "unbounded".
+        When quota is unlimited or not enforced, this header is **omitted**.
       schema:
-        oneOf:
-          - type: integer
-            format: int64
-            minimum: 0
-          - type: string
-            enum: ["unbounded"]
+        type: integer
+        format: int64
+        minimum: 0
+      required: false
 
   parameters:
     ChannelId:
@@ -328,16 +326,16 @@ components:
   responses:
     400BadRequest:
       description: |
-        Bad Request — request parsing failed due to **syntax/structural issues in the JSON payload**, including:
+        Bad Request — request parsing failed due to **invalid path parameters** or **syntax/structural issues in the JSON payload**, including:
 
-        - Malformed JSON (e.g., bad tokens, truncated body)
-        - JSON schema **shape** violation:
+        - **Malformed JSON** (e.g., bad tokens, truncated body)
+        - **JSON schema shape violation**:
           - Incorrect data type (i.e., field-type mismatch)
           - Non-nullable property explicitly set to null (i.e., invalid field `null` assignment)
           - Disallowed additional properties (i.e., unknown/unexpected fields)
           - Omitted mandatory properties (i.e., missing required fields)
-        - Field access policy violation:
-          - Access restricted properties (i,e., unauthorized field access) — use `400` instead of `403` to avoid disclosing field existence.
+        - **Field-level access policy violation**:
+          - Access restricted properties (i,e., unauthorized field access) — `400` is used instead of `403` to avoid disclosing field existence.
 
       headers:
         X-Request-Id:
@@ -367,7 +365,7 @@ components:
           - Numeric value out of range
           - Unsupported enum value
           - Cross-field value dependency issues (e.g., `enabled: true` requires `name` and `input.url`)
-          - Field value blocked by allowlist/denylist logic (use `422` instead of `403` to avoid exposing policy details)
+          - Field-level value blocked by allowlist/denylist logic (`422` used instead of `403` to avoid exposing policy details)
       headers:
         X-Request-Id:
           $ref: '#/components/headers/X-Request-Id'
@@ -395,7 +393,13 @@ components:
   schemas:
     Channel:
       type: object
-      description: Represents a single channel, defined by its configuration.
+      description: |
+        Represents a single channel, defined by its configuration.
+
+        - Additional properties may exist and MAY vary by client authorization level.
+        - Not all documented properties may be readable by every client; permissions can vary.
+        - Clients MUST ignore unknown properties in responses.
+
       properties:
         id:
           type: integer
@@ -423,7 +427,7 @@ components:
 
                 Note: When `input.url` is non-null, `name` is also non-null.
               maxLength: 2048
-          additionalProperties: false
+          additionalProperties: true
           required: [url]
         enabled:
           type: boolean
@@ -434,7 +438,7 @@ components:
             When the channel is disabled, the server does not attempt to connect to the input media source.
 
             Note: When `enabled` is `true`, `input.url` and `name` are non-null.
-      additionalProperties: false
+      additionalProperties: true
       required: [id, name, input, enabled]
 
     ChannelList:
@@ -447,13 +451,16 @@ components:
       description: |
         Subset of channel fields to update.
 
-        ### Cross-field constraints (evaluated **after** applying the JSON Merge Patch)
-        
+          - Additional properties may exist and MAY vary by client authorization level.
+          - Not all documented properties may be writable by every client; permissions can vary.
+          - Unknown/unexpected or unauthorized properties in requests are rejected with `400 Bad Request`.
+
+        Cross-field constraints (evaluated **after** applying the JSON Merge Patch):
         - Input media source URL requires a channel display name: 
           if `input.url` is non-null and `name` is null → **422 Unprocessable Content**.
         - Channel activation requires both input media source URL and channel display name:
           if `enabled` is `true` and (`input.url` is null or `name` is null) → **422 Unprocessable Content**.
-        
+
       type: object
       properties:
         name:
@@ -480,7 +487,7 @@ components:
 
                 ### Authentication
 
-                Authentication, when required, MUST be provided via RFC 3986 URI `userinfo` (e.g., `username[:password]@`).
+                Authentication (if required by the media source/destination) MUST be provided via RFC 3986 URI `userinfo` (e.g., `username[:password]@`).
                 `userinfo` MUST be percent-encoded per RFC 3986 §3.2.1.
 
                 ### Protocol-Specific Notes
@@ -493,7 +500,7 @@ components:
                 ### Access Policy (Allow/Deny Lists)
 
                 The server MAY enforce internal allow/deny lists over schemes, hostnames, ports, or any other URI component.
-                These lists MAY vary by client, tenant, or deployment. Any URI referencing a disallowed resource → `400 Bad Request`.
+                These lists MAY vary by client, tenant, or deployment. Any URI referencing a disallowed resource → `422 Unprocessable Content`.
 
                 ### References
 
@@ -503,7 +510,6 @@ components:
                 ### Note: Input URL & Name Dependency
 
                 - `input.url` with `name` null (not already configured or included in this patch) → `422 Unprocessable Content`.
-          additionalProperties: false
         enabled:
           type: boolean
           description: |
@@ -515,11 +521,16 @@ components:
 
             - `enabled: true` with `input.url` null (not already configured or included in this patch) → `422 Unprocessable Content`.
             - `enabled: true` with `name` null (not already configured or included in this patch) → `422 Unprocessable Content`.
-      additionalProperties: false
 
     ChannelStatus:
       type: object
-      description: Media reading/processing status for a single channel.
+      description: |
+        Media reading/processing status for a single channel.
+
+          - Additional properties may exist and MAY vary by client authorization level.
+          - Not all documented properties may be readable by every client; permissions can vary.
+          - Clients MUST ignore unknown properties in responses.
+
       properties:
         id:
           type: integer
@@ -537,7 +548,7 @@ components:
 
             Note: If `Channel.enabled` is turned off, the server does not attempt to read media — so online will always report as false.
           readOnly: true
-      additionalProperties: false
+      additionalProperties: true          
       required: [id, online]
 
     ChannelStatusList:
