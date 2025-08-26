@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/edirooss/zmux-server/pkg/models/channelmodel"
+	"github.com/edirooss/zmux-server/internal/domain/channel"
 	"github.com/edirooss/zmux-server/redis"
 	"go.uber.org/zap"
 )
@@ -77,6 +77,18 @@ func (s *ChannelService) lock(id int64) func() {
 	return func() { m.Unlock() }
 }
 
+// ChannelExists returns true if the channel ID exists in Redis, false otherwise.
+// Failure modes:
+//   - Redis error → returned as wrapped error.
+//   - Missing ID → (false, nil).
+func (s *ChannelService) ChannelExists(ctx context.Context, id int64) (bool, error) {
+	exists, err := s.repo.Exists(ctx, id)
+	if err != nil {
+		return false, fmt.Errorf("exists: %w", err)
+	}
+	return exists, nil
+}
+
 // CreateChannel creates a new channel, optionally
 // commits its systemd unit and enables it, and only then persists the channel document to Redis.
 //
@@ -96,7 +108,7 @@ func (s *ChannelService) lock(id int64) func() {
 //
 // Postconditions on success
 //   - Unit committed; service enabled iff ch.Enabled=true; Redis reflects that.
-func (s *ChannelService) CreateChannel(ctx context.Context, ch *channelmodel.ZmuxChannel) error {
+func (s *ChannelService) CreateChannel(ctx context.Context, ch *channel.ZmuxChannel) error {
 	id, err := s.repo.GenerateID(ctx)
 	if err != nil {
 		return err
@@ -137,7 +149,7 @@ func (s *ChannelService) CreateChannel(ctx context.Context, ch *channelmodel.Zmu
 // GetChannel returns a channel by ID (read-only, no locks).
 // Failure modes
 //   - redis.ErrChannelNotFound wrapped → callers should map to 404.
-func (s *ChannelService) GetChannel(ctx context.Context, id int64) (*channelmodel.ZmuxChannel, error) {
+func (s *ChannelService) GetChannel(ctx context.Context, id int64) (*channel.ZmuxChannel, error) {
 	ch, err := s.repo.Get(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("get: %w", err)
@@ -148,7 +160,7 @@ func (s *ChannelService) GetChannel(ctx context.Context, id int64) (*channelmode
 // ListChannels returns all channels (read-only, no locks).
 // Failure modes
 //   - Any Redis error is returned as-is (wrapped) → callers map to 500.
-func (s *ChannelService) ListChannels(ctx context.Context) ([]*channelmodel.ZmuxChannel, error) {
+func (s *ChannelService) ListChannels(ctx context.Context) ([]*channel.ZmuxChannel, error) {
 	chs, err := s.repo.List(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list: %w", err)
@@ -178,7 +190,7 @@ func (s *ChannelService) ListChannels(ctx context.Context) ([]*channelmodel.Zmux
 //
 // Postconditions on success
 //   - Runtime reflects desired config & enablement; Redis matches it.
-func (s *ChannelService) UpdateChannel(ctx context.Context, ch *channelmodel.ZmuxChannel) error {
+func (s *ChannelService) UpdateChannel(ctx context.Context, ch *channel.ZmuxChannel) error {
 	unlock := s.lock(ch.ID)
 	defer unlock()
 
@@ -383,7 +395,7 @@ func (s *ChannelService) disableChannel(channelID int64) error {
 // same inputs; repeated calls are cheap compared to failed starts at runtime.
 //
 // Note: Channel has to be enabled (i,e. forces input.URL to be non-null)
-func (s *ChannelService) commitSystemdService(channel *channelmodel.ZmuxChannel) error {
+func (s *ChannelService) commitSystemdService(channel *channel.ZmuxChannel) error {
 	cfg := SystemdServiceConfig{
 		ServiceName: fmt.Sprintf("zmux-channel-%d", channel.ID),
 		ExecStart:   BuildRemuxExecStart(channel),
