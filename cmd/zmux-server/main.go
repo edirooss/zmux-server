@@ -61,6 +61,14 @@ func main() {
 		if err != nil {
 			log.Fatal("redis session store init failed", zap.Error(err))
 		}
+		store.Options(sessions.Options{
+			Path:     "/api",   // scope cookie strictly to /api
+			MaxAge:   4 * 3600, // session cookie lifetime (4h)
+			Secure:   !isDev,   // must be true behind HTTPS in prod
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+		})
+
 		r.Use(sessions.Sessions("sid" /* Session cookie name */, store))
 
 		r.Use(accessLog(log)) // Observability (logger, tracing)

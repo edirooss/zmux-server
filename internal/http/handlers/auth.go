@@ -40,13 +40,6 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	sess := sessions.Default(c)
 	sess.Set("uid", req.Username)
 	sess.Set("last_touch", time.Now().Unix())
-	sess.Options(sessions.Options{
-		Path:     "/api",   // scope cookie strictly to /api
-		MaxAge:   4 * 3600, // session cookie lifetime (4h)
-		Secure:   !h.isDev, // must be true behind HTTPS in prod
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-	})
 	if err := sess.Save(); err != nil {
 		c.Error(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
