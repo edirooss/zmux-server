@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/edirooss/zmux-server/internal/dto"
 	"github.com/edirooss/zmux-server/redis"
@@ -28,8 +29,9 @@ import (
 // Notes:
 //   - Standard REST semantics (RFC 9110, RFC 5789).
 type ChannelsHandler struct {
-	log *zap.Logger
-	svc *services.ChannelService
+	log        *zap.Logger
+	svc        *services.ChannelService
+	summarySvc *services.SummaryService
 }
 
 // NewChannelsHandler constructs a ChannelsHandler instance.
@@ -40,9 +42,19 @@ func NewChannelsHandler(log *zap.Logger) (*ChannelsHandler, error) {
 		return nil, fmt.Errorf("new channel service: %w", err)
 	}
 
+	// Service for generating channel summaries
+	summarySvc := services.NewSummaryService(
+		log,
+		services.SummaryOptions{
+			TTL:            1000 * time.Millisecond, // tune as needed
+			RefreshTimeout: 500 * time.Millisecond,
+		},
+	)
+
 	return &ChannelsHandler{
-		log: log.Named("channels"),
-		svc: channelService,
+		log:        log.Named("channels"),
+		svc:        channelService,
+		summarySvc: summarySvc,
 	}, nil
 }
 
@@ -322,4 +334,35 @@ func decodeJSON(r io.Reader, obj any) error {
 		return err
 	}
 	return nil
+}
+
+// ------ Summary -----
+func (h *ChannelsHandler) Summary(c *gin.Context) {
+	// Optional query to bypass cache for admin/diagnostics: ?force=1
+	force := c.Query("force") == "1"
+
+	var (
+		res services.SummaryResult
+		err error
+	)
+	if force {
+		// Force a refresh by temporarily setting TTL=0 via a context trick:
+		// Simply call summarySvc.Get with expired cache by invalidating before.
+		// Safer: expose a public Invalidate(). We'll do that:
+		h.summarySvc.Invalidate()
+	}
+
+	res, err = h.summarySvc.Get(c.Request.Context())
+	if err != nil {
+		c.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		return
+	}
+
+	// Friendly cache headers for debugging/observability
+	c.Header("X-Cache", map[bool]string{true: "HIT", false: "MISS"}[res.CacheHit])
+	c.Header("X-Summary-Generated-At", strconv.FormatInt(res.GeneratedAt.UnixMilli(), 10))
+	c.Header("X-Total-Count", strconv.Itoa(len(res.Data)))
+
+	c.JSON(http.StatusOK, res.Data)
 }
