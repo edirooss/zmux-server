@@ -66,7 +66,7 @@ func trySession(sess sessions.Session) *principal {
 	now := time.Now().Unix()
 	last, _ := sess.Get("last_touch").(int64)
 	if last == 0 || now-last > 15*60 /* session touch interval seconds (15 minutes) */ {
-		// TODO(reliability): check error from Save() and log warn/metrics; Redis flaps shouldn't fail silently.
+		// TODO(reliability): check error from Save() and log warn; Redis flaps shouldn't fail silently.
 		sess.Set("last_touch", now)
 		_ = sess.Save()
 	}
@@ -80,8 +80,7 @@ func trySession(sess sessions.Session) *principal {
 // AuthAPIKey authenticates the request using an API key.
 //   - If an API key is provided in the X-API-Key header,
 //     it sets a principal on the gin.Context and continues request processing.
-//   - If no valid key is found, it aborts the request
-//     with 404 (obscurity pattern — don’t leak that endpoint exists yet auth failed).
+//   - If no valid key is found, it aborts the request with 401 unauthorized.
 func AuthAPIKey() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if p := tryAPIKey(c.GetHeader("X-API-Key")); p != nil {
@@ -89,15 +88,14 @@ func AuthAPIKey() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		c.AbortWithStatus(http.StatusNotFound)
+		c.AbortWithStatus(http.StatusUnauthorized)
 	}
 }
 
 // AuthSession authenticates the request using a session cookie.
 //   - If a valid session exists, it sets a principal on the gin.Context
 //     and continues request processing.
-//   - If no valid session is found,  it aborts the request
-//     with 404 (obscurity pattern — don’t leak that endpoint exists yet auth failed).
+//   - If no valid session is found, it aborts the request with 401 unauthorized.
 func AuthSession() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if p := trySession(sessions.Default(c)); p != nil {
@@ -106,11 +104,11 @@ func AuthSession() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		c.AbortWithStatus(http.StatusNotFound)
+		c.AbortWithStatus(http.StatusUnauthorized)
 	}
 }
 
-// --- Prefer API key, fallback to session, else 404 for obscurity ---
+// --- Prefer API key, fallback to session, else 401 ---
 func AuthEither() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if p := tryAPIKey(c.GetHeader("X-API-Key")); p != nil {
@@ -126,7 +124,7 @@ func AuthEither() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		c.AbortWithStatus(http.StatusNotFound)
+		c.AbortWithStatus(http.StatusUnauthorized)
 	}
 }
 
@@ -157,7 +155,7 @@ func CSRFIfSession() gin.HandlerFunc {
 		if want == "" || got == "" ||
 			subtle.ConstantTimeCompare([]byte(want), []byte(got)) != 1 {
 			c.AbortWithStatusJSON(http.StatusBadRequest,
-				gin.H{"message": "invalid_csrf"})
+				gin.H{"message": "invalid csrf token"})
 			return
 		}
 
@@ -263,7 +261,7 @@ func main() {
 
 	// Redis session store
 	store, err := redis.NewStoreWithDB(10, "tcp", "127.0.0.1:6379", "", "", "0",
-		[]byte("nZCowo9+aofuYO/54sK2mca+aj8M9XA2zVLrP1kh6uk=") /* TODO(security): rotate SESSION_KEY */)
+		[]byte("nZCowo9+aofuYO/54sK2mca+aj8M9XA2zVLrP1kh6uk=") /* TODO(security): rotate key */)
 	if err != nil {
 		log.Fatal("redis session store init failed", zap.Error(err))
 	}
@@ -455,7 +453,7 @@ func main() {
 		sharedAuthed := r.Group("", AuthEither(), CSRFIfSession())
 
 		{
-			// TODO(authz): add per-key/per-user scopes for modify actions; read/list should be separable.
+			// TODO(authz): add per-key scopes for allowed channels and field-level access
 			sharedAuthed.GET("/api/channels", channelshndlr.GetChannelList)      // Get all (Collection)
 			sharedAuthed.GET("/api/channels/:id", channelshndlr.GetChannel)      // Get one
 			sharedAuthed.PATCH("/api/channels/:id", channelshndlr.ModifyChannel) // Modify one (partial update)
