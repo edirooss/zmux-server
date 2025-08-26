@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/edirooss/zmux-server/internal/env"
 	"github.com/edirooss/zmux-server/internal/http/handlers"
 	"github.com/edirooss/zmux-server/pkg/utils/avurl"
 	"github.com/edirooss/zmux-server/services"
@@ -330,8 +331,8 @@ func main() {
 				}
 
 				// TODO(auth): replace with real user lookup + password verify (bcrypt/argon2id) against a store.
-				// Accept any non-empty credentials for now to unblock early development.
-				if req.Username == "" || req.Password == "" {
+				// Accept only env admin user credentials for now to unblock early development.
+				if !(req.Username == env.Admin.Username && req.Password == env.Admin.Password) {
 					c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid credentials"})
 					return
 				}
@@ -368,6 +369,15 @@ func main() {
 				_ = sess.Save()
 				c.Status(http.StatusNoContent)
 			})
+
+			r.GET("/api/me", func(c *gin.Context) {
+				p := getPrincipal(c)
+				if p == nil {
+					c.AbortWithStatus(http.StatusUnauthorized)
+					return
+				}
+				c.JSON(http.StatusOK, gin.H{"uid": p.UID})
+			})
 		}
 	}
 
@@ -390,15 +400,6 @@ func main() {
 			c.Header("Pragma", "no-cache")
 			c.Header("Expires", "0")
 			c.JSON(http.StatusOK, gin.H{"csrf": token})
-		})
-
-		sessAuthed.GET("/api/me", func(c *gin.Context) {
-			p := getPrincipal(c)
-			if p == nil || p.Kind != "session" || p.UID == "" {
-				c.AbortWithStatus(http.StatusInternalServerError) // Invariant broken: AuthSession should have guaranteed this.
-				return
-			}
-			c.JSON(http.StatusOK, gin.H{"uid": p.UID})
 		})
 
 		sessAuthed.GET("/api/system/net/localaddrs", func(c *gin.Context) {
