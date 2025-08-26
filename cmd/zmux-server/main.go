@@ -369,15 +369,6 @@ func main() {
 				_ = sess.Save()
 				c.Status(http.StatusNoContent)
 			})
-
-			r.GET("/api/me", func(c *gin.Context) {
-				p := getPrincipal(c)
-				if p == nil {
-					c.AbortWithStatus(http.StatusUnauthorized)
-					return
-				}
-				c.JSON(http.StatusOK, gin.H{"uid": p.UID})
-			})
 		}
 	}
 
@@ -385,6 +376,15 @@ func main() {
 	{
 		// --- Only for cookie session (web console) ---
 		sessAuthed := r.Group("", AuthSession(), CSRFIfSession())
+
+		sessAuthed.GET("/api/me", func(c *gin.Context) {
+			p := getPrincipal(c)
+			if p == nil || p.Kind != "session" || p.UID == "" {
+				c.AbortWithStatus(http.StatusInternalServerError) // Invariant broken: AuthSession should have guaranteed this.
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"uid": p.UID})
+		})
 
 		sessAuthed.GET("/api/csrf", func(c *gin.Context) {
 			sess := sessions.Default(c)
