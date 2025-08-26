@@ -33,13 +33,6 @@ func main() {
 	gin.DefaultWriter = zap.NewStdLog(log.Named("gin")).Writer() // Configure Gin's logger to use Zap
 	r := gin.New()
 
-	// Create Redis session store
-	store, err := redis.NewStoreWithDB(10, "tcp", "127.0.0.1:6379", "", "", "0",
-		[]byte("nZCowo9+aofuYO/54sK2mca+aj8M9XA2zVLrP1kh6uk=") /* TODO(security): rotate key */)
-	if err != nil {
-		log.Fatal("redis session store init failed", zap.Error(err))
-	}
-
 	// Apply middlewares
 	{
 		r.Use(gin.Recovery()) // Recovery first (outermost)
@@ -62,6 +55,12 @@ func main() {
 			}))
 		}
 
+		// Create Redis session store
+		store, err := redis.NewStoreWithDB(10, "tcp", "127.0.0.1:6379", "", "", "0",
+			[]byte("nZCowo9+aofuYO/54sK2mca+aj8M9XA2zVLrP1kh6uk=") /* TODO(security): rotate key */)
+		if err != nil {
+			log.Fatal("redis session store init failed", zap.Error(err))
+		}
 		r.Use(sessions.Sessions("sid" /* Session cookie name */, store))
 
 		r.Use(accessLog(log)) // Observability (logger, tracing)
@@ -74,7 +73,7 @@ func main() {
 			r.GET("/api/ping", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"message": "pong"}) })
 
 			{
-				authhndler := handlers.NewAuthHandler(log, store, isDev)
+				authhndler := handlers.NewAuthHandler(log, isDev)
 				r.POST("/api/login", authhndler.Login)
 				r.POST("/api/logout", authhndler.Logout)
 				r.GET("/api/me", authhndler.Me)

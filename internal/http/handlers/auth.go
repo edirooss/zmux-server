@@ -6,19 +6,17 @@ import (
 
 	"github.com/edirooss/zmux-server/internal/env"
 	"github.com/gin-contrib/sessions"
-	"github.com/gin-contrib/sessions/redis"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
 
 type AuthHandler struct {
 	log   *zap.Logger
-	store redis.Store
 	isDev bool
 }
 
-func NewAuthHandler(log *zap.Logger, store redis.Store, isDev bool) *AuthHandler {
-	return &AuthHandler{log.Named("auth"), store, isDev}
+func NewAuthHandler(log *zap.Logger, isDev bool) *AuthHandler {
+	return &AuthHandler{log.Named("auth"), isDev}
 }
 
 // Login authenticates a user and creates a new session.
@@ -42,7 +40,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	sess := sessions.Default(c)
 	sess.Set("uid", req.Username)
 	sess.Set("last_touch", time.Now().Unix())
-	h.store.Options(sessions.Options{
+	sess.Options(sessions.Options{
 		Path:     "/api",   // scope cookie strictly to /api
 		MaxAge:   4 * 3600, // session cookie lifetime (4h)
 		Secure:   !h.isDev, // must be true behind HTTPS in prod
