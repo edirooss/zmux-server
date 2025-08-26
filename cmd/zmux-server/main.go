@@ -30,7 +30,7 @@ import (
 // ============================================================================
 
 type principal struct {
-	Kind string // "session" or "apikey"
+	Kind string // "session"
 	UID  string
 }
 
@@ -45,16 +45,6 @@ func getPrincipal(c *gin.Context) *principal {
 }
 
 // --- Internal auth helpers (no side-effects) ---
-
-func tryAPIKey(key string) *principal {
-	if key == "" {
-		return nil
-	}
-	if uid, ok := validateAPIKey(key); ok {
-		return &principal{Kind: "apikey", UID: uid}
-	}
-	return nil
-}
 
 func trySession(sess sessions.Session) *principal {
 	uid, _ := sess.Get("uid").(string)
@@ -77,47 +67,12 @@ func trySession(sess sessions.Session) *principal {
 // --- Authentication handlers (invasive) ---
 // Blocks unauthenticated requests outright
 
-// AuthAPIKey authenticates the request using an API key.
-//   - If an API key is provided in the X-API-Key header,
-//     it sets a principal on the gin.Context and continues request processing.
-//   - If no valid key is found, it aborts the request with 401 unauthorized.
-func AuthAPIKey() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if p := tryAPIKey(c.GetHeader("X-API-Key")); p != nil {
-			setPrincipal(c, p)
-			c.Next()
-			return
-		}
-		c.AbortWithStatus(http.StatusUnauthorized)
-	}
-}
-
 // AuthSession authenticates the request using a session cookie.
 //   - If a valid session exists, it sets a principal on the gin.Context
 //     and continues request processing.
 //   - If no valid session is found, it aborts the request with 401 unauthorized.
 func AuthSession() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if p := trySession(sessions.Default(c)); p != nil {
-			setPrincipal(c, p)
-
-			c.Next()
-			return
-		}
-		c.AbortWithStatus(http.StatusUnauthorized)
-	}
-}
-
-// --- Prefer API key, fallback to session, else 401 ---
-func AuthEither() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if p := tryAPIKey(c.GetHeader("X-API-Key")); p != nil {
-			setPrincipal(c, p)
-
-			c.Next()
-			return
-		}
-
 		if p := trySession(sessions.Default(c)); p != nil {
 			setPrincipal(c, p)
 
@@ -171,16 +126,6 @@ func isMutating(m string) bool {
 	default:
 		return false
 	}
-}
-
-func validateAPIKey(key string) (uid string, ok bool) {
-	// TODO(auth): replace with real API key validation against a persistent store and return a stable key ID (not the raw key).
-	// Accept any non-empty key for now to unblock partners during early development.
-	if key == "" {
-		return "", false
-	}
-	// Avoid logging the raw key via UID; use a generic placeholder for now.
-	return "api", true
 }
 
 func randomTokenHex(nBytes int) string {
@@ -372,10 +317,10 @@ func main() {
 
 	// --- Protected endpoints (auth required) ---
 	{
-		// --- Only for cookie session (web console) ---
-		sessAuthed := r.Group("", AuthSession(), CSRFIfSession())
+		// --- Cookie session auth (web console) ---
+		authed := r.Group("", AuthSession(), CSRFIfSession())
 
-		sessAuthed.GET("/api/me", func(c *gin.Context) {
+		authed.GET("/api/me", func(c *gin.Context) {
 			p := getPrincipal(c)
 			if p == nil || p.Kind != "session" || p.UID == "" {
 				c.AbortWithStatus(http.StatusInternalServerError) // Invariant broken: AuthSession should have guaranteed this.
@@ -384,7 +329,7 @@ func main() {
 			c.JSON(http.StatusOK, gin.H{"uid": p.UID})
 		})
 
-		sessAuthed.GET("/api/csrf", func(c *gin.Context) {
+		authed.GET("/api/csrf", func(c *gin.Context) {
 			sess := sessions.Default(c)
 			token, _ := sess.Get("csrf").(string)
 			if token == "" {
@@ -400,7 +345,7 @@ func main() {
 			c.JSON(http.StatusOK, gin.H{"csrf": token})
 		})
 
-		sessAuthed.GET("/api/system/net/localaddrs", func(c *gin.Context) {
+		authed.GET("/api/system/net/localaddrs", func(c *gin.Context) {
 			localAddrs, err := localaddrLister.GetLocalAddrs(c.Request.Context())
 			if err != nil {
 				c.Error(err) // <-- attach
@@ -412,7 +357,7 @@ func main() {
 			c.JSON(http.StatusOK, localAddrs)
 		})
 
-		sessAuthed.GET("/api/channels/summary", func(c *gin.Context) {
+		authed.GET("/api/channels/summary", func(c *gin.Context) {
 			// Optional query to bypass cache for admin/diagnostics: ?force=1
 			force := c.Query("force") == "1"
 
@@ -443,20 +388,12 @@ func main() {
 		})
 
 		{
-			sessAuthed.POST("/api/channels", channelshndlr.CreateChannel)       // Create new (Collection)
-			sessAuthed.PUT("/api/channels/:id", channelshndlr.ReplaceChannel)   // Replace one (full update)
-			sessAuthed.DELETE("/api/channels/:id", channelshndlr.DeleteChannel) // Delete one
-		}
-
-		// --- Shared API ---
-		// Both session cookie (web console) and API key (partners) hit the same routes.
-		sharedAuthed := r.Group("", AuthEither(), CSRFIfSession())
-
-		{
-			// TODO(authz): add per-key scopes for allowed channels and field-level access
-			sharedAuthed.GET("/api/channels", channelshndlr.GetChannelList)      // Get all (Collection)
-			sharedAuthed.GET("/api/channels/:id", channelshndlr.GetChannel)      // Get one
-			sharedAuthed.PATCH("/api/channels/:id", channelshndlr.ModifyChannel) // Modify one (partial update)
+			authed.GET("/api/channels", channelshndlr.GetChannelList)       // Get all (Collection)
+			authed.POST("/api/channels", channelshndlr.CreateChannel)       // Create new (Collection)
+			authed.GET("/api/channels/:id", channelshndlr.GetChannel)       // Get one
+			authed.PUT("/api/channels/:id", channelshndlr.ReplaceChannel)   // Replace one (full update)
+			authed.PATCH("/api/channels/:id", channelshndlr.ModifyChannel)  // Modify one (partial update)
+			authed.DELETE("/api/channels/:id", channelshndlr.DeleteChannel) // Delete one
 		}
 	}
 
