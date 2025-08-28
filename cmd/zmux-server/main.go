@@ -90,9 +90,11 @@ func main() {
 
 		// --- Protected endpoints (auth required) ---
 		{
-			authed := r.Group("", middleware.RequireSessionAuth, middleware.ValidateSessionCSRF)
+			sessionAuthed := r.Group("", middleware.RequireSessionAuth, middleware.ValidateSessionCSRF) // Session authentication
 
-			authed.GET("/api/csrf", handlers.NewCSRFHandler(log).IssueSessionCSRF)
+			sessionAuthed.GET("/api/csrf", handlers.NewCSRFHandler(log).IssueSessionCSRF)
+
+			sessionOrAPIKeyAuthed := r.Group("", middleware.RequireAuth, middleware.ValidateSessionCSRF /* skips on API key auth */) // Both session auth + API key
 
 			{
 				// HTTP Handler for channel CRUD + summary
@@ -102,18 +104,18 @@ func main() {
 				}
 
 				{
-					authed.GET("/api/channels", channelshndlr.GetChannelList)       // Get all (Collection)
-					authed.POST("/api/channels", channelshndlr.CreateChannel)       // Create new (Collection)
-					authed.GET("/api/channels/:id", channelshndlr.GetChannel)       // Get one
-					authed.PUT("/api/channels/:id", channelshndlr.ReplaceChannel)   // Replace one (full update)
-					authed.PATCH("/api/channels/:id", channelshndlr.ModifyChannel)  // Modify one (partial update)
-					authed.DELETE("/api/channels/:id", channelshndlr.DeleteChannel) // Delete one
+					sessionOrAPIKeyAuthed.GET("/api/channels", channelshndlr.GetChannelList)      // Get all (Collection)
+					sessionAuthed.POST("/api/channels", channelshndlr.CreateChannel)              // Create new (Collection)
+					sessionOrAPIKeyAuthed.GET("/api/channels/:id", channelshndlr.GetChannel)      // Get one
+					sessionAuthed.PUT("/api/channels/:id", channelshndlr.ReplaceChannel)          // Replace one (full update)
+					sessionOrAPIKeyAuthed.PATCH("/api/channels/:id", channelshndlr.ModifyChannel) // Modify one (partial update)
+					sessionAuthed.DELETE("/api/channels/:id", channelshndlr.DeleteChannel)        // Delete one
 				}
 
-				authed.GET("/api/channels/summary", channelshndlr.Summary) // Generate summary for admin dashboard (Collection)
+				sessionAuthed.GET("/api/channels/summary", channelshndlr.Summary) // Generate summary for admin dashboard (Collection)
 			}
 
-			authed.GET("/api/system/net/localaddrs", handlers.NewLocalAddrHandler(log).GetLocalAddrList)
+			sessionAuthed.GET("/api/system/net/localaddrs", handlers.NewLocalAddrHandler(log).GetLocalAddrList)
 		}
 	}
 
