@@ -90,13 +90,11 @@ func main() {
 
 		// --- Protected endpoints (auth required) ---
 		{
-			authed := r.Group("", middleware.Authentication, middleware.ValidateSessionCSRF) // Authentication required (basic, session or API key)
-
+			authed := r.Group("", middleware.Authentication, middleware.ValidateSessionCSRF) // Any authenticated principal required (basic, session or API key)
 			authed.GET("/api/me", handlers.Me)
 
-			authzOnlyUser := middleware.AuthorizedAuth(auth.Basic, auth.Session)
-
-			authed.GET("/api/csrf", authzOnlyUser, handlers.IssueSessionCSRF)
+			authzed := authed.Group("", middleware.AuthorizedAuth(auth.Basic, auth.Session)) // Only basic or session principals are allowed (excludes API key access)
+			authzed.GET("/api/csrf", handlers.IssueSessionCSRF)
 
 			{
 				// HTTP Handler for channel CRUD + summary
@@ -106,18 +104,18 @@ func main() {
 				}
 
 				{
-					authed.GET("/api/channels", channelshndlr.GetChannelList)                      // Get all (Collection)
-					authed.POST("/api/channels", authzOnlyUser, channelshndlr.CreateChannel)       // Create new (Collection)
-					authed.GET("/api/channels/:id", channelshndlr.GetChannel)                      // Get one
-					authed.PUT("/api/channels/:id", authzOnlyUser, channelshndlr.ReplaceChannel)   // Replace one (full update)
-					authed.PATCH("/api/channels/:id", channelshndlr.ModifyChannel)                 // Modify one (partial update)
-					authed.DELETE("/api/channels/:id", authzOnlyUser, channelshndlr.DeleteChannel) // Delete one
+					authed.GET("/api/channels", channelshndlr.GetChannelList)        // Get all (Collection)
+					authzed.POST("/api/channels", channelshndlr.CreateChannel)       // Create new (Collection)
+					authed.GET("/api/channels/:id", channelshndlr.GetChannel)        // Get one
+					authzed.PUT("/api/channels/:id", channelshndlr.ReplaceChannel)   // Replace one (full update)
+					authed.PATCH("/api/channels/:id", channelshndlr.ModifyChannel)   // Modify one (partial update)
+					authzed.DELETE("/api/channels/:id", channelshndlr.DeleteChannel) // Delete one
 				}
 
-				authed.GET("/api/channels/summary", authzOnlyUser, channelshndlr.Summary) // Generate summary for admin dashboard (Collection)
+				authzed.GET("/api/channels/summary", channelshndlr.Summary) // Generate summary for admin dashboard (Collection)
 			}
 
-			authed.GET("/api/system/net/localaddrs", authzOnlyUser, handlers.NewLocalAddrHandler(log).GetLocalAddrList)
+			authzed.GET("/api/system/net/localaddrs", handlers.NewLocalAddrHandler(log).GetLocalAddrList)
 		}
 	}
 
