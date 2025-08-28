@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"text/template"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 // SystemdService handles systemd operations
 type SystemdService struct {
 	unitTemplate *template.Template
+	mu           sync.Mutex // mutex
 }
 
 // NewSystemdService creates a new systemd service handler
@@ -35,69 +37,85 @@ type SystemdServiceConfig struct {
 	RestartSec  string
 }
 
+// withCritical serializes access to all public APIs on this instance.
+func (s *SystemdService) withCritical(fn func() error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return fn()
+}
+
 // CommitService saves a systemd service
 func (s *SystemdService) CommitService(cfg SystemdServiceConfig) error {
-	serviceFilePath := filepath.Join("/etc/systemd/system", cfg.ServiceName+".service")
+	return s.withCritical(func() error {
+		serviceFilePath := filepath.Join("/etc/systemd/system", cfg.ServiceName+".service")
 
-	// Escape % characters for systemd
-	cfg.ExecStart = strings.ReplaceAll(cfg.ExecStart, "%", "%%")
+		// Escape % characters for systemd
+		cfg.ExecStart = strings.ReplaceAll(cfg.ExecStart, "%", "%%")
 
-	// Create service file
-	file, err := os.Create(serviceFilePath)
-	if err != nil {
-		return fmt.Errorf("create service file: %w", err)
-	}
+		// Create service file
+		file, err := os.Create(serviceFilePath)
+		if err != nil {
+			return fmt.Errorf("create service file: %w", err)
+		}
 
-	// Write from template
-	if err := s.unitTemplate.Execute(file, cfg); err != nil {
-		file.Close()
-		_ = os.Remove(serviceFilePath) // best-effort cleanup
-		return fmt.Errorf("execute template: %w", err)
-	}
+		// Write from template
+		if err := s.unitTemplate.Execute(file, cfg); err != nil {
+			file.Close()
+			_ = os.Remove(serviceFilePath) // best-effort cleanup
+			return fmt.Errorf("execute template: %w", err)
+		}
 
-	// Ensure contents are flushed and file is closed before reload
-	_ = file.Sync()
-	if err := file.Close(); err != nil {
-		_ = os.Remove(serviceFilePath)
-		return fmt.Errorf("close service file: %w", err)
-	}
+		// Ensure contents are flushed and file is closed before reload
+		_ = file.Sync()
+		if err := file.Close(); err != nil {
+			_ = os.Remove(serviceFilePath)
+			return fmt.Errorf("close service file: %w", err)
+		}
 
-	// Reload systemd daemon
-	if err := s.execSystemctl(context.TODO(), "daemon-reload"); err != nil {
-		_ = os.Remove(serviceFilePath) // best-effort cleanup on failure
-		return fmt.Errorf("daemon reload: %w", err)
-	}
+		// Reload systemd daemon
+		if err := s.execSystemctl(context.TODO(), "daemon-reload"); err != nil {
+			_ = os.Remove(serviceFilePath) // best-effort cleanup on failure
+			return fmt.Errorf("daemon reload: %w", err)
+		}
 
-	return nil
+		return nil
+	})
 }
 
 // RestartService restarts a systemd service
 func (s *SystemdService) RestartService(serviceName string) error {
-	if err := s.execSystemctl(context.TODO(), "restart", serviceName+".service"); err != nil {
-		return fmt.Errorf("restart: %w", err)
-	}
-	return nil
+	return s.withCritical(func() error {
+		if err := s.execSystemctl(context.TODO(), "restart", serviceName+".service"); err != nil {
+			return fmt.Errorf("restart: %w", err)
+		}
+		return nil
+	})
 }
 
 // EnableService starts and enables a systemd service
 func (s *SystemdService) EnableService(serviceName string) error {
-	// pass args as separate elements
-	if err := s.execSystemctl(context.TODO(), "enable", "--now", serviceName+".service"); err != nil {
-		return fmt.Errorf("enable now: %w", err)
-	}
-	return nil
+	return s.withCritical(func() error {
+		// pass args as separate elements
+		if err := s.execSystemctl(context.TODO(), "enable", "--now", serviceName+".service"); err != nil {
+			return fmt.Errorf("enable now: %w", err)
+		}
+		return nil
+	})
 }
 
 // DisableService stops and disables a systemd service
 func (s *SystemdService) DisableService(serviceName string) error {
-	// pass args as separate elements
-	if err := s.execSystemctl(context.TODO(), "disable", "--now", serviceName+".service"); err != nil {
-		return fmt.Errorf("disable now: %w", err)
-	}
-	return nil
+	return s.withCritical(func() error {
+		// pass args as separate elements
+		if err := s.execSystemctl(context.TODO(), "disable", "--now", serviceName+".service"); err != nil {
+			return fmt.Errorf("disable now: %w", err)
+		}
+		return nil
+	})
 }
 
 // execSystemctl executes a systemctl command with proper error handling
+// Note: no locking here — callers enter via withCritical.
 func (s *SystemdService) execSystemctl(ctx context.Context, args ...string) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
