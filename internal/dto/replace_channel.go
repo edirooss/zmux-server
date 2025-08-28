@@ -20,6 +20,8 @@ type ReplaceChannel struct {
 
 type ReplaceInput struct {
 	URL             W[string] `json:"url"`             //       required; string | null
+	Username        W[string] `json:"username"`        //       required; string | null
+	Password        W[string] `json:"password"`        //       required; string | null
 	AVIOFlags       W[string] `json:"avioflags"`       //       required; string | null
 	Probesize       W[uint]   `json:"probesize"`       //       required; uint
 	Analyzeduration W[uint]   `json:"analyzeduration"` //       required; uint
@@ -129,6 +131,30 @@ func (req *ReplaceInput) ToChannelInput() (*channel.ZmuxChannelInput, error) {
 		}
 	} else {
 		return nil, errors.New("input.url is required")
+	}
+
+	// username
+	// required; string | null
+	if req.Username.Set {
+		if req.Username.Null {
+			input.Username = nil
+		} else {
+			input.Username = &req.Username.V
+		}
+	} else {
+		return nil, errors.New("input.username is required")
+	}
+
+	// password
+	// required; string | null
+	if req.Password.Set {
+		if req.Password.Null {
+			input.Password = nil
+		} else {
+			input.Password = &req.Password.V
+		}
+	} else {
+		return nil, errors.New("input.password is required")
 	}
 
 	// avioflags

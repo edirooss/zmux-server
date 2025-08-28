@@ -19,6 +19,8 @@ type ModifyChannel struct {
 
 type ModifyChannelInput struct {
 	URL             W[string] `json:"url"`             //              optional; string | null
+	Username        W[string] `json:"username"`        //              optional; string | null
+	Password        W[string] `json:"password"`        //              optional; string | null
 	AVIOFlags       W[string] `json:"avioflags"`       //              optional; string | null
 	Probesize       W[uint]   `json:"probesize"`       //              optional; uint
 	Analyzeduration W[uint]   `json:"analyzeduration"` //              optional; uint
@@ -106,6 +108,26 @@ func (req *ModifyChannelInput) MergePatch(prev *channel.ZmuxChannelInput) error 
 			prev.URL = nil
 		} else {
 			prev.URL = &req.URL.V
+		}
+	}
+
+	// username
+	// optional; string | null
+	if req.Username.Set {
+		if req.Username.Null {
+			prev.Username = nil
+		} else {
+			prev.Username = &req.Username.V
+		}
+	}
+
+	// password
+	// optional; string | null
+	if req.Password.Set {
+		if req.Password.Null {
+			prev.Password = nil
+		} else {
+			prev.Password = &req.Password.V
 		}
 	}
 

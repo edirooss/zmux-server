@@ -19,6 +19,8 @@ type CreateChannel struct {
 
 type CreateChannelInput struct {
 	URL             W[string] `json:"url"`             //       optional; string | null   (default: null)
+	Username        W[string] `json:"username"`        //       optional; string | null   (default: null)
+	Password        W[string] `json:"password"`        //       optional; string | null   (default: null)
 	AVIOFlags       W[string] `json:"avioflags"`       //       optional; string | null   (default: null)
 	Probesize       W[uint]   `json:"probesize"`       //       optional; uint            (default: 5000000)
 	Analyzeduration W[uint]   `json:"analyzeduration"` //       optional; uint            (default: 0)
@@ -135,6 +137,30 @@ func (req *CreateChannelInput) ToChannelInput() (*channel.ZmuxChannelInput, erro
 		}
 	} else {
 		input.URL = nil
+	}
+
+	// username
+	// optional; string | null (default: null)
+	if req.Username.Set {
+		if req.Username.Null {
+			input.Username = nil
+		} else {
+			input.Username = &req.Username.V
+		}
+	} else {
+		input.Username = nil
+	}
+
+	// password
+	// optional; string | null (default: null)
+	if req.Password.Set {
+		if req.Password.Null {
+			input.Password = nil
+		} else {
+			input.Password = &req.Password.V
+		}
+	} else {
+		input.Password = nil
 	}
 
 	// avioflags
