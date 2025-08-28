@@ -4,14 +4,15 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/edirooss/zmux-server/internal/env"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 )
 
-// RequireSessionAuth blocks access unless a valid session exists.
+// RequireBasicAuthOrSession blocks access unless a valid basic auth credentials or valid session exists.
 // Responds with 401 Unauthorized if not authenticated.
-func RequireSessionAuth(c *gin.Context) {
-	if !isSessionAuthenticated(c) {
+func RequireBasicAuthOrSession(c *gin.Context) {
+	if !isBasicAuthenticated(c) && !isSessionAuthenticated(c) {
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
@@ -29,10 +30,10 @@ func RequireAPIKey(c *gin.Context) {
 	c.Next()
 }
 
-// RequireAuth allows access if either a valid session or API key is present.
+// RequireAuth allows access if either a valid basic auth credentials exists or valid session exists or a valid API key is exists.
 // Responds with 401 Unauthorized if both checks fail.
 func RequireAuth(c *gin.Context) {
-	if isSessionAuthenticated(c) || isAPIKeyValid(c) {
+	if isBasicAuthenticated(c) || isSessionAuthenticated(c) || isAPIKeyValid(c) {
 		c.Next()
 		return
 	}
@@ -60,6 +61,12 @@ func isSessionAuthenticated(c *gin.Context) bool {
 
 	c.Set(contextKeySessionAuth, struct{}{})
 	return true
+}
+
+// isBasicAuthenticated checks the HTTP request for Basic Authentication credentials.
+func isBasicAuthenticated(c *gin.Context) bool {
+	user, pass, hasAuth := c.Request.BasicAuth()
+	return hasAuth && user == env.Admin.Username && pass == env.Admin.Password
 }
 
 // isAPIKeyValid checks if the X-API-Key header matches the expected value.

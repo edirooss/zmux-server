@@ -10,7 +10,7 @@ import (
 
 // ValidateSessionCSRF checks CSRF tokens for session-authenticated requests.
 //
-//   - Skips validation for non-session-authenticated requests (e.g. API key).
+//   - Skips validation for non-session-authenticated requests (e.g. Basic, API key).
 //   - Applies only to mutating methods (POST, PUT, PATCH, DELETE).
 //   - Aborts with 400 Bad Request if the token is missing or invalid.
 func ValidateSessionCSRF(c *gin.Context) {
