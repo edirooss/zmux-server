@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/edirooss/zmux-server/internal/domain/auth"
 	"github.com/edirooss/zmux-server/internal/http/handlers"
 	"github.com/edirooss/zmux-server/internal/http/middleware"
 	"github.com/gin-contrib/cors"
@@ -77,11 +78,11 @@ func main() {
 	// Register route handlers
 	{
 		// --- Public endpoints (no auth) ---
-		authhndler := handlers.NewAuthHandler(log, isDev)
 		{
 			r.GET("/api/ping", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"message": "pong"}) })
 
 			{
+				authhndler := handlers.NewAuthHandler(log, isDev)
 				r.POST("/api/login", authhndler.Login)
 				r.POST("/api/logout", authhndler.Logout)
 			}
@@ -89,11 +90,13 @@ func main() {
 
 		// --- Protected endpoints (auth required) ---
 		{
-			authed := r.Group("", middleware.RequireAuth, middleware.ValidateSessionCSRF) // Any authentication method required (basic, session or API key)
+			authed := r.Group("", middleware.RequireAuth, middleware.ValidateSessionCSRF) // Authentication required (basic, session or API key)
 
-			authed.GET("/api/me", authhndler.Me)
+			authed.GET("/api/me", handlers.Me)
 
-			authed.GET("/api/csrf", handlers.NewCSRFHandler(log).IssueSessionCSRF)
+			authzOnlyUser := middleware.Authorized(auth.Basic, auth.Session)
+
+			authed.GET("/api/csrf", authzOnlyUser, handlers.IssueSessionCSRF)
 
 			{
 				// HTTP Handler for channel CRUD + summary
@@ -103,12 +106,12 @@ func main() {
 				}
 
 				{
-					authed.GET("/api/channels", channelshndlr.GetChannelList)       // Get all (Collection)
-					authed.POST("/api/channels", channelshndlr.CreateChannel)       // Create new (Collection)
-					authed.GET("/api/channels/:id", channelshndlr.GetChannel)       // Get one
-					authed.PUT("/api/channels/:id", channelshndlr.ReplaceChannel)   // Replace one (full update)
-					authed.PATCH("/api/channels/:id", channelshndlr.ModifyChannel)  // Modify one (partial update)
-					authed.DELETE("/api/channels/:id", channelshndlr.DeleteChannel) // Delete one
+					authed.GET("/api/channels", channelshndlr.GetChannelList)                      // Get all (Collection)
+					authed.POST("/api/channels", authzOnlyUser, channelshndlr.CreateChannel)       // Create new (Collection)
+					authed.GET("/api/channels/:id", channelshndlr.GetChannel)                      // Get one
+					authed.PUT("/api/channels/:id", authzOnlyUser, channelshndlr.ReplaceChannel)   // Replace one (full update)
+					authed.PATCH("/api/channels/:id", channelshndlr.ModifyChannel)                 // Modify one (partial update)
+					authed.DELETE("/api/channels/:id", authzOnlyUser, channelshndlr.DeleteChannel) // Delete one
 				}
 
 				authed.GET("/api/channels/summary", channelshndlr.Summary) // Generate summary for admin dashboard (Collection)

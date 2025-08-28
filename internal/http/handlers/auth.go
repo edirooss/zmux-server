@@ -37,9 +37,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid credentials"})
 		return
 	}
+	uid := req.Username
 
 	sess := sessions.Default(c)
-	sess.Set("uid", req.Username)
+	sess.Set("uid", uid)
 	sess.Set("last_touch", time.Now().Unix())
 	if err := sess.Save(); err != nil {
 		c.Error(err)
@@ -47,6 +48,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	auth.SetPrincipal(c, &auth.Principal{Kind: auth.Session, ID: uid})
 	c.Status(http.StatusOK)
 }
 
@@ -65,9 +67,10 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-func (h *AuthHandler) Me(c *gin.Context) {
+func Me(c *gin.Context) {
 	p := auth.GetPrincipal(c)
 	if p == nil {
+		// No principal found — authentication middleware wasn’t applied
 		c.Status(http.StatusUnauthorized)
 		return
 	}
