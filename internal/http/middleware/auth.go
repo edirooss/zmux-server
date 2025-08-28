@@ -62,29 +62,3 @@ func isAPIKeyValid(c *gin.Context) bool {
 	}
 	return false
 }
-
-// AuthorizedAuth returns middleware that permits access only if the authenticated
-// Principal's Kind is in the allowed list. Otherwise responds with 403 Forbidden.
-func AuthorizedAuth(allowed ...auth.Kind) gin.HandlerFunc {
-	allowedSet := make(map[auth.Kind]struct{}, len(allowed))
-	for _, k := range allowed {
-		allowedSet[k] = struct{}{}
-	}
-
-	return func(c *gin.Context) {
-		p := auth.GetPrincipal(c)
-		if p == nil {
-			// No principal found — authentication middleware wasn’t applied
-			c.AbortWithStatus(http.StatusUnauthorized)
-			return
-		}
-
-		if _, ok := allowedSet[p.Kind]; !ok {
-			// Authenticated but not authorized
-			c.AbortWithStatus(http.StatusForbidden)
-			return
-		}
-
-		c.Next()
-	}
-}

@@ -93,7 +93,7 @@ func main() {
 			authed := r.Group("", middleware.Authentication, middleware.ValidateSessionCSRF) // Any authenticated principal required (basic, session or API key)
 			authed.GET("/api/me", handlers.Me)
 
-			authzed := authed.Group("", middleware.AuthorizedAuth(auth.Basic, auth.Session)) // Only basic or session principals are allowed (excludes API key access)
+			authzed := authed.Group("", middleware.Authorization(auth.Basic, auth.Session)) // Only basic or session principals are allowed (excludes API key access)
 			authzed.GET("/api/csrf", handlers.IssueSessionCSRF)
 
 			{
