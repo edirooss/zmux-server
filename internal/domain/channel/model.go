@@ -1,8 +1,9 @@
 package channel
 
 import (
-	"errors"
 	"fmt"
+	"sort"
+	"strings"
 )
 
 type ZmuxChannel struct {
@@ -10,12 +11,14 @@ type ZmuxChannel struct {
 	Name       *string           `json:"name"`        // nullable
 	Input      ZmuxChannelInput  `json:"input"`       //
 	Output     ZmuxChannelOutput `json:"output"`      //
-	Enabled    bool              `json:"enabled"`     // (on enabled=true, requires both input.url and name to be non-null)
+	Enabled    bool              `json:"enabled"`     // (on true, input.url required)
 	RestartSec uint              `json:"restart_sec"` //
 }
 
 type ZmuxChannelInput struct {
-	URL             *string `json:"url"`             // nullable (on non-null, requires name to be non-null)
+	URL             *string `json:"url"`             // nullable (on non-null, name required)
+	Username        *string `json:"username"`        // nullable (on non-null, url required)
+	Password        *string `json:"password"`        // nullable (on non-null, username required)
 	AVIOFlags       *string `json:"avioflags"`       // nullable
 	Probesize       uint    `json:"probesize"`       //
 	Analyzeduration uint    `json:"analyzeduration"` //
@@ -35,26 +38,93 @@ type ZmuxChannelOutput struct {
 	MapData   bool    `json:"map_data"`  //
 }
 
-func (ch *ZmuxChannel) Validate() error {
-	if ch.Enabled && (ch.Input.URL == nil || ch.Name == nil) {
-		return errors.New("enabled=true requires non-null input.URL and name")
-	}
+// Dependency rules
+// key requires all fields in the slice
+var depRules = map[string][]string{
+	"input.url":      {"name"},
+	"input.username": {"input.url"},
+	"input.password": {"input.username"},
+	"enabled":        {"input.url"},
+}
 
-	if ch.Input.URL != nil && ch.Name == nil {
-		return errors.New("input.URL requires non-null name")
+func (ch *ZmuxChannel) Validate() error {
+	// Cross-field dependency check
+	if err := ch.crossDependencyCheck(); err != nil {
+		return err
 	}
 
 	if ch.Input.URL != nil {
 		if err := validateInputURL(*ch.Input.URL); err != nil {
-			return fmt.Errorf("invalid input.URL: %s", err)
+			return fmt.Errorf("invalid input.url: %s", err)
 		}
 	}
 
 	if ch.Output.URL != nil {
 		if err := validateOutputURL(*ch.Output.URL); err != nil {
-			return fmt.Errorf("invalid output.URL: %s", err)
+			return fmt.Errorf("invalid output.url: %s", err)
 		}
 	}
 
 	return nil
+}
+
+// crossDependencyCheck ensures all required (transitive) dependencies are set for any set field in depRules.
+func (ch *ZmuxChannel) crossDependencyCheck() error {
+	missing := map[string]struct{}{}
+
+	// DFS over dependencies; collect missing recursively.
+	var visit func(string)
+	visit = func(f string) {
+		for _, dep := range depRules[f] {
+			if !ch.isSet(dep) {
+				missing[dep] = struct{}{}
+			}
+			visit(dep)
+		}
+	}
+
+	// For every field that can *require* something, if it's set → enforce its deps.
+	for field := range depRules {
+		if ch.isSet(field) {
+			visit(field)
+		}
+	}
+
+	if len(missing) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(missing))
+	for k := range missing {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return fmt.Errorf("missing (cross-dependency) required fields [%s]", strings.Join(keys, ", "))
+}
+
+// isSet returns whether a given top-level or nested field is considered "set" (i.e. non-nil or true).
+//
+// This function is used for validating cross-field dependencies between fields that are conditionally required.
+// It implements minimal presence checks for a predefined set of fields that appear in the `depRules` map.
+//
+// A field is considered "set" if:
+//   - It's a pointer (e.g. *string) and is non-nil
+//   - It's a boolean and is true (e.g. `enabled`)
+//
+// NOTE: This function is tightly coupled to the `depRules` and must be kept in sync with any additions to that map.
+func (ch *ZmuxChannel) isSet(field string) bool {
+	switch field {
+	case "name":
+		return ch.Name != nil
+	case "input.url":
+		return ch.Input.URL != nil
+	case "input.username":
+		return ch.Input.Username != nil
+	case "input.password":
+		return ch.Input.Password != nil
+	case "enabled":
+		return ch.Enabled
+	default:
+		// Unknown fields are treated as not set; expand switch as needed.
+		return false
+	}
 }
