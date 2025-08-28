@@ -4,31 +4,11 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/edirooss/zmux-server/internal/domain/auth"
 	"github.com/edirooss/zmux-server/internal/env"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 )
-
-// RequireBasicAuthOrSession blocks access unless a valid basic auth credentials or valid session exists.
-// Responds with 401 Unauthorized if not authenticated.
-func RequireBasicAuthOrSession(c *gin.Context) {
-	if !isBasicAuthenticated(c) && !isSessionAuthenticated(c) {
-		c.AbortWithStatus(http.StatusUnauthorized)
-		return
-	}
-
-	c.Next()
-}
-
-// RequireAPIKey blocks access unless a valid API key is provided.
-// Responds with 401 Unauthorized if not authenticated.
-func RequireAPIKey(c *gin.Context) {
-	if !isAPIKeyValid(c) {
-		c.AbortWithStatus(http.StatusUnauthorized)
-		return
-	}
-	c.Next()
-}
 
 // RequireAuth allows access if either a valid basic auth credentials exists or valid session exists or a valid API key is exists.
 // Responds with 401 Unauthorized if both checks fail.
@@ -40,7 +20,15 @@ func RequireAuth(c *gin.Context) {
 	c.AbortWithStatus(http.StatusUnauthorized)
 }
 
-const contextKeySessionAuth = "SessionAuthenticated"
+// isBasicAuthenticated checks the HTTP request for Basic Authentication credentials.
+func isBasicAuthenticated(c *gin.Context) bool {
+	user, pass, hasAuth := c.Request.BasicAuth()
+	if hasAuth && user == env.Admin.Username && pass == env.Admin.Password {
+		auth.SetPrincipal(c, &auth.Principal{Kind: auth.Basic, ID: user})
+		return true
+	}
+	return false
+}
 
 // isSessionAuthenticated returns true if the session is valid.
 // Also updates the session's "last_touch" timestamp if older than 15 minutes.
@@ -59,19 +47,18 @@ func isSessionAuthenticated(c *gin.Context) bool {
 		_ = session.Save()
 	}
 
-	c.Set(contextKeySessionAuth, struct{}{})
+	auth.SetPrincipal(c, &auth.Principal{Kind: auth.Session, ID: userID})
 	return true
-}
-
-// isBasicAuthenticated checks the HTTP request for Basic Authentication credentials.
-func isBasicAuthenticated(c *gin.Context) bool {
-	user, pass, hasAuth := c.Request.BasicAuth()
-	return hasAuth && user == env.Admin.Username && pass == env.Admin.Password
 }
 
 // isAPIKeyValid checks if the X-API-Key header matches the expected value.
 // TODO: Replace with real validation logic.
 func isAPIKeyValid(c *gin.Context) bool {
 	apiKey := c.GetHeader("X-API-Key")
-	return apiKey == "test-apikey-1234"
+	if apiKey == "test-apikey-1234" {
+		auth.SetPrincipal(c, &auth.Principal{Kind: auth.APIKey, ID: apiKey})
+		return true
+
+	}
+	return false
 }

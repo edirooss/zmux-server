@@ -4,6 +4,7 @@ import (
 	"crypto/subtle"
 	"net/http"
 
+	"github.com/edirooss/zmux-server/internal/domain/auth"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 )
@@ -15,7 +16,7 @@ import (
 //   - Aborts with 400 Bad Request if the token is missing or invalid.
 func ValidateSessionCSRF(c *gin.Context) {
 	// Skip for non session-authenticated requests
-	if _, ok := c.Get(contextKeySessionAuth); !ok {
+	if p := auth.GetPrincipal(c); p != nil && p.Kind != auth.Session {
 		c.Next()
 		return
 	}

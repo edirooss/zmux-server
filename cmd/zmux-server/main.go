@@ -77,24 +77,23 @@ func main() {
 	// Register route handlers
 	{
 		// --- Public endpoints (no auth) ---
+		authhndler := handlers.NewAuthHandler(log, isDev)
 		{
 			r.GET("/api/ping", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"message": "pong"}) })
 
 			{
-				authhndler := handlers.NewAuthHandler(log, isDev)
 				r.POST("/api/login", authhndler.Login)
 				r.POST("/api/logout", authhndler.Logout)
-				r.GET("/api/me", authhndler.Me)
 			}
 		}
 
 		// --- Protected endpoints (auth required) ---
 		{
-			authed := r.Group("", middleware.RequireBasicAuthOrSession, middleware.ValidateSessionCSRF) // Either basic or session authentication required
+			authed := r.Group("", middleware.RequireAuth, middleware.ValidateSessionCSRF) // Any authentication method required (basic, session or API key)
+
+			authed.GET("/api/me", authhndler.Me)
 
 			authed.GET("/api/csrf", handlers.NewCSRFHandler(log).IssueSessionCSRF)
-
-			anyauthed := r.Group("", middleware.RequireAuth, middleware.ValidateSessionCSRF) // Any authentication method required (basic, session or API key)
 
 			{
 				// HTTP Handler for channel CRUD + summary
@@ -104,12 +103,12 @@ func main() {
 				}
 
 				{
-					anyauthed.GET("/api/channels", channelshndlr.GetChannelList)      // Get all (Collection)
-					authed.POST("/api/channels", channelshndlr.CreateChannel)         // Create new (Collection)
-					anyauthed.GET("/api/channels/:id", channelshndlr.GetChannel)      // Get one
-					authed.PUT("/api/channels/:id", channelshndlr.ReplaceChannel)     // Replace one (full update)
-					anyauthed.PATCH("/api/channels/:id", channelshndlr.ModifyChannel) // Modify one (partial update)
-					authed.DELETE("/api/channels/:id", channelshndlr.DeleteChannel)   // Delete one
+					authed.GET("/api/channels", channelshndlr.GetChannelList)       // Get all (Collection)
+					authed.POST("/api/channels", channelshndlr.CreateChannel)       // Create new (Collection)
+					authed.GET("/api/channels/:id", channelshndlr.GetChannel)       // Get one
+					authed.PUT("/api/channels/:id", channelshndlr.ReplaceChannel)   // Replace one (full update)
+					authed.PATCH("/api/channels/:id", channelshndlr.ModifyChannel)  // Modify one (partial update)
+					authed.DELETE("/api/channels/:id", channelshndlr.DeleteChannel) // Delete one
 				}
 
 				authed.GET("/api/channels/summary", channelshndlr.Summary) // Generate summary for admin dashboard (Collection)
