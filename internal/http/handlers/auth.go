@@ -75,5 +75,5 @@ func Me(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"kind": p.Kind, "id": p.ID})
+	c.JSON(http.StatusOK, gin.H{"kind": p.Kind.String(), "id": p.ID})
 }

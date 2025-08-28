@@ -10,9 +10,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// RequireAuth allows access if either a valid basic auth credentials exists or valid session exists or a valid API key is exists.
+// Authentication allows access if either a valid basic auth credentials exists or valid session exists or a valid API key is exists.
 // Responds with 401 Unauthorized if both checks fail.
-func RequireAuth(c *gin.Context) {
+func Authentication(c *gin.Context) {
 	if isBasicAuthenticated(c) || isSessionAuthenticated(c) || isAPIKeyValid(c) {
 		c.Next()
 		return
@@ -63,9 +63,9 @@ func isAPIKeyValid(c *gin.Context) bool {
 	return false
 }
 
-// Authorized returns middleware that permits access only if the authenticated
+// AuthorizedAuth returns middleware that permits access only if the authenticated
 // Principal's Kind is in the allowed list. Otherwise responds with 403 Forbidden.
-func Authorized(allowed ...auth.Kind) gin.HandlerFunc {
+func AuthorizedAuth(allowed ...auth.Kind) gin.HandlerFunc {
 	allowedSet := make(map[auth.Kind]struct{}, len(allowed))
 	for _, k := range allowed {
 		allowedSet[k] = struct{}{}

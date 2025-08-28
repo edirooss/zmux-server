@@ -90,11 +90,11 @@ func main() {
 
 		// --- Protected endpoints (auth required) ---
 		{
-			authed := r.Group("", middleware.RequireAuth, middleware.ValidateSessionCSRF) // Authentication required (basic, session or API key)
+			authed := r.Group("", middleware.Authentication, middleware.ValidateSessionCSRF) // Authentication required (basic, session or API key)
 
 			authed.GET("/api/me", handlers.Me)
 
-			authzOnlyUser := middleware.Authorized(auth.Basic, auth.Session)
+			authzOnlyUser := middleware.AuthorizedAuth(auth.Basic, auth.Session)
 
 			authed.GET("/api/csrf", authzOnlyUser, handlers.IssueSessionCSRF)
 
@@ -114,10 +114,10 @@ func main() {
 					authed.DELETE("/api/channels/:id", authzOnlyUser, channelshndlr.DeleteChannel) // Delete one
 				}
 
-				authed.GET("/api/channels/summary", channelshndlr.Summary) // Generate summary for admin dashboard (Collection)
+				authed.GET("/api/channels/summary", authzOnlyUser, channelshndlr.Summary) // Generate summary for admin dashboard (Collection)
 			}
 
-			authed.GET("/api/system/net/localaddrs", handlers.NewLocalAddrHandler(log).GetLocalAddrList)
+			authed.GET("/api/system/net/localaddrs", authzOnlyUser, handlers.NewLocalAddrHandler(log).GetLocalAddrList)
 		}
 	}
 
@@ -168,9 +168,9 @@ func accessLog(log *zap.Logger) gin.HandlerFunc {
 			zap.String("user_agent", c.Request.UserAgent()),
 			zap.Duration("latency", latency),
 		}
-		// if p := getPrincipal(c); p != nil {
-		// 	fields = append(fields, zap.Dict("auth", zap.String("kind", p.Kind), zap.String("uid", p.UID)))
-		// }
+		if p := auth.GetPrincipal(c); p != nil {
+			fields = append(fields, zap.Dict("auth", zap.String("kind", p.Kind.String()), zap.String("id", p.ID)))
+		}
 		if joinedErr != nil {
 			fields = append(fields, zap.Error(joinedErr))
 		}
