@@ -3,13 +3,14 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"sync"
 	"time"
 
 	"golang.org/x/sync/singleflight"
 
-	"github.com/edirooss/zmux-server/pkg/models"
+	"github.com/edirooss/zmux-server/internal/domain/channel"
 	"github.com/edirooss/zmux-server/redis"
 	"go.uber.org/zap"
 )
@@ -34,9 +35,21 @@ func (o *SummaryOptions) setDefaults() {
 	}
 }
 
+// ChannelSummary is the API model for GET /api/channels/summary.
+// We embed ZmuxChannel so its fields are flattened (id, name, etc.) and
+// add monitoring fields conditionally.
+//   - status is present only if channel.Enabled == true AND status key exists.
+//   - ifmt/metrics are present only if status.liveness == "Live" and keys exist.
+type ChannelSummary struct {
+	channel.ZmuxChannel
+	Status  *redis.RemuxStatus `json:"status,omitempty"`
+	Ifmt    json.RawMessage    `json:"ifmt,omitempty"`
+	Metrics json.RawMessage    `json:"metrics,omitempty"`
+}
+
 // SummaryResult lets the handler set headers/telemetry.
 type SummaryResult struct {
-	Data        []models.ChannelSummary
+	Data        []ChannelSummary
 	CacheHit    bool
 	GeneratedAt time.Time // snapshot timestamp
 }
@@ -47,7 +60,7 @@ type SummaryService struct {
 	remuxRepo *redis.RemuxRepository
 
 	mu      sync.RWMutex
-	cache   []models.ChannelSummary
+	cache   []ChannelSummary
 	expires time.Time
 	genAt   time.Time
 
@@ -142,7 +155,7 @@ func (s *SummaryService) Invalidate() {
 }
 
 // refresh runs the Redis pipeline: channels -> statuses -> ifmt/metrics
-func (s *SummaryService) refresh(ctx context.Context) ([]models.ChannelSummary, error) {
+func (s *SummaryService) refresh(ctx context.Context) ([]ChannelSummary, error) {
 	chs, err := s.chanRepo.List(ctx)
 	if err != nil {
 		return nil, err
@@ -173,9 +186,9 @@ func (s *SummaryService) refresh(ctx context.Context) ([]models.ChannelSummary, 
 		s.log.Warn("bulk ifmt/metrics failed", zap.Error(err))
 	}
 
-	out := make([]models.ChannelSummary, 0, len(chs))
+	out := make([]ChannelSummary, 0, len(chs))
 	for _, ch := range chs {
-		sum := models.ChannelSummary{ZmuxChannel: *ch}
+		sum := ChannelSummary{ZmuxChannel: *ch}
 		if ch.Enabled {
 			if st, ok := statusMap[ch.ID]; ok {
 				sum.Status = st
@@ -190,11 +203,11 @@ func (s *SummaryService) refresh(ctx context.Context) ([]models.ChannelSummary, 
 	return out, nil
 }
 
-func cloneSummaries(in []models.ChannelSummary) []models.ChannelSummary {
+func cloneSummaries(in []ChannelSummary) []ChannelSummary {
 	if len(in) == 0 {
 		return nil
 	}
-	out := make([]models.ChannelSummary, len(in))
+	out := make([]ChannelSummary, len(in))
 	copy(out, in)
 	return out
 }

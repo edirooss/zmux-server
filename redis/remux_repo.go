@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/edirooss/zmux-server/pkg/models"
 	"go.uber.org/zap"
 )
 
@@ -27,9 +26,25 @@ func NewRemuxRepository(log *zap.Logger) *RemuxRepository {
 	}
 }
 
+// RemuxStatus mirrors the JSON stored at remux:<id>:status
+// Example stored value (string):
+//
+//	{
+//	  "liveness": "Dead" | "Live",
+//	  "metadata": "...",
+//	  "timestamp": 0
+//	}
+//
+// Keep field names/json tags aligned with stored JSON to avoid re-mapping.
+type RemuxStatus struct {
+	Liveness  string `json:"liveness"`
+	Metadata  string `json:"metadata"`
+	Timestamp int64  `json:"timestamp"`
+}
+
 // BulkStatus fetches remux:<id>:status for all ids in one MGET. Missing keys are ignored.
-func (r *RemuxRepository) BulkStatus(ctx context.Context, ids []int64) (map[int64]*models.RemuxStatus, error) {
-	out := make(map[int64]*models.RemuxStatus, len(ids))
+func (r *RemuxRepository) BulkStatus(ctx context.Context, ids []int64) (map[int64]*RemuxStatus, error) {
+	out := make(map[int64]*RemuxStatus, len(ids))
 	if len(ids) == 0 {
 		return out, nil
 	}
@@ -58,7 +73,7 @@ func (r *RemuxRepository) BulkStatus(ctx context.Context, ids []int64) (map[int6
 			r.log.Warn("unexpected redis type for status", zap.Any("type", t))
 			continue
 		}
-		var st models.RemuxStatus
+		var st RemuxStatus
 		if err := json.Unmarshal([]byte(raw), &st); err != nil {
 			r.log.Warn("bad status json", zap.String("key", keys[i]), zap.Error(err))
 			continue
