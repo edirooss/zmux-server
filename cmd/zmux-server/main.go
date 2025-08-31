@@ -8,7 +8,7 @@ import (
 
 	"github.com/edirooss/zmux-server/internal/domain/auth"
 	"github.com/edirooss/zmux-server/internal/http/handler"
-	"github.com/edirooss/zmux-server/internal/http/middleware"
+	mw "github.com/edirooss/zmux-server/internal/http/middleware"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/secure"
 	"github.com/gin-contrib/sessions"
@@ -73,6 +73,13 @@ func main() {
 		r.Use(sessions.Sessions("sid" /* Session cookie name */, store))
 
 		r.Use(accessLog(log)) // Observability (logger, tracing)
+
+		r.Use(func(c *gin.Context) {
+			// Enforce a hard 10MB max request body.
+			// Protects against oversized or drip-fed request body ("slow body" / RUDY DoS)
+			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 10<<20)
+			c.Next()
+		})
 	}
 
 	// Register route handlers
@@ -90,10 +97,10 @@ func main() {
 
 		// --- Protected endpoints (auth required) ---
 		{
-			authed := r.Group("", middleware.Authentication, middleware.ValidateSessionCSRF) // Any authenticated principal required (basic, session, or bearer token)
+			authed := r.Group("", mw.Authentication, mw.ValidateSessionCSRF) // Any authenticated principal required (basic, session, or bearer token)
 			authed.GET("/api/me", handler.Me)
 
-			authzed := authed.Group("", middleware.Authorization(auth.Basic, auth.Session)) // Only basic or session principals are allowed (excludes bearer token access)
+			authzed := authed.Group("", mw.Authorization(auth.Basic, auth.Session)) // Only basic or session principals are allowed (excludes bearer token access)
 			authzed.GET("/api/csrf", handler.IssueSessionCSRF)
 
 			{
@@ -104,12 +111,12 @@ func main() {
 				}
 
 				{
-					authed.GET("/api/channels", channelshndlr.GetChannelList)        // Get all (Collection)
-					authzed.POST("/api/channels", channelshndlr.CreateChannel)       // Create new (Collection)
-					authed.GET("/api/channels/:id", channelshndlr.GetChannel)        // Get one
-					authzed.PUT("/api/channels/:id", channelshndlr.ReplaceChannel)   // Replace one (full update)
-					authed.PATCH("/api/channels/:id", channelshndlr.ModifyChannel)   // Modify one (partial update)
-					authzed.DELETE("/api/channels/:id", channelshndlr.DeleteChannel) // Delete one
+					authed.GET("/api/channels", channelshndlr.GetChannelList)                              // Get all (Collection)
+					authzed.POST("/api/channels", mw.ConcurrentCap(10), channelshndlr.CreateChannel)       // Create new (Collection)
+					authed.GET("/api/channels/:id", channelshndlr.GetChannel)                              // Get one
+					authzed.PUT("/api/channels/:id", mw.ConcurrentCap(10), channelshndlr.ReplaceChannel)   // Replace one (full update)
+					authed.PATCH("/api/channels/:id", mw.ConcurrentCap(10), channelshndlr.ModifyChannel)   // Modify one (partial update)
+					authzed.DELETE("/api/channels/:id", mw.ConcurrentCap(10), channelshndlr.DeleteChannel) // Delete one
 				}
 
 				authzed.GET("/api/channels/summary", channelshndlr.Summary) // Generate summary for admin dashboard (Collection)
@@ -119,10 +126,21 @@ func main() {
 		}
 	}
 
-	log.Info("running HTTP server on 127.0.0.1:8080")
-	if err := r.Run("127.0.0.1:8080"); err != nil {
+	httpsrv := &http.Server{
+		Addr:              "127.0.0.1:8080",
+		Handler:           r,
+		ReadHeaderTimeout: 2 * time.Second,  // kills header-drip Slowloris
+		ReadTimeout:       10 * time.Second, // full request read (incl. body)
+		WriteTimeout:      15 * time.Second, // avoid forever-hangs on writes
+		IdleTimeout:       60 * time.Second, // keep-alive cap
+		MaxHeaderBytes:    1 << 20,          // 1MB cap
+	}
+
+	log.Info("running HTTP server", zap.String("addr", httpsrv.Addr))
+	if err := httpsrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatal("server failed", zap.Error(err))
 	}
+	log.Info("server closed")
 }
 
 func buildLogger() *zap.Logger {
