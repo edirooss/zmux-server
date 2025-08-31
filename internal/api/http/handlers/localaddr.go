@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/edirooss/zmux-server/services"
+	"github.com/edirooss/zmux-server/internal/services"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
