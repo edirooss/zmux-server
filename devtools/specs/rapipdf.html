@@ -1,14 +1,109 @@
- <!doctype html>
-  <html>
-  <head>
-    <script src="https://unpkg.com/rapipdf/dist/rapipdf-min.js"></script>
-  </head>
-  <body>
-    <rapi-pdf
-      style = "width:700px; height:40px; font-size:18px;" 
-      spec-url = "zmux.b2b.openapi.yaml"
-      button-bg = "#b44646" 
-    > </rapi-pdf>
-  </body> 
-  </html>
-  
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ZMUX B2B API – PDF Generator</title>
+  <link rel="preconnect" href="https://unpkg.com" />
+  <style>
+    :root {
+      --brand: #b44646;          /* primary brand color */
+      --alt: #0e7490;            /* alternate (teal) for subheads */
+      --text: #222;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --shadow: 0 10px 25px rgba(2, 6, 23, 0.08);
+    }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      color: var(--text);
+      background: radial-gradient(1200px 800px at 10% -10%, #fff 0, var(--bg) 50%, #eef2f7 100%);
+    }
+    .wrap {
+      max-width: 960px;
+      margin: clamp(24px, 5vw, 64px) auto;
+      padding: clamp(16px, 3vw, 32px);
+    }
+    .card {
+      background: var(--card);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      padding: clamp(16px, 3vw, 28px);
+    }
+    h1 {
+      margin: 0 0 4px;
+      font-size: clamp(20px, 3.4vw, 28px);
+      letter-spacing: -0.02em;
+    }
+    .sub {
+      margin: 0 0 18px;
+      color: #475569;
+      font-size: 0.95rem;
+    }
+    .note {
+      margin: 12px 0 18px;
+      background: #fef2f2;
+      color: #7f1d1d;
+      border: 1px solid #fecaca;
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-size: 0.9rem;
+    }
+    .controls { display: grid; gap: 12px; margin-top: 18px; }
+    .muted { color: #64748b; font-size: 0.9rem; }
+    footer { margin-top: 20px; color: #6b7280; font-size: 0.85rem; }
+  </style>
+  <!-- RapiPDF web component -->
+  <script src="https://unpkg.com/rapipdf/dist/rapipdf-min.js" defer></script>
+</head>
+<body>
+  <main class="wrap">
+    <section class="card" aria-labelledby="title">
+      <h1 id="title">Generate a polished API PDF</h1>
+      <p class="sub">One-click PDF generation from your OpenAPI spec with tuned colors, title, footer, and schema display.</p>
+
+      <div class="note">Using the official RapiPDF attributes for a richer, brand-aligned output. Adjust any attribute in the tag below as needed.</div>
+
+      <!--
+        Key attributes referenced from the official docs:
+          - spec-url: points to your OpenAPI (YAML/JSON)
+          - button-label/button-bg/button-color: CTA look
+          - input-bg/input-color/hide-input: input appearance/visibility
+          - pdf-*-color/pdf-title/pdf-footer-text/pdf-schema-style: PDF look & metadata
+          - include-* flags: choose what sections to include in the PDF
+      -->
+      <div class="controls">
+        <rapi-pdf
+          style="width:100%; max-width: 880px; height:56px; font-size:18px;"
+          spec-url="zmux.b2b.openapi.yaml?nocache"
+          button-label="Download API PDF"
+          button-bg="#b44646"
+          button-color="#ffffff"
+          input-bg="#ffffff"
+          input-color="#333333"
+          hide-input="true"
+          pdf-primary-color="#b44646"
+          pdf-alternate-color="#0e7490"
+          pdf-title="ZMUX B2B API Reference"
+          pdf-footer-text="© 2025 ZMUX"
+          pdf-schema-style="table"
+          include-info="true"
+          include-toc="true"
+          include-security="false"
+          include-api-details="true"
+          include-api-list="false"
+          include-example="false"
+        ></rapi-pdf>
+        <p class="muted">Tip: Prefer nested views? Change <code>pdf-schema-style</code> to <code>object</code>. Want simpler UI? Set <code>hide-input</code> to <code>true</code> for a button-only experience.</p>
+      </div>
+
+      <footer>
+        Works with OpenAPI 3.x/2.0 spec files. If your spec is large, PDF generation may take a moment depending on browser performance.
+      </footer>
+    </section>
+  </main>
+  <noscript>This page requires JavaScript enabled to load the <code>&lt;rapi-pdf&gt;</code> web component.</noscript>
+</body>
+</html>
