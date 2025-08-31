@@ -209,6 +209,10 @@ func (h *ChannelsHandler) ModifyChannel(c *gin.Context) {
 	// Persist
 	if err := h.svc.UpdateChannel(c.Request.Context(), ch); err != nil {
 		c.Error(err)
+		if errors.Is(err, service.ErrLocked) {
+			c.JSON(http.StatusLocked, gin.H{"message": service.ErrLocked.Error()})
+			return
+		}
 		if errors.Is(err, redis.ErrChannelNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"message": redis.ErrChannelNotFound.Error()})
 			return
@@ -273,6 +277,10 @@ func (h *ChannelsHandler) ReplaceChannel(c *gin.Context) {
 
 	if err := h.svc.UpdateChannel(c.Request.Context(), ch); err != nil {
 		c.Error(err)
+		if errors.Is(err, service.ErrLocked) {
+			c.JSON(http.StatusLocked, gin.H{"message": service.ErrLocked.Error()})
+			return
+		}
 		if errors.Is(err, redis.ErrChannelNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"message": redis.ErrChannelNotFound.Error()})
 			return
@@ -304,6 +312,10 @@ func (h *ChannelsHandler) DeleteChannel(c *gin.Context) {
 
 	if err := h.svc.DeleteChannel(c.Request.Context(), id); err != nil {
 		c.Error(err)
+		if errors.Is(err, service.ErrLocked) {
+			c.JSON(http.StatusLocked, gin.H{"message": service.ErrLocked.Error()})
+			return
+		}
 		if errors.Is(err, redis.ErrChannelNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"message": redis.ErrChannelNotFound.Error()})
 			return

@@ -80,7 +80,7 @@ func (g *gate) Unlock() {
 	}
 }
 
-var ErrLocked = errors.New("locked")
+var ErrLocked = errors.New("channel locked")
 
 // NewChannelService constructs the ChannelService with its dependencies.
 func NewChannelService(log *zap.Logger) (*ChannelService, error) {
