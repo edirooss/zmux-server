@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"sync"
@@ -51,8 +52,35 @@ type ChannelService struct {
 	systemd *SystemdService
 
 	// per-channel locks to serialize mutations on the same ID
-	muxes sync.Map // map[int64]*sync.Mutex
+	muxes sync.Map // map[int64]*gate
 }
+
+// gate is a tiny semaphore (cap=1) that supports Lock/TryLock/Unlock.
+type gate struct{ ch chan struct{} }
+
+func newGate() *gate {
+	g := &gate{ch: make(chan struct{}, 1)}
+	g.ch <- struct{}{} // token present = unlocked
+	return g
+}
+func (g *gate) Lock() { <-g.ch }
+func (g *gate) TryLock() bool {
+	select {
+	case <-g.ch:
+		return true
+	default:
+		return false
+	}
+}
+func (g *gate) Unlock() {
+	select {
+	case g.ch <- struct{}{}:
+	default:
+		panic("unlock of unlocked gate")
+	}
+}
+
+var ErrLocked = errors.New("locked")
 
 // NewChannelService constructs the ChannelService with its dependencies.
 func NewChannelService(log *zap.Logger) (*ChannelService, error) {
@@ -68,13 +96,23 @@ func NewChannelService(log *zap.Logger) (*ChannelService, error) {
 	}, nil
 }
 
-// lock acquires a per-channel mutex and returns an unlock func. Safe to call
-// multiple times; the same ID always maps to the same *sync.Mutex.
+// lock acquires a per-channel mutex (blocking) and returns an unlock func.
+// Safe to call multiple times; the same ID always maps to the same *gate.
 func (s *ChannelService) lock(id int64) func() {
-	v, _ := s.muxes.LoadOrStore(id, &sync.Mutex{})
-	m := v.(*sync.Mutex)
-	m.Lock()
-	return func() { m.Unlock() }
+	v, _ := s.muxes.LoadOrStore(id, newGate())
+	g := v.(*gate)
+	g.Lock()
+	return func() { g.Unlock() }
+}
+
+// tryLock attempts to acquire the per-channel mutex without blocking.
+func (s *ChannelService) tryLock(id int64) (func(), error) {
+	v, _ := s.muxes.LoadOrStore(id, newGate())
+	g := v.(*gate)
+	if !g.TryLock() {
+		return func() {}, fmt.Errorf("id %d: %w", id, ErrLocked)
+	}
+	return func() { g.Unlock() }, nil
 }
 
 // ChannelExists returns true if the channel ID exists in Redis, false otherwise.
@@ -191,7 +229,10 @@ func (s *ChannelService) ListChannels(ctx context.Context) ([]*channel.ZmuxChann
 // Postconditions on success
 //   - Runtime reflects desired config & enablement; Redis matches it.
 func (s *ChannelService) UpdateChannel(ctx context.Context, ch *channel.ZmuxChannel) error {
-	unlock := s.lock(ch.ID)
+	unlock, err := s.tryLock(ch.ID) // non-blocking: if someone else is mutating this channel, return ErrLocked.
+	if err != nil {
+		return fmt.Errorf("try lock: %w", err)
+	}
 	defer unlock()
 
 	// Load current from Redis
@@ -254,7 +295,10 @@ func (s *ChannelService) UpdateChannel(ctx context.Context, ch *channel.ZmuxChan
 // Postconditions on success
 //   - Record removed from Redis; service disabled (if it had been enabled).
 func (s *ChannelService) DeleteChannel(ctx context.Context, id int64) error {
-	unlock := s.lock(id)
+	unlock, err := s.tryLock(id) // non-blocking: if someone else is mutating this channel, return ErrLocked.
+	if err != nil {
+		return fmt.Errorf("try lock: %w", err)
+	}
 	defer unlock()
 
 	ch, err := s.repo.Get(ctx, id)
@@ -281,99 +325,26 @@ func (s *ChannelService) DeleteChannel(ctx context.Context, id int64) error {
 	return nil
 }
 
-// EnableChannel ensures the channel exists, commits its unit (to guarantee
-// definition is present), enables the service, and *persists Enabled=true*.
-//
-// Happy path
-//  1. Load channel, ignore if already enabled (idempotent early return).
-//  2. Commit unit to ensure definition exists/is current.
-//  3. Enable service.
-//  4. Persist Enabled=true to Redis (runtime and persisted converge).
-//
-// Failure modes & resulting state
-//   - repo.Get fails → nothing changed.
-//   - commitSystemdService fails → NO enable; NO Redis change.
-//   - enableChannel fails → unit exists, runtime not enabled; NO Redis change.
-//   - repo.Set fails after enabling → runtime enabled but Redis says false;
-//     best‑effort DISABLE to remove drift; error returned.
-func (s *ChannelService) EnableChannel(ctx context.Context, id int64) error {
-	unlock := s.lock(id)
-	defer unlock()
-
-	ch, err := s.repo.Get(ctx, id)
-	if err != nil {
-		return fmt.Errorf("get channel: %w", err)
+// commitSystemdService renders/commits the systemd unit for a channel. This is
+// called for create and update flows, and also before enabling to ensure the
+// unit exists and is up-to-date. Consider this idempotent with respect to the
+// same inputs; repeated calls are cheap compared to failed starts at runtime.
+func (s *ChannelService) commitSystemdService(ch *channel.ZmuxChannel) error {
+	cfg := SystemdServiceConfig{
+		ServiceName: fmt.Sprintf("zmux-channel-%d", ch.ID),
+		ExecStart:   BuildRemuxExecStart(ch),
+		RestartSec:  strconv.FormatUint(uint64(ch.RestartSec), 10),
 	}
-	if ch.Enabled {
-		return nil // idempotent
-	}
-
-	if err := s.enableChannel(ch.ID); err != nil {
-		return fmt.Errorf("enable channel: %w", err)
-	}
-
-	ch.Enabled = true
-	if err := s.repo.Set(ctx, ch); err != nil {
-		// rollback runtime effect so Redis/API and systemd do not drift
-		_ = s.disableChannel(ch.ID)
-		return fmt.Errorf("set: %w", err)
-	}
-	return nil
-}
-
-// DisableChannel ensures the channel exists, disables the systemd unit, and
-// *persists Enabled=false*.
-//
-// Happy path
-//  1. Load channel, ignore if already disabled (idempotent early return).
-//  2. Disable service.
-//  3. Persist Enabled=false to Redis.
-//
-// Failure modes & resulting state
-//   - repo.Get fails → nothing changed.
-//   - disableChannel fails → runtime remains enabled; NO Redis change.
-//   - repo.Set fails after disabling → runtime disabled but Redis says true;
-//     best‑effort RE-ENABLE to remove drift; error returned.
-func (s *ChannelService) DisableChannel(ctx context.Context, id int64) error {
-	unlock := s.lock(id)
-	defer unlock()
-
-	ch, err := s.repo.Get(ctx, id)
-	if err != nil {
-		return fmt.Errorf("get channel: %w", err)
-	}
-	if !ch.Enabled {
-		return nil // idempotent
-	}
-
-	if err := s.disableChannel(ch.ID); err != nil {
-		return fmt.Errorf("disable channel: %w", err)
-	}
-
-	ch.Enabled = false
-	if err := s.repo.Set(ctx, ch); err != nil {
-		// rollback runtime effect so Redis/API and systemd do not drift
-		_ = s.enableChannel(ch.ID)
-		return fmt.Errorf("set: %w", err)
-	}
-	return nil
-}
-
-// restartChannel is a thin wrapper around systemd.RestartService for a channel.
-// Kept private to make higher-level flows explicit and testable.
-// Should be called on already-enabled services to provide restart semantics.
-func (s *ChannelService) restartChannel(channelID int64) error {
-	serviceName := fmt.Sprintf("zmux-channel-%d", channelID)
-	if err := s.systemd.RestartService(serviceName); err != nil {
-		return fmt.Errorf("enable systemd service: %w", err)
+	if err := s.systemd.CommitService(cfg); err != nil {
+		return fmt.Errorf("commit systemd service: %w", err)
 	}
 	return nil
 }
 
 // enableChannel is a thin wrapper around systemd.EnableService for a channel.
 // Kept private to make higher-level flows explicit and testable.
-func (s *ChannelService) enableChannel(channelID int64) error {
-	serviceName := fmt.Sprintf("zmux-channel-%d", channelID)
+func (s *ChannelService) enableChannel(id int64) error {
+	serviceName := fmt.Sprintf("zmux-channel-%d", id)
 	if err := s.systemd.EnableService(serviceName); err != nil {
 		return fmt.Errorf("enable systemd service: %w", err)
 	}
@@ -381,28 +352,21 @@ func (s *ChannelService) enableChannel(channelID int64) error {
 }
 
 // disableChannel is a thin wrapper around systemd.DisableService for a channel.
-func (s *ChannelService) disableChannel(channelID int64) error {
-	serviceName := fmt.Sprintf("zmux-channel-%d", channelID)
+func (s *ChannelService) disableChannel(id int64) error {
+	serviceName := fmt.Sprintf("zmux-channel-%d", id)
 	if err := s.systemd.DisableService(serviceName); err != nil {
 		return fmt.Errorf("disable systemd service: %w", err)
 	}
 	return nil
 }
 
-// commitSystemdService renders/commits the systemd unit for a channel. This is
-// called for create and update flows, and also before enabling to ensure the
-// unit exists and is up-to-date. Consider this idempotent with respect to the
-// same inputs; repeated calls are cheap compared to failed starts at runtime.
-//
-// Note: Channel has to be enabled (i,e. forces input.URL to be non-null)
-func (s *ChannelService) commitSystemdService(channel *channel.ZmuxChannel) error {
-	cfg := SystemdServiceConfig{
-		ServiceName: fmt.Sprintf("zmux-channel-%d", channel.ID),
-		ExecStart:   BuildRemuxExecStart(channel),
-		RestartSec:  strconv.FormatUint(uint64(channel.RestartSec), 10),
-	}
-	if err := s.systemd.CommitService(cfg); err != nil {
-		return fmt.Errorf("commit systemd service: %w", err)
+// restartChannel is a thin wrapper around systemd.RestartService for a channel.
+// Kept private to make higher-level flows explicit and testable.
+// Should be called on already-enabled services to provide restart semantics.
+func (s *ChannelService) restartChannel(id int64) error {
+	serviceName := fmt.Sprintf("zmux-channel-%d", id)
+	if err := s.systemd.RestartService(serviceName); err != nil {
+		return fmt.Errorf("restart systemd service: %w", err)
 	}
 	return nil
 }
