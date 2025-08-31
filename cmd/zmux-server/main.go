@@ -97,10 +97,10 @@ func main() {
 
 		// --- Protected endpoints (auth required) ---
 		{
-			authed := r.Group("", mw.Authentication, mw.ValidateSessionCSRF) // Any authenticated principal required
+			authed := r.Group("", mw.Authentication, mw.ValidateSessionCSRF) // Any authenticated principal required (admin|service_account)
 			authed.GET("/api/me", handler.Me)
 
-			authzed := authed.Group("", mw.Authorization(principal.BasicAuth, principal.SessionAuth)) // Only principals authed via basic or session are allowed (excludes bearer token access)
+			authzed := authed.Group("", mw.Authorization(principal.Admin)) // Only admin principal
 			authzed.GET("/api/csrf", handler.IssueSessionCSRF)
 
 			{
