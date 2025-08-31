@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/edirooss/zmux-server/internal/domain/auth"
+	"github.com/edirooss/zmux-server/internal/domain/principal"
 	"github.com/edirooss/zmux-server/internal/env"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -26,7 +26,7 @@ func Authentication(c *gin.Context) {
 func isBasicAuthenticated(c *gin.Context) bool {
 	user, pass, hasAuth := c.Request.BasicAuth()
 	if hasAuth && user == env.Admin.Username && pass == env.Admin.Password {
-		auth.SetPrincipal(c, user, auth.BasicAuth, auth.AdminKind, auth.NewPermissionSet(auth.PermAdmin))
+		principal.SetPrincipal(c, user, principal.BasicAuth, principal.Admin)
 		return true
 	}
 	return false
@@ -49,7 +49,7 @@ func isSessionAuthenticated(c *gin.Context) bool {
 		_ = session.Save()
 	}
 
-	auth.SetPrincipal(c, userID, auth.SessionAuth, auth.AdminKind, auth.NewPermissionSet(auth.PermAdmin))
+	principal.SetPrincipal(c, userID, principal.SessionAuth, principal.Admin)
 	return true
 }
 
@@ -70,7 +70,7 @@ func isBearerTokenValid(c *gin.Context) bool {
 	}
 	// constant-time compare to avoid timing side channels
 	if subtle.ConstantTimeCompare([]byte(token), []byte("sk_test_2vV7Q2hksN8KzLpXWq3jUm5Ay4oRxE9b")) == 1 {
-		auth.SetPrincipal(c, token, auth.BearerAuth, auth.ServiceKind, auth.NewPermissionSet(auth.PermAdmin))
+		principal.SetPrincipal(c, token, principal.BearerAuth, principal.ServiceAccount)
 		return true
 	}
 	return false

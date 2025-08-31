@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/edirooss/zmux-server/internal/domain/auth"
+	"github.com/edirooss/zmux-server/internal/domain/principal"
 	"github.com/edirooss/zmux-server/internal/env"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -48,7 +48,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	auth.SetPrincipal(c, uid, auth.SessionAuth, auth.AdminKind, auth.NewPermissionSet(auth.PermAdmin))
+	principal.SetPrincipal(c, uid, principal.SessionAuth, principal.Admin)
 	c.Status(http.StatusOK)
 }
 
@@ -68,7 +68,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 }
 
 func Me(c *gin.Context) {
-	p := auth.GetPrincipal(c)
+	p := principal.GetPrincipal(c)
 	if p == nil {
 		// No principal found — authentication middleware wasn’t applied
 		c.Status(http.StatusUnauthorized)
@@ -76,9 +76,8 @@ func Me(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"id":          p.ID,
-		"kind":        p.PrincipalKind.String(),
-		"auth_type":   p.AuthType.String(),
-		"permissions": p.GetPermissions(),
+		"id":        p.ID,
+		"kind":      p.Kind.String(),
+		"auth_type": p.AuthType.String(),
 	})
 }
