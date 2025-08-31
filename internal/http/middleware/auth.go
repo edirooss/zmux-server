@@ -26,7 +26,7 @@ func Authentication(c *gin.Context) {
 func isBasicAuthenticated(c *gin.Context) bool {
 	user, pass, hasAuth := c.Request.BasicAuth()
 	if hasAuth && user == env.Admin.Username && pass == env.Admin.Password {
-		auth.SetPrincipal(c, &auth.Principal{Kind: auth.Basic, ID: user})
+		auth.SetPrincipal(c, user, auth.BasicAuth, auth.AdminKind, auth.NewPermissionSet(auth.PermAdmin))
 		return true
 	}
 	return false
@@ -49,7 +49,7 @@ func isSessionAuthenticated(c *gin.Context) bool {
 		_ = session.Save()
 	}
 
-	auth.SetPrincipal(c, &auth.Principal{Kind: auth.Session, ID: userID})
+	auth.SetPrincipal(c, userID, auth.SessionAuth, auth.AdminKind, auth.NewPermissionSet(auth.PermAdmin))
 	return true
 }
 
@@ -65,22 +65,13 @@ func isBearerTokenValid(c *gin.Context) bool {
 		return false
 	}
 	token := strings.TrimSpace(strings.TrimPrefix(h, prefix))
-	demoBearerToken := "sk_test_2vV7Q2hksN8KzLpXWq3jUm5Ay4oRxE9b"
-	if token == "" || demoBearerToken == "" {
+	if token == "" {
 		return false
 	}
 	// constant-time compare to avoid timing side channels
-	if subtle.ConstantTimeCompare([]byte(token), []byte(demoBearerToken)) == 1 {
-		auth.SetPrincipal(c, &auth.Principal{Kind: auth.Token, ID: redactToken(token)})
+	if subtle.ConstantTimeCompare([]byte(token), []byte("sk_test_2vV7Q2hksN8KzLpXWq3jUm5Ay4oRxE9b")) == 1 {
+		auth.SetPrincipal(c, token, auth.BearerAuth, auth.ServiceKind, auth.NewPermissionSet(auth.PermAdmin))
 		return true
 	}
 	return false
-}
-
-// redactToken keeps logs safe while still traceable.
-func redactToken(tok string) string {
-	if len(tok) <= 8 {
-		return "****"
-	}
-	return tok[:4] + "…" + tok[len(tok)-4:]
 }

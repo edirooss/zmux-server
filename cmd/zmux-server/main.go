@@ -97,10 +97,10 @@ func main() {
 
 		// --- Protected endpoints (auth required) ---
 		{
-			authed := r.Group("", mw.Authentication, mw.ValidateSessionCSRF) // Any authenticated principal required (basic, session, or bearer token)
+			authed := r.Group("", mw.Authentication, mw.ValidateSessionCSRF) // Any authenticated principal required
 			authed.GET("/api/me", handler.Me)
 
-			authzed := authed.Group("", mw.Authorization(auth.Basic, auth.Session)) // Only basic or session principals are allowed (excludes bearer token access)
+			authzed := authed.Group("", mw.Authorization(auth.BasicAuth, auth.SessionAuth)) // Only principals authed via basic or session are allowed (excludes bearer token access)
 			authzed.GET("/api/csrf", handler.IssueSessionCSRF)
 
 			{
@@ -186,7 +186,12 @@ func accessLog(log *zap.Logger) gin.HandlerFunc {
 			zap.Duration("latency", latency),
 		}
 		if p := auth.GetPrincipal(c); p != nil {
-			fields = append(fields, zap.Dict("auth", zap.String("kind", p.Kind.String()), zap.String("id", p.ID)))
+			fields = append(fields, zap.Dict("principal",
+				zap.String("id", p.ID),
+				zap.String("kind", p.PrincipalKind.String()),
+				zap.String("auth_type", p.AuthType.String()),
+				zap.Strings("permissions", p.GetPermissions()),
+			))
 		}
 		if joinedErr != nil {
 			fields = append(fields, zap.Error(joinedErr))

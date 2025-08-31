@@ -8,9 +8,9 @@ import (
 )
 
 // Authorization returns middleware that permits access only if the authenticated
-// Principal's Kind is in the allowed list. Otherwise responds with 403 Forbidden.
-func Authorization(allowed ...auth.Kind) gin.HandlerFunc {
-	allowedSet := make(map[auth.Kind]struct{}, len(allowed))
+// Principal's auth type is in the allowed list. Otherwise responds with 403 Forbidden.
+func Authorization(allowed ...auth.AuthType) gin.HandlerFunc {
+	allowedSet := make(map[auth.AuthType]struct{}, len(allowed))
 	for _, k := range allowed {
 		allowedSet[k] = struct{}{}
 	}
@@ -23,7 +23,7 @@ func Authorization(allowed ...auth.Kind) gin.HandlerFunc {
 			return
 		}
 
-		if _, ok := allowedSet[p.Kind]; !ok {
+		if _, ok := allowedSet[p.AuthType]; !ok {
 			// Authenticated but not authorized
 			c.AbortWithStatus(http.StatusForbidden)
 			return

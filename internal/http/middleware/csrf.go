@@ -16,7 +16,7 @@ import (
 //   - Aborts with 400 Bad Request if the token is missing or invalid.
 func ValidateSessionCSRF(c *gin.Context) {
 	// Skip for non session-authenticated requests
-	if p := auth.GetPrincipal(c); p != nil && p.Kind != auth.Session {
+	if p := auth.GetPrincipal(c); p != nil && p.AuthType != auth.SessionAuth {
 		c.Next()
 		return
 	}

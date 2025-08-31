@@ -48,7 +48,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	auth.SetPrincipal(c, &auth.Principal{Kind: auth.Session, ID: uid})
+	auth.SetPrincipal(c, uid, auth.SessionAuth, auth.AdminKind, auth.NewPermissionSet(auth.PermAdmin))
 	c.Status(http.StatusOK)
 }
 
@@ -75,5 +75,10 @@ func Me(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"kind": p.Kind.String(), "id": p.ID})
+	c.JSON(http.StatusOK, gin.H{
+		"id":          p.ID,
+		"kind":        p.PrincipalKind.String(),
+		"auth_type":   p.AuthType.String(),
+		"permissions": p.GetPermissions(),
+	})
 }
