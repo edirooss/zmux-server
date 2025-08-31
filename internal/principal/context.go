@@ -4,12 +4,8 @@ import "github.com/gin-gonic/gin"
 
 const principalKey = "auth.principal"
 
-func SetPrincipal(c *gin.Context, id string, authType AuthType, kind Kind) {
-	c.Set(principalKey, &Principal{
-		ID:       id,
-		AuthType: authType,
-		Kind:     kind,
-	})
+func SetPrincipal(c *gin.Context, p *Principal) {
+	c.Set(principalKey, p)
 }
 
 func GetPrincipal(c *gin.Context) *Principal {

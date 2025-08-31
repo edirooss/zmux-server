@@ -1,12 +1,12 @@
 package principal
 
-type Kind int     // principal kind (admin|service_account)
-type AuthType int // principal auth type (session|basic|bearer)
+type Kind int           // principal kind (admin|service_account)
+type CredentialType int // principal credential type (login|session|basic|bearer)
 
 type Principal struct {
-	ID       string
-	Kind     Kind
-	AuthType AuthType
+	ID             string // user id for admins, account id for service accounts
+	PrincipalType  Kind
+	CredentialType CredentialType
 }
 
 const (
@@ -15,9 +15,10 @@ const (
 )
 
 const (
-	SessionAuth AuthType = iota // Auth via session cookie
-	BasicAuth                   // Auth via http basic (username/password)
-	BearerAuth                  // Auth via http bearer (token)
+	Login   CredentialType = iota // Auth via login form (username/password)
+	Session                       // Auth via cookie-based session
+	Basic                         // Auth via http basic (username/password)
+	Bearer                        // Auth via http bearer (token)
 )
 
 func (k Kind) String() string {
@@ -31,13 +32,15 @@ func (k Kind) String() string {
 	}
 }
 
-func (a AuthType) String() string {
+func (a CredentialType) String() string {
 	switch a {
-	case BasicAuth:
-		return "basic"
-	case SessionAuth:
+	case Login:
+		return "login"
+	case Session:
 		return "session"
-	case BearerAuth:
+	case Basic:
+		return "basic"
+	case Bearer:
 		return "bearer"
 	default:
 		return "unknown"

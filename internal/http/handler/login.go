@@ -4,24 +4,25 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/edirooss/zmux-server/internal/env"
 	"github.com/edirooss/zmux-server/internal/principal"
+	"github.com/edirooss/zmux-server/internal/service"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
 
-type AuthHandler struct {
+type LoginHandler struct {
 	log   *zap.Logger
+	svc   *service.AuthService
 	isDev bool
 }
 
-func NewAuthHandler(log *zap.Logger, isDev bool) *AuthHandler {
-	return &AuthHandler{log.Named("auth"), isDev}
+func NewLoginHandler(log *zap.Logger, authsvc *service.AuthService, isDev bool) *LoginHandler {
+	return &LoginHandler{log.Named("login"), authsvc, isDev}
 }
 
 // Login authenticates a user and creates a new session.
-func (h *AuthHandler) Login(c *gin.Context) {
+func (h *LoginHandler) Login(c *gin.Context) {
 	var req struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
@@ -32,15 +33,15 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// TODO(auth): replace with real user lookup + password verify (bcrypt/argon2id).
-	if !(req.Username == env.Admin.Username && req.Password == env.Admin.Password) {
+	p, ok := h.svc.ValidateUsernamePassword(req.Username, req.Password, principal.Login)
+	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid credentials"})
 		return
 	}
-	uid := req.Username
+	principal.SetPrincipal(c, p)
 
 	sess := sessions.Default(c)
-	sess.Set("uid", uid)
+	sess.Set("uid", p.ID)
 	sess.Set("last_touch", time.Now().Unix())
 	if err := sess.Save(); err != nil {
 		c.Error(err)
@@ -48,12 +49,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	principal.SetPrincipal(c, uid, principal.SessionAuth, principal.Admin)
 	c.Status(http.StatusOK)
 }
 
 // Logout clears the current session.
-func (h *AuthHandler) Logout(c *gin.Context) {
+func (h *LoginHandler) Logout(c *gin.Context) {
 	sess := sessions.Default(c)
 	sess.Clear()
 	sess.Options(sessions.Options{
@@ -76,8 +76,8 @@ func Me(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"id":        p.ID,
-		"kind":      p.Kind.String(),
-		"auth_type": p.AuthType.String(),
+		"id":              p.ID,
+		"principal_type":  p.PrincipalType.String(),
+		"credential_type": p.CredentialType.String(),
 	})
 }

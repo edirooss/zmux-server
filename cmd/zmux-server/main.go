@@ -9,6 +9,7 @@ import (
 	"github.com/edirooss/zmux-server/internal/http/handler"
 	mw "github.com/edirooss/zmux-server/internal/http/middleware"
 	"github.com/edirooss/zmux-server/internal/principal"
+	"github.com/edirooss/zmux-server/internal/service"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/secure"
 	"github.com/gin-contrib/sessions"
@@ -84,12 +85,14 @@ func main() {
 
 	// Register route handlers
 	{
+		authsvc := service.NewAuthService()
+
 		// --- Public endpoints (no auth) ---
 		{
 			r.GET("/api/ping", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"message": "pong"}) })
 
 			{
-				authhndler := handler.NewAuthHandler(log, isDev)
+				authhndler := handler.NewLoginHandler(log, authsvc, isDev)
 				r.POST("/api/login", authhndler.Login)
 				r.POST("/api/logout", authhndler.Logout)
 			}
@@ -97,7 +100,7 @@ func main() {
 
 		// --- Protected endpoints (auth required) ---
 		{
-			authed := r.Group("", mw.Authentication, mw.ValidateSessionCSRF) // Any authenticated principal required (admin|service_account)
+			authed := r.Group("", mw.Authentication(authsvc), mw.ValidateSessionCSRF) // Any authenticated principal required (admin|service_account)
 			authed.GET("/api/me", handler.Me)
 
 			authzed := authed.Group("", mw.Authorization(principal.Admin)) // Only admin principal
@@ -188,8 +191,8 @@ func accessLog(log *zap.Logger) gin.HandlerFunc {
 		if p := principal.GetPrincipal(c); p != nil {
 			fields = append(fields, zap.Dict("principal",
 				zap.String("id", p.ID),
-				zap.String("kind", p.Kind.String()),
-				zap.String("auth_type", p.AuthType.String()),
+				zap.String("principal_type", p.PrincipalType.String()),
+				zap.String("credential_type", p.CredentialType.String()),
 			))
 		}
 		if joinedErr != nil {

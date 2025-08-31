@@ -23,7 +23,7 @@ func Authorization(allowed ...principal.Kind) gin.HandlerFunc {
 			return
 		}
 
-		if _, ok := allowedSet[p.Kind]; !ok {
+		if _, ok := allowedSet[p.PrincipalType]; !ok {
 			// Authenticated but not authorized
 			c.AbortWithStatus(http.StatusForbidden)
 			return

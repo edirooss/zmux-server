@@ -1,45 +1,50 @@
 package middleware
 
 import (
-	"crypto/subtle"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/edirooss/zmux-server/internal/env"
 	"github.com/edirooss/zmux-server/internal/principal"
+	"github.com/edirooss/zmux-server/internal/service"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 )
 
 // Authentication allows access if either valid Basic credentials, valid session, or valid Bearer token exists.
 // Responds with 401 Unauthorized if none validate.
-func Authentication(c *gin.Context) {
-	if isBasicAuthenticated(c) || isSessionAuthenticated(c) || isBearerTokenValid(c) {
-		c.Next()
-		return
+func Authentication(svc *service.AuthService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if isBasicAuthenticated(c, svc) || isSessionAuthenticated(c, svc) || isBearerTokenValid(c, svc) {
+			c.Next()
+			return
+		}
+		c.AbortWithStatus(http.StatusUnauthorized)
 	}
-	c.AbortWithStatus(http.StatusUnauthorized)
 }
 
 // isBasicAuthenticated checks the HTTP request for Basic Authentication credentials.
-func isBasicAuthenticated(c *gin.Context) bool {
+func isBasicAuthenticated(c *gin.Context, svc *service.AuthService) bool {
 	user, pass, hasAuth := c.Request.BasicAuth()
-	if hasAuth && user == env.Admin.Username && pass == env.Admin.Password {
-		principal.SetPrincipal(c, user, principal.BasicAuth, principal.Admin)
-		return true
+	if hasAuth {
+		if p, ok := svc.ValidateUsernamePassword(user, pass, principal.Basic); ok {
+			principal.SetPrincipal(c, p)
+			return true
+		}
 	}
 	return false
 }
 
 // isSessionAuthenticated returns true if the session is valid.
 // Also updates the session's "last_touch" timestamp if older than 15 minutes.
-func isSessionAuthenticated(c *gin.Context) bool {
+func isSessionAuthenticated(c *gin.Context, svc *service.AuthService) bool {
 	session := sessions.Default(c)
 	userID, _ := session.Get("uid").(string)
-	if userID == "" {
+	p, ok := svc.ValidateSession(userID)
+	if !ok {
 		return false
 	}
+	principal.SetPrincipal(c, p)
 
 	const sessionTTL = 15 * 60 // 15 minutes
 	now := time.Now().Unix()
@@ -49,13 +54,12 @@ func isSessionAuthenticated(c *gin.Context) bool {
 		_ = session.Save()
 	}
 
-	principal.SetPrincipal(c, userID, principal.SessionAuth, principal.Admin)
 	return true
 }
 
 // isBearerTokenValid validates Authorization: Bearer <token> against a demo secret.
 // TODO(bearer): replace with lookup+hash compare for production.
-func isBearerTokenValid(c *gin.Context) bool {
+func isBearerTokenValid(c *gin.Context, svc *service.AuthService) bool {
 	h := c.GetHeader("Authorization")
 	if h == "" {
 		return false
@@ -69,8 +73,8 @@ func isBearerTokenValid(c *gin.Context) bool {
 		return false
 	}
 	// constant-time compare to avoid timing side channels
-	if subtle.ConstantTimeCompare([]byte(token), []byte("sk_test_2vV7Q2hksN8KzLpXWq3jUm5Ay4oRxE9b")) == 1 {
-		principal.SetPrincipal(c, token, principal.BearerAuth, principal.ServiceAccount)
+	if p, ok := svc.ValidateBearerToken(token); ok {
+		principal.SetPrincipal(c, p)
 		return true
 	}
 	return false
