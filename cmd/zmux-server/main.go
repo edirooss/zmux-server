@@ -40,9 +40,9 @@ func main() {
 
 		if isDev { // Enable CORS for local Vite dev
 			r.Use(cors.New(cors.Config{
-				AllowOrigins:     []string{"http://localhost:5173", "http://localhost:4173"},
+				AllowOrigins:     []string{"http://localhost:5173", "http://localhost:4173", "http://127.0.0.1:3000"},
 				AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-				AllowHeaders:     []string{"Content-Type", "X-CSRF-Token"},
+				AllowHeaders:     []string{"Content-Type", "X-CSRF-Token", "Authorization"},
 				ExposeHeaders:    []string{"X-Total-Count", "X-Cache", "X-Summary-Generated-At"},
 				AllowCredentials: true, // Allow cookies in dev
 				MaxAge:           12 * time.Hour,
