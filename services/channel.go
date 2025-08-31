@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/edirooss/zmux-server/internal/domain/channel"
-	"github.com/edirooss/zmux-server/redis"
+	"github.com/edirooss/zmux-server/internal/redis"
 	"go.uber.org/zap"
 )
 

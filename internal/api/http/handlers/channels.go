@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/edirooss/zmux-server/internal/api/http/dto"
-	"github.com/edirooss/zmux-server/redis"
+	"github.com/edirooss/zmux-server/internal/redis"
 	"github.com/edirooss/zmux-server/services"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"

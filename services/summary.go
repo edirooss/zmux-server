@@ -11,7 +11,7 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	"github.com/edirooss/zmux-server/internal/domain/channel"
-	"github.com/edirooss/zmux-server/redis"
+	"github.com/edirooss/zmux-server/internal/redis"
 	"go.uber.org/zap"
 )
 
