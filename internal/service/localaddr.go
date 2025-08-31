@@ -1,5 +1,4 @@
-// services/netaddrs.go
-package services
+package service
 
 import (
 	"context"

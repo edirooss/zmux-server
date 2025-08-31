@@ -1,5 +1,4 @@
-// services/summary.go
-package services
+package service
 
 import (
 	"context"

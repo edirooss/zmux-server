@@ -1,5 +1,4 @@
-// services/remux_command_builder.go
-package services
+package service
 
 import (
 	"strconv"

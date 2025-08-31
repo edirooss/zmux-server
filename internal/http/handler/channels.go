@@ -11,7 +11,7 @@ import (
 
 	"github.com/edirooss/zmux-server/internal/http/dto"
 	"github.com/edirooss/zmux-server/internal/redis"
-	"github.com/edirooss/zmux-server/internal/services"
+	"github.com/edirooss/zmux-server/internal/service"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
@@ -30,22 +30,22 @@ import (
 //   - Standard REST semantics (RFC 9110, RFC 5789).
 type ChannelsHandler struct {
 	log        *zap.Logger
-	svc        *services.ChannelService
-	summarySvc *services.SummaryService
+	svc        *service.ChannelService
+	summarySvc *service.SummaryService
 }
 
 // NewChannelsHandler constructs a ChannelsHandler instance.
 func NewChannelsHandler(log *zap.Logger) (*ChannelsHandler, error) {
 	// Service for channel CRUD
-	channelService, err := services.NewChannelService(log)
+	channelService, err := service.NewChannelService(log)
 	if err != nil {
 		return nil, fmt.Errorf("new channel service: %w", err)
 	}
 
 	// Service for generating channel summaries
-	summarySvc := services.NewSummaryService(
+	summarySvc := service.NewSummaryService(
 		log,
-		services.SummaryOptions{
+		service.SummaryOptions{
 			TTL:            1000 * time.Millisecond, // tune as needed
 			RefreshTimeout: 500 * time.Millisecond,
 		},
@@ -342,7 +342,7 @@ func (h *ChannelsHandler) Summary(c *gin.Context) {
 	force := c.Query("force") == "1"
 
 	var (
-		res services.SummaryResult
+		res service.SummaryResult
 		err error
 	)
 	if force {
