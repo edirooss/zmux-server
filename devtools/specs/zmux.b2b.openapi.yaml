@@ -24,6 +24,8 @@ info:
     url: https://internal.zmux/license-info
 
 servers:
+  - url: http://127.0.0.1:8080
+    description: Development
   - url: https://internal.zmux
     description: Production
 
@@ -130,7 +132,7 @@ paths:
             examples:
               updateChannel:
                 summary: Update channel properties
-                description: Sets `name`, `input.url` and enables the channel.
+                description: Sets `name`, `input.url`, `input.username`, `input.password` and enables the channel.
                 value:
                   name: "Live1"
                   input:
@@ -189,6 +191,12 @@ paths:
             X-Request-Id:
               $ref: "#/components/headers/X-Request-Id"
         "422": { $ref: "#/components/responses/422UnprocessableContent" }
+        "423":
+          description: |
+            Locked — The targeted channel is temporarily locked by another in-flight operation.
+
+            - Requests received while the resource is locked are rejected immediately.
+            - Clients could retry after the conflicting operation has completed.
         "429": { $ref: "#/components/responses/429TooManyRequests" }
         "500": { $ref: "#/components/responses/500InternalServerError" }
         "503": { $ref: "#/components/responses/503ServiceUnavailable" }
@@ -309,7 +317,7 @@ components:
     Quota-Limit:
       description: >
         Maximum number of channels that may be enabled concurrently for the authenticated client.
-        When quota is unlimited or not enforced, this header is **omitted**.
+        When quota is unlimited or not enforced, this header is omitted.
       schema:
         type: integer
         format: int64
@@ -319,7 +327,7 @@ components:
     Quota-Remaining:
       description: >
         Remaining number of channels that may be enabled before hitting the quota.
-        When quota is unlimited or not enforced, this header is **omitted**.
+        When quota is unlimited or not enforced, this header is omitted.
       schema:
         type: integer
         format: int64
@@ -398,7 +406,7 @@ components:
           $ref: "#/components/headers/X-Request-Id"
 
     429TooManyRequests:
-      description: Too Many Requests — rate limit exceeded.
+      description: Too Many Requests — client exceeds defined rate limits or concurrency thresholds.
       headers:
         X-Request-Id:
           $ref: "#/components/headers/X-Request-Id"
@@ -408,7 +416,7 @@ components:
         X-Request-Id:
           $ref: "#/components/headers/X-Request-Id"
     503ServiceUnavailable:
-      description: Service Unavailable — temporary downtime; try again later.
+      description: Service Unavailable — temporarily unavailable due to overload or scheduled maintenance.
       headers:
         X-Request-Id:
           $ref: "#/components/headers/X-Request-Id"
@@ -420,7 +428,6 @@ components:
         Represents a single channel, defined by its configuration.
 
         - Clients MUST ignore unknown properties in responses.
-        - Undocumented additonal properties (obscured) MAY exist and vary by client authorization level.
 
       properties:
         id:
@@ -445,8 +452,6 @@ components:
               format: uri
               description: |
                 A URL that identifies the source or destination of a multimedia stream.
-
-                Note: When `input.url` is non-null, `name` is also non-null.
               maxLength: 2048
             username:
               type: string
@@ -456,8 +461,6 @@ components:
               description: |
                 Username for authenticating to the media source.
                 Raw characters (plain-text, NOT percent-encoded).
-
-                Note: When `username` is non-null, `input.url` is also non-null.
             password:
               type: string
               nullable: true
@@ -466,10 +469,8 @@ components:
               description: |
                 Password for authenticating to the media source.
                 Raw characters (plain-text, NOT percent-encoded).
-
-                Note: When `password` is non-null, `username` and `input.url` are also non-null.
           additionalProperties: true
-          required: [url]
+          required: [url, username, password]
         enabled:
           type: boolean
           description: |
@@ -477,8 +478,6 @@ components:
 
             Indicates whether the channel is enabled — that is, whether media reading from the input source is enabled.
             When the channel is disabled, the server does not attempt to connect to the input media source.
-
-            Note: When `enabled` is `true`, `input.url` and `name` are non-null.
       additionalProperties: true
       required: [id, name, input, enabled]
 
@@ -492,18 +491,15 @@ components:
       description: |
         Subset of channel fields to update.
 
-        - Unknown/unexpected or unauthorized properties in requests are rejected with `400 Bad Request`.
-        - Undocumented additonal properties (obscured) MAY exist and vary by client authorization level.
+        ### Cross-field Dependency Rules
+        Cross-field validation is evaluated **after** applying the merge patch:
 
-        Field constraints
-        - Credentials must be provided via `input.username` and `input.password`; 
-          `input.url` MUST NOT contain RFC 3986 `userinfo` (e.g., `username[:password]@`) → **422 Unprocessable Content**.
-
-        Cross-field constraints (evaluated **after** applying the JSON Merge Patch):
-        - `enabled: true` → both `name` and `input.url` must be non-null.
-        - `input.url` non-null → `name` must be non-null.
-        - `input.username` non-null → `input.url` must be non-null.
-        - `input.password` non-null → `input.username` must be non-null.
+        - `enabled: true` → both `name` and `input.url` must be **non-null**
+        - `input.url` non-null → `name` must be **non-null**
+        - `input.username` non-null → `input.url` must be **non-null**
+        - `input.password` non-null → `input.username` must be **non-null**
+        
+        Requests violating any cross-field dependency rules → `422 Unprocessable Content`.
 
       type: object
       properties:
@@ -519,19 +515,28 @@ components:
               type: string
               nullable: true
               format: uri
+              minLength: 1
               maxLength: 2048
               description: >
                 An **absolute URL** that specifies the source/destination of a multimedia stream.
 
-                MUST follow the generic URI syntax [RFC 3986].
-                MAY be further constrained or extended by the semantics of the specific protocol (scheme).
+                ### URI Syntax
+                
+                  - MUST follow the generic URI syntax [RFC 3986].
+                  - MAY be further constrained or extended by the semantics of the specific protocol (scheme).
+
+                ```
+                  <schema>://<host>:<port>/<path-and-query>
+                ```
 
                 URI syntax violations (e.g., malformed encoding, invalid structure) → `422 Unprocessable Content`.
 
                 ### Authentication
 
-                Provide credentials via `input.username` and `input.password`.
-                `input.url` MUST NOT contain RFC 3986 `userinfo` (e.g., `username[:password]@`). Requests containing `userinfo` in `input.url` → `422 Unprocessable Content`.
+                  - `input.url` **MUST NOT** contain RFC 3986 `userinfo` (e.g., `username[:password]@`). 
+                  - Provide credentials via `input.username` and `input.password`.
+                
+                Requests containing `userinfo` in `input.url` → `422 Unprocessable Content`.
 
                 ### Protocol-Specific Notes
 
@@ -547,12 +552,9 @@ components:
 
                 ### References
 
-                - [RFC 3986] Uniform Resource Identifier (URI): Generic Syntax
-                - [RFC 2326] Real Time Streaming Protocol (RTSP) 1.0
+                  - [RFC 3986] Uniform Resource Identifier (URI): Generic Syntax
+                  - [RFC 2326] Real Time Streaming Protocol (RTSP) 1.0
 
-                ### Note: Input URL & Name Dependency
-
-                - `input.url` with `name` null (not already configured or included in this patch) → `422 Unprocessable Content`.
             username:
               type: string
               nullable: true
@@ -561,10 +563,6 @@ components:
               description: |
                 Username for authenticating to the media source.
                 Raw characters (plain-text, NOT percent-encoded).
-
-                ### Note: Username & Input URL Dependency
-
-                - `input.username` with `input.url` null (not already configured or included in this patch) → `422 Unprocessable Content`.
             password:
               type: string
               nullable: true
@@ -573,10 +571,6 @@ components:
               description: |
                 Password for authenticating to the media source.
                 Raw characters (plain-text, NOT percent-encoded).
-
-                ### Note: Password & Username Dependency
-
-                - `input.password` with `input.username` null (not already configured or included in this patch) → `422 Unprocessable Content`.
           additionalProperties: false
         enabled:
           type: boolean
@@ -584,11 +578,6 @@ components:
             Enables/disables media reading from the input source. 
             When channel is disabled, the server does not attempt to connect to the input media source.
             Useful for pausing a channel without losing its settings.
-
-            ### Note: Enabled & Input URL/Name Dependency
-
-            - `enabled: true` with `input.url` null (not already configured or included in this patch) → `422 Unprocessable Content`.
-            - `enabled: true` with `name` null (not already configured or included in this patch) → `422 Unprocessable Content`.
       additionalProperties: false
     ChannelStatus:
       type: object
@@ -596,7 +585,6 @@ components:
         Media reading/processing status for a single channel.
 
         - Clients MUST ignore unknown properties in responses.
-        - Undocumented additonal properties (obscured) MAY exist and vary by client authorization level.
 
       properties:
         id:
