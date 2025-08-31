@@ -378,3 +378,29 @@ func (h *ChannelsHandler) Summary(c *gin.Context) {
 
 	c.JSON(http.StatusOK, res.Data)
 }
+
+// ---- Channel Status List -----
+// Prototype/demo -- quick win based on Summary.
+func (h *ChannelsHandler) Status(c *gin.Context) {
+	summaryResult, err := h.summarySvc.Get(c.Request.Context())
+	if err != nil {
+		c.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		return
+	}
+
+	data := make([]dto.ChannelStatus, 0, len(summaryResult.Data))
+	for _, item := range summaryResult.Data {
+		data = append(data, dto.ChannelStatus{
+			ID:     item.ID,
+			Online: item.Status != nil && item.Status.Liveness == "Live",
+		})
+	}
+
+	// Friendly cache headers for debugging/observability
+	c.Header("X-Cache", map[bool]string{true: "HIT", false: "MISS"}[summaryResult.CacheHit])
+	c.Header("X-Status-Generated-At", strconv.FormatInt(summaryResult.GeneratedAt.UnixMilli(), 10))
+	c.Header("X-Total-Count", strconv.Itoa(len(data)))
+
+	c.JSON(http.StatusOK, data)
+}
