@@ -4,7 +4,7 @@ import (
 	"crypto/subtle"
 	"net/http"
 
-	"github.com/edirooss/zmux-server/internal/domain/principal"
+	"github.com/edirooss/zmux-server/internal/principal"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 )

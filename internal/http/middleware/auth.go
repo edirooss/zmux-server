@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/edirooss/zmux-server/internal/domain/principal"
 	"github.com/edirooss/zmux-server/internal/env"
+	"github.com/edirooss/zmux-server/internal/principal"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 )

@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/edirooss/zmux-server/internal/domain/principal"
 	"github.com/edirooss/zmux-server/internal/env"
+	"github.com/edirooss/zmux-server/internal/principal"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"

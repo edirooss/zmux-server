@@ -3,7 +3,7 @@ package middleware
 import (
 	"net/http"
 
-	"github.com/edirooss/zmux-server/internal/domain/principal"
+	"github.com/edirooss/zmux-server/internal/principal"
 	"github.com/gin-gonic/gin"
 )
 

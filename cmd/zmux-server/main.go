@@ -6,9 +6,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/edirooss/zmux-server/internal/domain/principal"
 	"github.com/edirooss/zmux-server/internal/http/handler"
 	mw "github.com/edirooss/zmux-server/internal/http/middleware"
+	"github.com/edirooss/zmux-server/internal/principal"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/secure"
 	"github.com/gin-contrib/sessions"
