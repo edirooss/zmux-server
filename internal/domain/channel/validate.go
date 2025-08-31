@@ -3,7 +3,7 @@ package channel
 import (
 	"errors"
 
-	"github.com/edirooss/zmux-server/pkg/utils/avurl"
+	"github.com/edirooss/zmux-server/pkg/urlutil"
 )
 
 // validateInputURL
@@ -15,7 +15,7 @@ import (
 // Returns: error on validation failure, or nil if valid.
 func validateInputURL(raw string) error {
 	// Parse URL
-	url, err := avurl.Parse(raw)
+	url, err := urlutil.Parse(raw)
 	if err != nil {
 		return err
 	}
@@ -38,7 +38,7 @@ func validateInputURL(raw string) error {
 // Returns: error on validation failure, or nil if valid.
 func validateOutputURL(raw string) error {
 	// Parse URL
-	url, err := avurl.Parse(raw)
+	url, err := urlutil.Parse(raw)
 	if err != nil {
 		return err
 	}

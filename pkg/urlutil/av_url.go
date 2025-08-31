@@ -1,11 +1,11 @@
-package avurl
+package urlutil
 
 import (
 	"errors"
 	"fmt"
 	"strings"
 
-	"github.com/edirooss/zmux-server/pkg/utils/hostutil"
+	"github.com/edirooss/zmux-server/pkg/hostutil"
 )
 
 type URL struct {

@@ -1,4 +1,4 @@
-package avurl
+package urlutil
 
 import "strings"
 

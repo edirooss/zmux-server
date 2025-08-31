@@ -3,7 +3,7 @@ package handlers
 import (
 	"net/http"
 
-	"github.com/edirooss/zmux-server/pkg/utils/avurl"
+	"github.com/edirooss/zmux-server/pkg/urlutil"
 	"github.com/gin-gonic/gin"
 )
 
@@ -19,7 +19,7 @@ func (h *URLParse) Parse(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
-	url, err := avurl.Parse(req.URL)
+	url, err := urlutil.Parse(req.URL)
 	if err != nil {
 		c.Error(err)
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"message": err.Error()})
@@ -39,7 +39,7 @@ func (h *URLParse) RawParse(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
-	url, err := avurl.RawParse(req.URL)
+	url, err := urlutil.RawParse(req.URL)
 	if err != nil {
 		c.Error(err)
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"message": err.Error()})
