@@ -44,7 +44,7 @@ paths:
         Returns all channels visible to the client.
 
         - `200` with `[]` when no channels are authorized.
-        - `404` if the client is not permitted to use this endpoint (obscure existence).
+        - `403` if the client is not permitted to use this endpoint.
 
       parameters:
         - $ref: "#/components/parameters/X-Request-Id"
@@ -95,7 +95,7 @@ paths:
                   summary: No authorized channels
                   value: []
         "401": { $ref: "#/components/responses/401Unauthorized" }
-        "404": { $ref: "#/components/responses/404NotFound" }
+        "403": { $ref: "#/components/responses/403Forbidden" }
         "429": { $ref: "#/components/responses/429TooManyRequests" }
         "500": { $ref: "#/components/responses/500InternalServerError" }
         "503": { $ref: "#/components/responses/503ServiceUnavailable" }
@@ -168,6 +168,7 @@ paths:
               $ref: "#/components/headers/X-Request-Id"
         "400": { $ref: "#/components/responses/400BadRequest" }
         "401": { $ref: "#/components/responses/401Unauthorized" }
+        "403": { $ref: "#/components/responses/403Forbidden" }
         "404": { $ref: "#/components/responses/404NotFound" }
         "409":
           description: |
@@ -201,7 +202,7 @@ paths:
         Returns the online/offline runtime status for all channels visible to the client.
 
         - `200` with `[]` when no channels are authorized.
-        - `404` if the client is not permitted to use this endpoint (obscure existence).
+        - `403` if the client is not permitted to use this endpoint.
 
       parameters:
         - $ref: "#/components/parameters/X-Request-Id"
@@ -232,7 +233,7 @@ paths:
                   summary: No authorized channels
                   value: []
         "401": { $ref: "#/components/responses/401Unauthorized" }
-        "404": { $ref: "#/components/responses/404NotFound" }
+        "403": { $ref: "#/components/responses/403Forbidden" }
         "429": { $ref: "#/components/responses/429TooManyRequests" }
         "500": { $ref: "#/components/responses/500InternalServerError" }
         "503": { $ref: "#/components/responses/503ServiceUnavailable" }
@@ -287,7 +288,7 @@ paths:
                     used: 12
                     remaining: null
         "401": { $ref: "#/components/responses/401Unauthorized" }
-        "404": { $ref: "#/components/responses/404NotFound" }
+        "403": { $ref: "#/components/responses/403Forbidden" }
         "429": { $ref: "#/components/responses/429TooManyRequests" }
         "500": { $ref: "#/components/responses/500InternalServerError" }
         "503": { $ref: "#/components/responses/503ServiceUnavailable" }
@@ -355,10 +356,8 @@ components:
         - **JSON schema shape violation**:
           - Incorrect data type (i.e., field-type mismatch)
           - Non-nullable property explicitly set to null (i.e., invalid field `null` assignment)
-          - Disallowed additional properties (i.e., unknown/unexpected fields)
+          - Disallowed additional properties (i.e., unknown/unexpected or unauthorized fields)
           - Omitted mandatory properties (i.e., missing required fields)
-        - **Field-level access policy violation**:
-          - Access restricted properties (i.e., unauthorized field access) — `400` is used instead of `403` to avoid disclosing field existence.
 
       headers:
         X-Request-Id:
@@ -370,9 +369,16 @@ components:
         X-Request-Id:
           $ref: "#/components/headers/X-Request-Id"
 
+    403Forbidden:
+      description: |
+        Forbidden — the client lacks permission to access the targeted resource.
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/X-Request-Id"
+
     404NotFound:
       description: |
-        Not Found — the targeted resource does not exist, or access is intentionally obscured for entity and collection endpoints (`404` is used instead of `403` to avoid leaking existence).
+        Not Found — the targeted resource does not exist.
       headers:
         X-Request-Id:
           $ref: "#/components/headers/X-Request-Id"
@@ -386,7 +392,7 @@ components:
           - Numeric value out of range
           - Unsupported enum value
           - Cross-field value dependency issues (e.g., `enabled: true` requires `name` and `input.url`)
-          - Field-level value blocked by allowlist/denylist logic (`422` used instead of `403` to avoid exposing policy details)
+          - Field-level value blocked by allowlist/denylist logic
       headers:
         X-Request-Id:
           $ref: "#/components/headers/X-Request-Id"
