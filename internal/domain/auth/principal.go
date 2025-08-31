@@ -8,7 +8,7 @@ type Kind int
 const (
 	Basic   Kind = iota // basic
 	Session             // session
-	APIKey              // apikey
+	Token               // bearer token
 )
 
 func (k Kind) String() string {
@@ -17,8 +17,8 @@ func (k Kind) String() string {
 		return "basic"
 	case Session:
 		return "session"
-	case APIKey:
-		return "apikey"
+	case Token:
+		return "token"
 	default:
 		return ""
 	}

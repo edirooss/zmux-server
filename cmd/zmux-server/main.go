@@ -90,10 +90,10 @@ func main() {
 
 		// --- Protected endpoints (auth required) ---
 		{
-			authed := r.Group("", middleware.Authentication, middleware.ValidateSessionCSRF) // Any authenticated principal required (basic, session or API key)
+			authed := r.Group("", middleware.Authentication, middleware.ValidateSessionCSRF) // Any authenticated principal required (basic, session, or bearer token)
 			authed.GET("/api/me", handler.Me)
 
-			authzed := authed.Group("", middleware.Authorization(auth.Basic, auth.Session)) // Only basic or session principals are allowed (excludes API key access)
+			authzed := authed.Group("", middleware.Authorization(auth.Basic, auth.Session)) // Only basic or session principals are allowed (excludes bearer token access)
 			authzed.GET("/api/csrf", handler.IssueSessionCSRF)
 
 			{

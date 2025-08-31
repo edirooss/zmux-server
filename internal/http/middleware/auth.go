@@ -1,7 +1,9 @@
 package middleware
 
 import (
+	"crypto/subtle"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/edirooss/zmux-server/internal/domain/auth"
@@ -10,10 +12,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Authentication allows access if either a valid basic auth credentials exists or valid session exists or a valid API key is exists.
-// Responds with 401 Unauthorized if both checks fail.
+// Authentication allows access if either valid Basic credentials, valid session, or valid Bearer token exists.
+// Responds with 401 Unauthorized if none validate.
 func Authentication(c *gin.Context) {
-	if isBasicAuthenticated(c) || isSessionAuthenticated(c) || isAPIKeyValid(c) {
+	if isBasicAuthenticated(c) || isSessionAuthenticated(c) || isBearerTokenValid(c) {
 		c.Next()
 		return
 	}
@@ -51,14 +53,34 @@ func isSessionAuthenticated(c *gin.Context) bool {
 	return true
 }
 
-// isAPIKeyValid checks if the X-API-Key header matches the expected value.
-// TODO: Replace with real validation logic.
-func isAPIKeyValid(c *gin.Context) bool {
-	apiKey := c.GetHeader("X-API-Key")
-	if apiKey == "test-apikey-1234" {
-		auth.SetPrincipal(c, &auth.Principal{Kind: auth.APIKey, ID: apiKey})
+// isBearerTokenValid validates Authorization: Bearer <token> against a demo secret.
+// TODO(bearer): replace with lookup+hash compare for production.
+func isBearerTokenValid(c *gin.Context) bool {
+	h := c.GetHeader("Authorization")
+	if h == "" {
+		return false
+	}
+	const prefix = "Bearer "
+	if !strings.HasPrefix(h, prefix) {
+		return false
+	}
+	token := strings.TrimSpace(strings.TrimPrefix(h, prefix))
+	demoBearerToken := "sk_test_2vV7Q2hksN8KzLpXWq3jUm5Ay4oRxE9b"
+	if token == "" || demoBearerToken == "" {
+		return false
+	}
+	// constant-time compare to avoid timing side channels
+	if subtle.ConstantTimeCompare([]byte(token), []byte(demoBearerToken)) == 1 {
+		auth.SetPrincipal(c, &auth.Principal{Kind: auth.Token, ID: redactToken(token)})
 		return true
-
 	}
 	return false
+}
+
+// redactToken keeps logs safe while still traceable.
+func redactToken(tok string) string {
+	if len(tok) <= 8 {
+		return "****"
+	}
+	return tok[:4] + "…" + tok[len(tok)-4:]
 }
