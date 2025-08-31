@@ -91,7 +91,7 @@ func (h *ChannelsHandler) GetChannelList(c *gin.Context) {
 //   - 422 Unprocessable Entity → Validation failed
 //   - 500 Internal Server Error
 func (h *ChannelsHandler) CreateChannel(c *gin.Context) {
-	var req dto.CreateChannel
+	var req dto.ChannelCreate
 	if err := bind(c.Request, &req); err != nil {
 		c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
@@ -186,7 +186,7 @@ func (h *ChannelsHandler) ModifyChannel(c *gin.Context) {
 		return
 	}
 
-	var req dto.ModifyChannel
+	var req dto.ChannelModify
 	if err := bind(c.Request, &req); err != nil {
 		c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
@@ -254,7 +254,7 @@ func (h *ChannelsHandler) ReplaceChannel(c *gin.Context) {
 		return
 	}
 
-	var req dto.ReplaceChannel
+	var req dto.ChannelReplace
 	if err := bind(c.Request, &req); err != nil {
 		c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})

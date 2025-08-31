@@ -6,18 +6,18 @@ import (
 	"github.com/edirooss/zmux-server/internal/domain/channel"
 )
 
-// CreateChannel is the DTO for creating a new Zmux channel via
+// ChannelCreate is the DTO for creating a new Zmux channel via
 // POST /api/channels.
 //   - All fields are optional. Defaults applied.
-type CreateChannel struct {
+type ChannelCreate struct {
 	Name       W[string]              `json:"name"`        //   optional; string | null   (default: null)
-	Input      W[CreateChannelInput]  `json:"input"`       //   optional; object          (default: {})
-	Output     W[CreateChannelOutput] `json:"output"`      //   optional; object          (default: {})
+	Input      W[ChannelInputCreate]  `json:"input"`       //   optional; object          (default: {})
+	Output     W[ChannelOutputCreate] `json:"output"`      //   optional; object          (default: {})
 	Enabled    W[bool]                `json:"enabled"`     //   optional; bool            (default: false)
 	RestartSec W[uint]                `json:"restart_sec"` //   optional; uint            (default: 3)
 }
 
-type CreateChannelInput struct {
+type ChannelInputCreate struct {
 	URL             W[string] `json:"url"`             //       optional; string | null   (default: null)
 	Username        W[string] `json:"username"`        //       optional; string | null   (default: null)
 	Password        W[string] `json:"password"`        //       optional; string | null   (default: null)
@@ -31,7 +31,7 @@ type CreateChannelInput struct {
 	RTSPTransport   W[string] `json:"rtsp_transport"`  //       optional; string | null   (default: null)
 }
 
-type CreateChannelOutput struct {
+type ChannelOutputCreate struct {
 	URL       W[string] `json:"url"`       //                   optional; string | null   (default: null)
 	Localaddr W[string] `json:"localaddr"` //                   optional; string | null   (default: null)
 	PktSize   W[uint]   `json:"pkt_size"`  //                   optional; uint            (default: 1316)
@@ -43,7 +43,7 @@ type CreateChannelOutput struct {
 // ToChannel maps CreateChannel → channel.ZmuxChannel
 // Disallows explicit null assignment to non-nullable fields.
 // Fills unset fields with defaults.
-func (req *CreateChannel) ToChannel() (*channel.ZmuxChannel, error) {
+func (req *ChannelCreate) ToChannel() (*channel.ZmuxChannel, error) {
 	ch := &channel.ZmuxChannel{}
 
 	// name
@@ -70,7 +70,7 @@ func (req *CreateChannel) ToChannel() (*channel.ZmuxChannel, error) {
 		}
 		ch.Input = *input
 	} else {
-		input, err := new(CreateChannelInput).ToChannelInput()
+		input, err := new(ChannelInputCreate).ToChannelInput()
 		if err != nil {
 			return nil, err
 		}
@@ -89,7 +89,7 @@ func (req *CreateChannel) ToChannel() (*channel.ZmuxChannel, error) {
 		}
 		ch.Output = *output
 	} else {
-		output, err := new(CreateChannelOutput).ToChannelOutput()
+		output, err := new(ChannelOutputCreate).ToChannelOutput()
 		if err != nil {
 			return nil, err
 		}
@@ -124,7 +124,7 @@ func (req *CreateChannel) ToChannel() (*channel.ZmuxChannel, error) {
 // ToChannelInput maps CreateChannelInput → channel.ZmuxChannelInput
 // Disallows explicit null assignment to non-nullable fields.
 // Fills unset fields with defaults.
-func (req *CreateChannelInput) ToChannelInput() (*channel.ZmuxChannelInput, error) {
+func (req *ChannelInputCreate) ToChannelInput() (*channel.ZmuxChannelInput, error) {
 	input := &channel.ZmuxChannelInput{}
 
 	// url
@@ -262,7 +262,7 @@ func (req *CreateChannelInput) ToChannelInput() (*channel.ZmuxChannelInput, erro
 // ToChannelOutput maps CreateChannelOutput → channel.ZmuxChannelOutput
 // Disallows explicit null assignment to non-nullable fields.
 // Fills unset fields with defaults.
-func (req *CreateChannelOutput) ToChannelOutput() (*channel.ZmuxChannelOutput, error) {
+func (req *ChannelOutputCreate) ToChannelOutput() (*channel.ZmuxChannelOutput, error) {
 	output := &channel.ZmuxChannelOutput{}
 
 	// url

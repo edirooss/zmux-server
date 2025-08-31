@@ -7,18 +7,18 @@ import (
 	"github.com/edirooss/zmux-server/internal/domain/channel"
 )
 
-// ReplaceChannel is the DTO for updating a Zmux channel via
+// ChannelReplace is the DTO for updating a Zmux channel via
 // PUT /api/channels/{id}. Full-replacement semantics (RFC 9110):
 //   - All fields are required.
-type ReplaceChannel struct {
+type ChannelReplace struct {
 	Name       W[string]        `json:"name"`        //         required; string | null
-	Input      W[ReplaceInput]  `json:"input"`       //         required; object
-	Output     W[ReplaceOutput] `json:"output"`      //         required; object
+	Input      W[InputReplace]  `json:"input"`       //         required; object
+	Output     W[OutputReplace] `json:"output"`      //         required; object
 	Enabled    W[bool]          `json:"enabled"`     //         required; bool
 	RestartSec W[uint]          `json:"restart_sec"` //         required; uint
 }
 
-type ReplaceInput struct {
+type InputReplace struct {
 	URL             W[string] `json:"url"`             //       required; string | null
 	Username        W[string] `json:"username"`        //       required; string | null
 	Password        W[string] `json:"password"`        //       required; string | null
@@ -32,7 +32,7 @@ type ReplaceInput struct {
 	RTSPTransport   W[string] `json:"rtsp_transport"`  //       required; string | null
 }
 
-type ReplaceOutput struct {
+type OutputReplace struct {
 	URL       W[string] `json:"url"`       //                   required; string | null
 	Localaddr W[string] `json:"localaddr"` //                   required; string | null
 	PktSize   W[uint]   `json:"pkt_size"`  //                   required; uint
@@ -44,7 +44,7 @@ type ReplaceOutput struct {
 // ToChannel maps ReplaceChannel → channel.ZmuxChannel
 // Disallows explicit null assignment to non-nullable fields.
 // Requires all fields to be set (PUT semantics).
-func (req *ReplaceChannel) ToChannel(id int64) (*channel.ZmuxChannel, error) {
+func (req *ChannelReplace) ToChannel(id int64) (*channel.ZmuxChannel, error) {
 	ch := &channel.ZmuxChannel{}
 	ch.ID = id
 
@@ -118,7 +118,7 @@ func (req *ReplaceChannel) ToChannel(id int64) (*channel.ZmuxChannel, error) {
 // ToChannelInput maps ReplaceInput → channel.ZmuxChannelInput
 // Disallows explicit null assignment to non-nullable fields.
 // Requires all fields to be set (PUT semantics).
-func (req *ReplaceInput) ToChannelInput() (*channel.ZmuxChannelInput, error) {
+func (req *InputReplace) ToChannelInput() (*channel.ZmuxChannelInput, error) {
 	input := &channel.ZmuxChannelInput{}
 
 	// url
@@ -255,7 +255,7 @@ func (req *ReplaceInput) ToChannelInput() (*channel.ZmuxChannelInput, error) {
 // ToChannelOutput maps ReplaceOutput → channel.ZmuxChannelOutput
 // Disallows explicit null assignment to non-nullable fields.
 // Requires all fields to be set (PUT semantics).
-func (req *ReplaceOutput) ToChannelOutput() (*channel.ZmuxChannelOutput, error) {
+func (req *OutputReplace) ToChannelOutput() (*channel.ZmuxChannelOutput, error) {
 	output := &channel.ZmuxChannelOutput{}
 
 	// url
