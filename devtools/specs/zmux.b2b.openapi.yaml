@@ -52,8 +52,6 @@ paths:
         "200":
           description: OK — array of authorized `Channel` objects, each representing a single channel as defined by its configuration; empty if none.
           headers:
-            Cache-Control:
-              $ref: "#/components/headers/Cache-Control-NoStore"
             X-Request-Id:
               $ref: "#/components/headers/X-Request-Id"
 
@@ -68,22 +66,30 @@ paths:
                     - id: 1
                       name: Live1
                       input:
-                        url: rtsp://zmuxUser:Aa1234%2F%21%40%23%24@172.16.5.20/live.sdp
+                        url: rtsp://172.16.5.20/live.sdp
+                        username: zmuxUser
+                        password: "Aa1234$#@!"
                       enabled: true
                     - id: 2
                       name: null
                       input:
                         url: null
+                        username: null
+                        password: null
                       enabled: false
                     - id: 7
                       name: Live2
                       input:
-                        url: rtsp://administrator:Bb%2F%26%25%21@203.0.113.45:5544/streaming/video1
+                        url: rtsp://203.0.113.45:5544/streaming/video1
+                        username: null
+                        password: null
                       enabled: false
                     - id: 8
                       name: Live3-channel-reserved
                       input:
                         url: null
+                        username: null
+                        password: null
                       enabled: false
                 emptyList:
                   summary: No authorized channels
@@ -128,7 +134,9 @@ paths:
                 value:
                   name: "Live1"
                   input:
-                    url: "rtsp://zmuxUser:Aa1234%2F%21%40%23%24@172.16.5.20/live.sdp"
+                    url: "rtsp://172.16.5.20/live.sdp"
+                    username: zmuxUser
+                    password: "Aa1234$#@!"
                   enabled: true
               disableChannel:
                 summary: Pause/deactivate a channel
@@ -140,18 +148,18 @@ paths:
                   enabled: true
               clearChannel:
                 summary: Clear/reset channel to null/disabled
-                description: Sets `name` and `input.url` to null and disables the channel.
+                description: Sets `name`, `input.url`, `input.username` and `input.password` to null and disables the channel.
                 value:
                   name: null
                   input:
                     url: null
+                    username: null
+                    password: null
                   enabled: false
       responses:
         "204":
           description: No Content — Channel updated successfully.
           headers:
-            Cache-Control:
-              $ref: "#/components/headers/Cache-Control-NoStore"
             Quota-Limit:
               $ref: "#/components/headers/Quota-Limit"
             Quota-Remaining:
@@ -203,8 +211,6 @@ paths:
           headers:
             X-Request-Id:
               $ref: "#/components/headers/X-Request-Id"
-            Cache-Control:
-              $ref: "#/components/headers/Cache-Control-NoStore"
 
           content:
             application/json:
@@ -234,7 +240,7 @@ paths:
   /api/quota:
     get:
       tags: [Channels]
-      summary: Get enabled-channels quota
+      summary: Get enabled channels quota
       operationId: getQuota
       description: |
         Returns the client's quota for concurrently enabled channels,
@@ -253,8 +259,6 @@ paths:
           headers:
             X-Request-Id:
               $ref: "#/components/headers/X-Request-Id"
-            Cache-Control:
-              $ref: "#/components/headers/Cache-Control-NoStore"
           content:
             application/json:
               schema:
@@ -301,30 +305,6 @@ components:
         type: string
         minLength: 1
         maxLength: 64
-    Cache-Control-NoStore:
-      description: Cache-Control policy for sensitive/dynamic endpoints.
-      schema:
-        type: string
-        default: no-store
-    Retry-After:
-      description: |
-        Advises clients when to retry after a rate limit (`429`) or temporary downtime (`503`).
-
-        The value MAY be either:
-        - A delay in seconds (delta-seconds), e.g., `"60"`.
-        - An absolute date/time in HTTP-date (IMF-fixdate) format, e.g., "Wed, 21 Oct 2015 07:28:00 GMT".
-
-        Clients SHOULD respect this hint before retrying.
-      schema:
-        type: string
-      examples:
-        deltaSeconds:
-          summary: Delay in seconds
-          value: "60"
-        httpDate:
-          summary: Specific retry date/time
-          value: "Wed, 21 Oct 2015 07:28:00 GMT"
-
     Quota-Limit:
       description: >
         Maximum number of channels that may be enabled concurrently for the authenticated client.
@@ -378,7 +358,7 @@ components:
           - Disallowed additional properties (i.e., unknown/unexpected fields)
           - Omitted mandatory properties (i.e., missing required fields)
         - **Field-level access policy violation**:
-          - Access restricted properties (i,e., unauthorized field access) — `400` is used instead of `403` to avoid disclosing field existence.
+          - Access restricted properties (i.e., unauthorized field access) — `400` is used instead of `403` to avoid disclosing field existence.
 
       headers:
         X-Request-Id:
@@ -414,8 +394,6 @@ components:
     429TooManyRequests:
       description: Too Many Requests — rate limit exceeded.
       headers:
-        Retry-After:
-          $ref: "#/components/headers/Retry-After"
         X-Request-Id:
           $ref: "#/components/headers/X-Request-Id"
     500InternalServerError:
@@ -426,8 +404,6 @@ components:
     503ServiceUnavailable:
       description: Service Unavailable — temporary downtime; try again later.
       headers:
-        Retry-After:
-          $ref: "#/components/headers/Retry-After"
         X-Request-Id:
           $ref: "#/components/headers/X-Request-Id"
 
@@ -437,9 +413,8 @@ components:
       description: |
         Represents a single channel, defined by its configuration.
 
-        - Additional properties may exist and MAY vary by client authorization level.
-        - Not all documented properties may be readable by every client; permissions can vary.
         - Clients MUST ignore unknown properties in responses.
+        - Undocumented additonal properties (obscured) MAY exist and vary by client authorization level.
 
       properties:
         id:
@@ -462,12 +437,31 @@ components:
               type: string
               nullable: true
               format: uri
-              pattern: "^[A-Za-z][A-Za-z0-9+.-]*:"
               description: |
                 A URL that identifies the source or destination of a multimedia stream.
 
                 Note: When `input.url` is non-null, `name` is also non-null.
               maxLength: 2048
+            username:
+              type: string
+              nullable: true
+              minLength: 1
+              maxLength: 256
+              description: |
+                Username for authenticating to the media source.
+                Raw characters (plain-text, NOT percent-encoded).
+
+                Note: When `username` is non-null, `input.url` is also non-null.
+            password:
+              type: string
+              nullable: true
+              minLength: 1
+              maxLength: 1024
+              description: |
+                Password for authenticating to the media source.
+                Raw characters (plain-text, NOT percent-encoded).
+
+                Note: When `password` is non-null, `username` and `input.url` are also non-null.
           additionalProperties: true
           required: [url]
         enabled:
@@ -492,15 +486,18 @@ components:
       description: |
         Subset of channel fields to update.
 
-          - Additional properties may exist and MAY vary by client authorization level.
-          - Not all documented properties may be writable by every client; permissions can vary.
-          - Unknown/unexpected or unauthorized properties in requests are rejected with `400 Bad Request`.
+        - Unknown/unexpected or unauthorized properties in requests are rejected with `400 Bad Request`.
+        - Undocumented additonal properties (obscured) MAY exist and vary by client authorization level.
+
+        Field constraints
+        - Credentials must be provided via `input.username` and `input.password`; 
+          `input.url` MUST NOT contain RFC 3986 `userinfo` (e.g., `username[:password]@`) → **422 Unprocessable Content**.
 
         Cross-field constraints (evaluated **after** applying the JSON Merge Patch):
-        - Input media source URL requires a channel display name: 
-          if `input.url` is non-null and `name` is null → **422 Unprocessable Content**.
-        - Channel activation requires both input media source URL and channel display name:
-          if `enabled` is `true` and (`input.url` is null or `name` is null) → **422 Unprocessable Content**.
+        - `enabled: true` → both `name` and `input.url` must be non-null.
+        - `input.url` non-null → `name` must be non-null.
+        - `input.username` non-null → `input.url` must be non-null.
+        - `input.password` non-null → `input.username` must be non-null.
 
       type: object
       properties:
@@ -516,7 +513,6 @@ components:
               type: string
               nullable: true
               format: uri
-              pattern: "^[A-Za-z][A-Za-z0-9+.-]*:"
               maxLength: 2048
               description: >
                 An **absolute URL** that specifies the source/destination of a multimedia stream.
@@ -524,12 +520,12 @@ components:
                 MUST follow the generic URI syntax [RFC 3986].
                 MAY be further constrained or extended by the semantics of the specific protocol (scheme).
 
-                URI syntax violations (e.g., malformed encoding, invalid structure) → `400 Bad Request`.
+                URI syntax violations (e.g., malformed encoding, invalid structure) → `422 Unprocessable Content`.
 
                 ### Authentication
 
-                Authentication (if required by the media source/destination) MUST be provided via RFC 3986 URI `userinfo` (e.g., `username[:password]@`).
-                `userinfo` MUST be percent-encoded per RFC 3986 §3.2.1.
+                Provide credentials via `input.username` and `input.password`.
+                `input.url` MUST NOT contain RFC 3986 `userinfo` (e.g., `username[:password]@`). Requests containing `userinfo` in `input.url` → `422 Unprocessable Content`.
 
                 ### Protocol-Specific Notes
 
@@ -551,6 +547,31 @@ components:
                 ### Note: Input URL & Name Dependency
 
                 - `input.url` with `name` null (not already configured or included in this patch) → `422 Unprocessable Content`.
+            username:
+              type: string
+              nullable: true
+              minLength: 1
+              maxLength: 256
+              description: |
+                Username for authenticating to the media source.
+                Raw characters (plain-text, NOT percent-encoded).
+
+                ### Note: Username & Input URL Dependency
+
+                - `input.username` with `input.url` null (not already configured or included in this patch) → `422 Unprocessable Content`.
+            password:
+              type: string
+              nullable: true
+              minLength: 1
+              maxLength: 1024
+              description: |
+                Password for authenticating to the media source.
+                Raw characters (plain-text, NOT percent-encoded).
+
+                ### Note: Password & Username Dependency
+
+                - `input.password` with `input.username` null (not already configured or included in this patch) → `422 Unprocessable Content`.
+          additionalProperties: false
         enabled:
           type: boolean
           description: |
@@ -562,15 +583,14 @@ components:
 
             - `enabled: true` with `input.url` null (not already configured or included in this patch) → `422 Unprocessable Content`.
             - `enabled: true` with `name` null (not already configured or included in this patch) → `422 Unprocessable Content`.
-
+      additionalProperties: false
     ChannelStatus:
       type: object
       description: |
         Media reading/processing status for a single channel.
 
-          - Additional properties may exist and MAY vary by client authorization level.
-          - Not all documented properties may be readable by every client; permissions can vary.
-          - Clients MUST ignore unknown properties in responses.
+        - Clients MUST ignore unknown properties in responses.
+        - Undocumented additonal properties (obscured) MAY exist and vary by client authorization level.
 
       properties:
         id:
