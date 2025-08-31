@@ -1,4 +1,4 @@
-package handlers
+package handler
 
 import (
 	"encoding/json"
@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/edirooss/zmux-server/internal/api/http/dto"
+	"github.com/edirooss/zmux-server/internal/http/dto"
 	"github.com/edirooss/zmux-server/internal/redis"
 	"github.com/edirooss/zmux-server/internal/services"
 	"github.com/gin-gonic/gin"

@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/edirooss/zmux-server/internal/domain/channel"
-	"github.com/edirooss/zmux-server/pkg/urlutil"
+	"github.com/edirooss/zmux-server/pkg/avurl"
 )
 
 // RemuxCommandBuilder builds the final argv/command string for the `remux` binary.
@@ -116,7 +116,7 @@ func BuildRemuxExecArgs(ch *channel.ZmuxChannel) []string {
 
 	// --- Input (strings; omit if empty) ---
 	builder.
-		WithStringP("--input-url", urlutil.EmbeddUserinfo(ch.Input.URL, ch.Input.Username, ch.Input.Password)).
+		WithStringP("--input-url", avurl.EmbeddUserinfo(ch.Input.URL, ch.Input.Username, ch.Input.Password)).
 		WithStringP("--avioflags", ch.Input.AVIOFlags).
 		WithUint("--probesize", ch.Input.Probesize).
 		WithUint("--analyzeduration", ch.Input.Analyzeduration).

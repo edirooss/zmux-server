@@ -6,9 +6,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/edirooss/zmux-server/internal/api/http/handlers"
-	"github.com/edirooss/zmux-server/internal/api/http/middleware"
 	"github.com/edirooss/zmux-server/internal/domain/auth"
+	"github.com/edirooss/zmux-server/internal/http/handler"
+	"github.com/edirooss/zmux-server/internal/http/middleware"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/secure"
 	"github.com/gin-contrib/sessions"
@@ -82,7 +82,7 @@ func main() {
 			r.GET("/api/ping", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"message": "pong"}) })
 
 			{
-				authhndler := handlers.NewAuthHandler(log, isDev)
+				authhndler := handler.NewAuthHandler(log, isDev)
 				r.POST("/api/login", authhndler.Login)
 				r.POST("/api/logout", authhndler.Logout)
 			}
@@ -91,14 +91,14 @@ func main() {
 		// --- Protected endpoints (auth required) ---
 		{
 			authed := r.Group("", middleware.Authentication, middleware.ValidateSessionCSRF) // Any authenticated principal required (basic, session or API key)
-			authed.GET("/api/me", handlers.Me)
+			authed.GET("/api/me", handler.Me)
 
 			authzed := authed.Group("", middleware.Authorization(auth.Basic, auth.Session)) // Only basic or session principals are allowed (excludes API key access)
-			authzed.GET("/api/csrf", handlers.IssueSessionCSRF)
+			authzed.GET("/api/csrf", handler.IssueSessionCSRF)
 
 			{
 				// HTTP Handler for channel CRUD + summary
-				channelshndlr, err := handlers.NewChannelsHandler(log)
+				channelshndlr, err := handler.NewChannelsHandler(log)
 				if err != nil {
 					log.Fatal("channels http handler creation failed", zap.Error(err))
 				}
@@ -115,7 +115,7 @@ func main() {
 				authzed.GET("/api/channels/summary", channelshndlr.Summary) // Generate summary for admin dashboard (Collection)
 			}
 
-			authzed.GET("/api/system/net/localaddrs", handlers.NewLocalAddrHandler(log).GetLocalAddrList)
+			authzed.GET("/api/system/net/localaddrs", handler.NewLocalAddrHandler(log).GetLocalAddrList)
 		}
 	}
 
