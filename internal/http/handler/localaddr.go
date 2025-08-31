@@ -1,24 +1,24 @@
-package handlers
+package handler
 
 import (
 	"net/http"
 	"strconv"
 
-	"github.com/edirooss/zmux-server/services"
+	"github.com/edirooss/zmux-server/internal/service"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
 
 type LocalAddrHandler struct {
 	log *zap.Logger
-	svc *services.LocalAddrLister
+	svc *service.LocalAddrLister
 }
 
 // NewLocalAddrHandler constructs a LocaladdrHandler instance.
 func NewLocalAddrHandler(log *zap.Logger) *LocalAddrHandler {
 	return &LocalAddrHandler{
 		log: log.Named("localaddr"),
-		svc: services.NewLocalAddrLister(services.LocalAddrListerOptions{}), // // Service for reading local addresses
+		svc: service.NewLocalAddrLister(service.LocalAddrListerOptions{}), // // Service for reading local addresses
 	}
 }
 

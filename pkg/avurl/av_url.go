@@ -3,8 +3,9 @@ package avurl
 import (
 	"errors"
 	"fmt"
+	"strings"
 
-	"github.com/edirooss/zmux-server/pkg/utils/hostutil"
+	"github.com/edirooss/zmux-server/pkg/hostutil"
 )
 
 type URL struct {
@@ -27,6 +28,10 @@ func Parse(url string) (*URL, error) {
 
 	if _md.junk != "" /* leftover junk after ']' */ {
 		return nil, errors.New("invalid URL")
+	}
+
+	if _md.hasAtSign {
+		return nil, errors.New("userinfo should not be embedded in the URL")
 	}
 
 	if host != "" {
@@ -66,3 +71,47 @@ func RawParse(url string) (*URL, error) {
 		Path:     path,
 	}, nil
 }
+
+func EmbeddUserinfo(url, username, password *string) *string {
+	if url == nil {
+		return nil
+	}
+
+	schema, _, host, port, path, _md := avurlSplit(*url)
+
+	userinfo := ""
+	if username != nil {
+		_md.hasAtSign = true
+		userinfo += escapUsername(*username)
+
+		if password != nil {
+			userinfo += ":" + escapPassword(*password)
+		}
+	}
+
+	return ptr(avurlJoin(schema, userinfo, host, port, path, _md))
+}
+
+// escapUsername escapes only '/', '?', '#' and ':' using percent-encoding.
+func escapUsername(input string) string {
+	replacer := strings.NewReplacer(
+		"/", "%2F",
+		"?", "%3F",
+		"#", "%23",
+		":", "%3A",
+	)
+	return replacer.Replace(input)
+}
+
+// escapPassword escapes only '/', '?', and '#' using percent-encoding.
+func escapPassword(input string) string {
+	replacer := strings.NewReplacer(
+		"/", "%2F",
+		"?", "%3F",
+		"#", "%23",
+	)
+	return replacer.Replace(input)
+}
+
+// ptr helper
+func ptr(s string) *string { return &s }

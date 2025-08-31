@@ -3,7 +3,7 @@ package channel
 import (
 	"errors"
 
-	"github.com/edirooss/zmux-server/pkg/utils/avurl"
+	"github.com/edirooss/zmux-server/pkg/avurl"
 )
 
 // validateInputURL
@@ -49,19 +49,12 @@ func validateOutputURL(raw string) error {
 		return errors.New("only `udp` protocol allowed for media output")
 	}
 
-	// We require protocol; fallback to local file is forbidden for media output (i,e. writing to a local file)
-	if url.Schema == "" {
-		return errors.New("missing protocol")
-	}
-
 	// For `udp` outputs, require hostname & port
-	if url.Schema == "udp" {
-		if url.Host == "" {
-			return errors.New("missing host for 'udp' media output")
-		}
-		if url.Port == "" {
-			return errors.New("missing port for 'udp' media output")
-		}
+	if url.Host == "" {
+		return errors.New("missing host for 'udp' media output")
+	}
+	if url.Port == "" {
+		return errors.New("missing port for 'udp' media output")
 	}
 
 	return nil

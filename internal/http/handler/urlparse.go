@@ -1,9 +1,9 @@
-package handlers
+package handler
 
 import (
 	"net/http"
 
-	"github.com/edirooss/zmux-server/pkg/utils/avurl"
+	"github.com/edirooss/zmux-server/pkg/avurl"
 	"github.com/gin-gonic/gin"
 )
 

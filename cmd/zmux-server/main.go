@@ -6,8 +6,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/edirooss/zmux-server/internal/http/handlers"
-	"github.com/edirooss/zmux-server/internal/http/middleware"
+	"github.com/edirooss/zmux-server/internal/domain/auth"
+	"github.com/edirooss/zmux-server/internal/http/handler"
+	mw "github.com/edirooss/zmux-server/internal/http/middleware"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/secure"
 	"github.com/gin-contrib/sessions"
@@ -39,9 +40,9 @@ func main() {
 
 		if isDev { // Enable CORS for local Vite dev
 			r.Use(cors.New(cors.Config{
-				AllowOrigins:     []string{"http://localhost:5173", "http://localhost:4173"},
+				AllowOrigins:     []string{"http://localhost:5173", "http://localhost:4173", "http://127.0.0.1:3000"},
 				AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-				AllowHeaders:     []string{"Content-Type", "X-CSRF-Token"},
+				AllowHeaders:     []string{"Content-Type", "X-CSRF-Token", "Authorization"},
 				ExposeHeaders:    []string{"X-Total-Count", "X-Cache", "X-Summary-Generated-At"},
 				AllowCredentials: true, // Allow cookies in dev
 				MaxAge:           12 * time.Hour,
@@ -72,6 +73,13 @@ func main() {
 		r.Use(sessions.Sessions("sid" /* Session cookie name */, store))
 
 		r.Use(accessLog(log)) // Observability (logger, tracing)
+
+		r.Use(func(c *gin.Context) {
+			// Enforce a hard 10MB max request body.
+			// Protects against oversized or drip-fed request body ("slow body" / RUDY DoS)
+			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 10<<20)
+			c.Next()
+		})
 	}
 
 	// Register route handlers
@@ -81,46 +89,58 @@ func main() {
 			r.GET("/api/ping", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"message": "pong"}) })
 
 			{
-				authhndler := handlers.NewAuthHandler(log, isDev)
+				authhndler := handler.NewAuthHandler(log, isDev)
 				r.POST("/api/login", authhndler.Login)
 				r.POST("/api/logout", authhndler.Logout)
-				r.GET("/api/me", authhndler.Me)
 			}
 		}
 
 		// --- Protected endpoints (auth required) ---
 		{
-			authed := r.Group("", middleware.RequireSessionAuth, middleware.ValidateSessionCSRF)
+			authed := r.Group("", mw.Authentication, mw.ValidateSessionCSRF) // Any authenticated principal required (basic, session, or bearer token)
+			authed.GET("/api/me", handler.Me)
 
-			authed.GET("/api/csrf", handlers.NewCSRFHandler(log).IssueSessionCSRF)
+			authzed := authed.Group("", mw.Authorization(auth.Basic, auth.Session)) // Only basic or session principals are allowed (excludes bearer token access)
+			authzed.GET("/api/csrf", handler.IssueSessionCSRF)
 
 			{
 				// HTTP Handler for channel CRUD + summary
-				channelshndlr, err := handlers.NewChannelsHandler(log)
+				channelshndlr, err := handler.NewChannelsHandler(log)
 				if err != nil {
 					log.Fatal("channels http handler creation failed", zap.Error(err))
 				}
 
 				{
-					authed.GET("/api/channels", channelshndlr.GetChannelList)       // Get all (Collection)
-					authed.POST("/api/channels", channelshndlr.CreateChannel)       // Create new (Collection)
-					authed.GET("/api/channels/:id", channelshndlr.GetChannel)       // Get one
-					authed.PUT("/api/channels/:id", channelshndlr.ReplaceChannel)   // Replace one (full update)
-					authed.PATCH("/api/channels/:id", channelshndlr.ModifyChannel)  // Modify one (partial update)
-					authed.DELETE("/api/channels/:id", channelshndlr.DeleteChannel) // Delete one
+					authed.GET("/api/channels", channelshndlr.GetChannelList)                              // Get all (Collection)
+					authzed.POST("/api/channels", mw.ConcurrentCap(10), channelshndlr.CreateChannel)       // Create new (Collection)
+					authed.GET("/api/channels/:id", channelshndlr.GetChannel)                              // Get one
+					authzed.PUT("/api/channels/:id", mw.ConcurrentCap(10), channelshndlr.ReplaceChannel)   // Replace one (full update)
+					authed.PATCH("/api/channels/:id", mw.ConcurrentCap(10), channelshndlr.ModifyChannel)   // Modify one (partial update)
+					authzed.DELETE("/api/channels/:id", mw.ConcurrentCap(10), channelshndlr.DeleteChannel) // Delete one
 				}
 
-				authed.GET("/api/channels/summary", channelshndlr.Summary) // Generate summary for admin dashboard (Collection)
+				authzed.GET("/api/channels/summary", channelshndlr.Summary) // Generate summary for admin dashboard (Collection)
 			}
 
-			authed.GET("/api/system/net/localaddrs", handlers.NewLocalAddrHandler(log).GetLocalAddrList)
+			authzed.GET("/api/system/net/localaddrs", handler.NewLocalAddrHandler(log).GetLocalAddrList)
 		}
 	}
 
-	log.Info("running HTTP server on 127.0.0.1:8080")
-	if err := r.Run("127.0.0.1:8080"); err != nil {
+	httpsrv := &http.Server{
+		Addr:              "127.0.0.1:8080",
+		Handler:           r,
+		ReadHeaderTimeout: 2 * time.Second,  // kills header-drip Slowloris
+		ReadTimeout:       10 * time.Second, // full request read (incl. body)
+		WriteTimeout:      15 * time.Second, // avoid forever-hangs on writes
+		IdleTimeout:       60 * time.Second, // keep-alive cap
+		MaxHeaderBytes:    1 << 20,          // 1MB cap
+	}
+
+	log.Info("running HTTP server", zap.String("addr", httpsrv.Addr))
+	if err := httpsrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatal("server failed", zap.Error(err))
 	}
+	log.Info("server closed")
 }
 
 func buildLogger() *zap.Logger {
@@ -164,9 +184,9 @@ func accessLog(log *zap.Logger) gin.HandlerFunc {
 			zap.String("user_agent", c.Request.UserAgent()),
 			zap.Duration("latency", latency),
 		}
-		// if p := getPrincipal(c); p != nil {
-		// 	fields = append(fields, zap.Dict("auth", zap.String("kind", p.Kind), zap.String("uid", p.UID)))
-		// }
+		if p := auth.GetPrincipal(c); p != nil {
+			fields = append(fields, zap.Dict("auth", zap.String("kind", p.Kind.String()), zap.String("id", p.ID)))
+		}
 		if joinedErr != nil {
 			fields = append(fields, zap.Error(joinedErr))
 		}

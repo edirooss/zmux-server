@@ -4,15 +4,23 @@ import (
 	"crypto/subtle"
 	"net/http"
 
+	"github.com/edirooss/zmux-server/internal/domain/auth"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 )
 
 // ValidateSessionCSRF checks CSRF tokens for session-authenticated requests.
 //
+//   - Skips validation for non-session-authenticated requests (e.g. Basic, API key).
 //   - Applies only to mutating methods (POST, PUT, PATCH, DELETE).
 //   - Aborts with 400 Bad Request if the token is missing or invalid.
 func ValidateSessionCSRF(c *gin.Context) {
+	// Skip for non session-authenticated requests
+	if p := auth.GetPrincipal(c); p != nil && p.Kind != auth.Session {
+		c.Next()
+		return
+	}
+
 	// Skip if method is not mutating
 	switch c.Request.Method {
 	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:

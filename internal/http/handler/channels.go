@@ -1,4 +1,4 @@
-package handlers
+package handler
 
 import (
 	"encoding/json"
@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/edirooss/zmux-server/internal/dto"
-	"github.com/edirooss/zmux-server/redis"
-	"github.com/edirooss/zmux-server/services"
+	"github.com/edirooss/zmux-server/internal/http/dto"
+	"github.com/edirooss/zmux-server/internal/redis"
+	"github.com/edirooss/zmux-server/internal/service"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
@@ -30,22 +30,22 @@ import (
 //   - Standard REST semantics (RFC 9110, RFC 5789).
 type ChannelsHandler struct {
 	log        *zap.Logger
-	svc        *services.ChannelService
-	summarySvc *services.SummaryService
+	svc        *service.ChannelService
+	summarySvc *service.SummaryService
 }
 
 // NewChannelsHandler constructs a ChannelsHandler instance.
 func NewChannelsHandler(log *zap.Logger) (*ChannelsHandler, error) {
 	// Service for channel CRUD
-	channelService, err := services.NewChannelService(log)
+	channelService, err := service.NewChannelService(log)
 	if err != nil {
 		return nil, fmt.Errorf("new channel service: %w", err)
 	}
 
 	// Service for generating channel summaries
-	summarySvc := services.NewSummaryService(
+	summarySvc := service.NewSummaryService(
 		log,
-		services.SummaryOptions{
+		service.SummaryOptions{
 			TTL:            1000 * time.Millisecond, // tune as needed
 			RefreshTimeout: 500 * time.Millisecond,
 		},
@@ -209,6 +209,10 @@ func (h *ChannelsHandler) ModifyChannel(c *gin.Context) {
 	// Persist
 	if err := h.svc.UpdateChannel(c.Request.Context(), ch); err != nil {
 		c.Error(err)
+		if errors.Is(err, service.ErrLocked) {
+			c.JSON(http.StatusLocked, gin.H{"message": service.ErrLocked.Error()})
+			return
+		}
 		if errors.Is(err, redis.ErrChannelNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"message": redis.ErrChannelNotFound.Error()})
 			return
@@ -273,6 +277,10 @@ func (h *ChannelsHandler) ReplaceChannel(c *gin.Context) {
 
 	if err := h.svc.UpdateChannel(c.Request.Context(), ch); err != nil {
 		c.Error(err)
+		if errors.Is(err, service.ErrLocked) {
+			c.JSON(http.StatusLocked, gin.H{"message": service.ErrLocked.Error()})
+			return
+		}
 		if errors.Is(err, redis.ErrChannelNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"message": redis.ErrChannelNotFound.Error()})
 			return
@@ -304,6 +312,10 @@ func (h *ChannelsHandler) DeleteChannel(c *gin.Context) {
 
 	if err := h.svc.DeleteChannel(c.Request.Context(), id); err != nil {
 		c.Error(err)
+		if errors.Is(err, service.ErrLocked) {
+			c.JSON(http.StatusLocked, gin.H{"message": service.ErrLocked.Error()})
+			return
+		}
 		if errors.Is(err, redis.ErrChannelNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"message": redis.ErrChannelNotFound.Error()})
 			return
@@ -342,7 +354,7 @@ func (h *ChannelsHandler) Summary(c *gin.Context) {
 	force := c.Query("force") == "1"
 
 	var (
-		res services.SummaryResult
+		res service.SummaryResult
 		err error
 	)
 	if force {
