@@ -133,12 +133,7 @@ func (h *ChannelsHandler) CreateChannel(c *gin.Context) {
 //   - 404 Not Found → Channel not found
 //   - 500 Internal Server Error
 func (h *ChannelsHandler) GetChannel(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil || id <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid id"})
-		return
-	}
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64) // extract :id (already validated by middleware)
 
 	ch, err := h.svc.GetChannel(c.Request.Context(), id)
 	if err != nil {
@@ -167,12 +162,7 @@ func (h *ChannelsHandler) GetChannel(c *gin.Context) {
 //   - 422 Unprocessable Entity → Validation failed
 //   - 500 Internal Server Error
 func (h *ChannelsHandler) ModifyChannel(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil || id <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid id"})
-		return
-	}
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64) // extract :id (already validated by middleware)
 
 	// Load current
 	ch, err := h.svc.GetChannel(c.Request.Context(), id)
@@ -236,12 +226,7 @@ func (h *ChannelsHandler) ModifyChannel(c *gin.Context) {
 //   - 422 Unprocessable Entity → Validation failed
 //   - 500 Internal Server Error
 func (h *ChannelsHandler) ReplaceChannel(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil || id <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid id"})
-		return
-	}
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64) // extract :id (already validated by middleware)
 
 	exists, err := h.svc.ChannelExists(c.Request.Context(), id)
 	if err != nil {
@@ -303,12 +288,7 @@ func (h *ChannelsHandler) ReplaceChannel(c *gin.Context) {
 //   - 404 Not Found → Channel not found
 //   - 500 Internal Server Error
 func (h *ChannelsHandler) DeleteChannel(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil || id <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid id"})
-		return
-	}
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64) // extract :id (already validated by middleware)
 
 	if err := h.svc.DeleteChannel(c.Request.Context(), id); err != nil {
 		c.Error(err)

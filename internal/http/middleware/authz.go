@@ -2,8 +2,10 @@ package middleware
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/edirooss/zmux-server/internal/domain/principal"
+	"github.com/edirooss/zmux-server/internal/env"
 	"github.com/edirooss/zmux-server/internal/service"
 	"github.com/gin-gonic/gin"
 )
@@ -50,6 +52,38 @@ func ServiceAccountOnly(authsvc *service.AuthService) gin.HandlerFunc {
 			// Authenticated but the endpoint is not relevant/applicable to this principal kind
 			// Using 422 Unprocessable Content to signal semantic mismatch
 			c.AbortWithStatus(http.StatusUnprocessableEntity)
+			return
+		}
+
+		c.Next()
+	}
+}
+
+// RequireChannelIDAccess enforces that a service account is bound
+// to the channel ID. Admin principals bypass this check entirely.
+func RequireChannelIDAccess(authsvc *service.AuthService, idx env.ServiceAccountChannelIDs) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		p := authsvc.WhoAmI(c)
+		if p == nil {
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
+
+		// Admins always allowed
+		if p.Kind == principal.Admin {
+			c.Next()
+			return
+		}
+
+		// Must be a service account
+		if p.Kind != principal.ServiceAccount {
+			c.AbortWithStatus(http.StatusForbidden)
+			return
+		}
+
+		id, _ := strconv.ParseInt(c.Param("id"), 10, 64) // extract :id (already validated by middleware)
+		if !idx.Has(p.ID, id) {
+			c.AbortWithStatus(http.StatusForbidden)
 			return
 		}
 

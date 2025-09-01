@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/edirooss/zmux-server/internal/domain/principal"
+	"github.com/edirooss/zmux-server/internal/env"
 	"github.com/edirooss/zmux-server/internal/http/handler"
 	mw "github.com/edirooss/zmux-server/internal/http/middleware"
 	"github.com/edirooss/zmux-server/internal/service"
@@ -99,17 +100,27 @@ func main() {
 				}
 
 				{
-					authed.GET("/api/channels", channelshndlr.GetChannelList)                              // Get all (Collection)
-					authzed.POST("/api/channels", mw.ConcurrentCap(10), channelshndlr.CreateChannel)       // Create new (Collection)
-					authed.GET("/api/channels/:id", channelshndlr.GetChannel)                              // Get one
-					authzed.PUT("/api/channels/:id", mw.ConcurrentCap(10), channelshndlr.ReplaceChannel)   // Replace one (full update)
-					authed.PATCH("/api/channels/:id", mw.ConcurrentCap(10), channelshndlr.ModifyChannel)   // Modify one (partial update)
-					authzed.DELETE("/api/channels/:id", mw.ConcurrentCap(10), channelshndlr.DeleteChannel) // Delete one
+					authed.GET("/api/channels", channelshndlr.GetChannelList)                                // Get all (Collection)
+					authzed.POST("/api/channels", mw.CapConcurrentRequests(10), channelshndlr.CreateChannel) // Create new (Collection)
+					authed.GET("/api/channels/:id",
+						mw.RequireValidID(),
+						mw.RequireChannelIDAccess(authsvc, env.ServiceAccountChannelIDsIndex),
+						channelshndlr.GetChannel,
+					) // Get one
+					authzed.PUT("/api/channels/:id", mw.RequireValidID(), mw.CapConcurrentRequests(10), channelshndlr.ReplaceChannel) // Replace one (full update)
+					authed.PATCH("/api/channels/:id",
+						mw.RequireValidID(),
+						mw.RequireChannelIDAccess(authsvc, env.ServiceAccountChannelIDsIndex),
+						mw.CapConcurrentRequests(10),
+						channelshndlr.ModifyChannel,
+					) // Modify one (partial update)
+					authzed.DELETE("/api/channels/:id", mw.RequireValidID(), mw.CapConcurrentRequests(10), channelshndlr.DeleteChannel) // Delete one
 				}
 
 				authzed.GET("/api/channels/summary", channelshndlr.Summary) // Get status+ifmt+metrics
 				authed.GET("/api/channels/status", channelshndlr.Status)    // Get status
-				authed.GET("/api/channels/quota", mw.ServiceAccountOnly(authsvc), channelshndlr.Quota)
+
+				authed.GET("/api/channels/quota", mw.ServiceAccountOnly(authsvc), channelshndlr.Quota) // Get channel-quota (applicable to service-accounts)
 			}
 
 			authzed.GET("/api/system/net/localaddrs", handler.NewLocalAddrHandler(log).GetLocalAddrList)
