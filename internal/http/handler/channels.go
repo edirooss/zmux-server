@@ -404,3 +404,13 @@ func (h *ChannelsHandler) Status(c *gin.Context) {
 
 	c.JSON(http.StatusOK, data)
 }
+
+// Quota
+// Prototype/demo
+func (h *ChannelsHandler) Quota(c *gin.Context) {
+	c.JSON(http.StatusOK, struct {
+		Limit     *int `json:"limit"`
+		Used      int  `json:"used"`
+		Remaining *int `json:"remaining"`
+	}{nil, 0, nil})
+}

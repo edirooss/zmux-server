@@ -107,8 +107,9 @@ func main() {
 					authzed.DELETE("/api/channels/:id", mw.ConcurrentCap(10), channelshndlr.DeleteChannel) // Delete one
 				}
 
-				authzed.GET("/api/channels/summary", channelshndlr.Summary) // Get status+ifmt+metrics (Collection)
-				authed.GET("/api/channels/status", channelshndlr.Status)    // Get status (Collection)
+				authzed.GET("/api/channels/summary", channelshndlr.Summary) // Get status+ifmt+metrics
+				authed.GET("/api/channels/status", channelshndlr.Status)    // Get status
+				authed.GET("/api/channels/quota", mw.ServiceAccountOnly(authsvc), channelshndlr.Quota)
 			}
 
 			authzed.GET("/api/system/net/localaddrs", handler.NewLocalAddrHandler(log).GetLocalAddrList)

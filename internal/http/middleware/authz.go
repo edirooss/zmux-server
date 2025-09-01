@@ -33,3 +33,26 @@ func Authorization(authsvc *service.AuthService, allowed ...principal.PrincipalK
 		c.Next()
 	}
 }
+
+// ServiceAccountOnly permits only ServiceAccount principals.
+// - 401 if no principal (auth missing)
+// - 422 if principal exists but is not applicable (e.g., Admin trying a service-account-only endpoint)
+func ServiceAccountOnly(authsvc *service.AuthService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		p := authsvc.WhoAmI(c)
+		if p == nil {
+			// Unauthenticated
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
+
+		if p.Kind != principal.ServiceAccount {
+			// Authenticated but the endpoint is not relevant/applicable to this principal kind
+			// Using 422 Unprocessable Content to signal semantic mismatch
+			c.AbortWithStatus(http.StatusUnprocessableEntity)
+			return
+		}
+
+		c.Next()
+	}
+}
