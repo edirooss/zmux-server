@@ -2,6 +2,7 @@ package service
 
 import (
 	"crypto/subtle"
+	"fmt"
 
 	"github.com/edirooss/zmux-server/internal/domain/principal"
 	"github.com/gin-contrib/sessions"
@@ -14,12 +15,17 @@ const principalKey contextKey = "auth.principal"
 
 // AuthService handles authentication logic.
 type AuthService struct {
-	UsrSessionSvc *UserSessionService
+	UserSession *UserSessionService
 }
 
 // NewAuthService creates a new AuthService.
-func NewAuthService(sessionService *UserSessionService) *AuthService {
-	return &AuthService{UsrSessionSvc: sessionService}
+func NewAuthService(isDev bool) (*AuthService, error) {
+	usersesssvc, err := NewUserSessionService(isDev)
+	if err != nil {
+		return nil, fmt.Errorf("new user session service: %w", err)
+	}
+
+	return &AuthService{UserSession: usersesssvc}, nil
 }
 
 // AuthenticateWithPassword authenticates using username and password.
@@ -39,7 +45,7 @@ func (s *AuthService) AuthenticateWithPassword(c *gin.Context, username, passwor
 // AuthenticateWithSession reads session from context and authenticates user ID.
 func (s *AuthService) AuthenticateWithSession(c *gin.Context) (*principal.Principal, bool) {
 	session := sessions.Default(c)
-	uid, ok := s.UsrSessionSvc.GetUserID(session)
+	uid, ok := s.UserSession.GetUserID(session)
 	if !ok {
 		return nil, false
 	}

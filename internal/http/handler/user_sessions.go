@@ -37,7 +37,7 @@ func (h *UserSessionsHandler) Login(c *gin.Context) {
 	}
 
 	s := sessions.Default(c)
-	if err := h.svc.UsrSessionSvc.SetUserSession(s, p.ID); err != nil {
+	if err := h.svc.UserSession.SetUserSession(s, p.ID); err != nil {
 		c.Error(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 		return
@@ -49,6 +49,6 @@ func (h *UserSessionsHandler) Login(c *gin.Context) {
 // Logout clears the current session.
 func (h *UserSessionsHandler) Logout(c *gin.Context) {
 	s := sessions.Default(c)
-	_ = h.svc.UsrSessionSvc.ClearUserSession(s)
+	_ = h.svc.UserSession.ClearUserSession(s)
 	c.Status(http.StatusNoContent)
 }

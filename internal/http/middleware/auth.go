@@ -24,7 +24,13 @@ func Authentication(svc *service.AuthService) gin.HandlerFunc {
 	}
 }
 
-// isBasicAuthenticated authenticates using HTTP Basic Auth.
+// isSessionAuthenticated authenticates using internal user ID set on a session (cookie-based).
+func isSessionAuthenticated(c *gin.Context, svc *service.AuthService) bool {
+	_, ok := svc.AuthenticateWithSession(c)
+	return ok
+}
+
+// isBasicAuthenticated authenticates using username password from HTTP Basic Auth.
 func isBasicAuthenticated(c *gin.Context, svc *service.AuthService) bool {
 	user, pass, valid := c.Request.BasicAuth()
 	if valid {
@@ -34,13 +40,7 @@ func isBasicAuthenticated(c *gin.Context, svc *service.AuthService) bool {
 	return false
 }
 
-// isSessionAuthenticated authenticates using a session cookie.
-func isSessionAuthenticated(c *gin.Context, svc *service.AuthService) bool {
-	_, ok := svc.AuthenticateWithSession(c)
-	return ok
-}
-
-// isBearerTokenAuthenticated authenticates using an Authorization: Bearer token.
+// isBearerTokenAuthenticated authenticates using a token from Bearer authorization.
 func isBearerTokenAuthenticated(c *gin.Context, svc *service.AuthService) bool {
 	h := c.GetHeader("Authorization")
 	const prefix = "Bearer "

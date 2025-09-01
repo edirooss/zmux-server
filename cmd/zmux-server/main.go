@@ -34,11 +34,10 @@ func main() {
 	r := gin.New()
 
 	// Apply middlewares
-	usersesssvc, err := service.NewUserSessionService(isDev)
+	authsvc, err := service.NewAuthService(isDev)
 	if err != nil {
-		log.Fatal("user session service creation failed", zap.Error(err))
+		log.Fatal("auth service creation failed", zap.Error(err))
 	}
-	authsvc := service.NewAuthService(usersesssvc)
 	{
 		r.Use(gin.Recovery()) // Recovery first (outermost)
 
@@ -60,7 +59,7 @@ func main() {
 			}))
 		}
 
-		r.Use(usersesssvc.Middleware())
+		r.Use(authsvc.UserSession.Middleware()) // Attach user cookie-based session for auth
 
 		r.Use(accessLog(log, authsvc)) // Observability (logger, tracing)
 
@@ -79,9 +78,9 @@ func main() {
 			r.GET("/api/ping", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"message": "pong"}) })
 
 			{
-				authhndler := handler.NewUserSessionsHandler(log, authsvc)
-				r.POST("/api/login", authhndler.Login)
-				r.POST("/api/logout", authhndler.Logout)
+				usrsesshndler := handler.NewUserSessionsHandler(log, authsvc)
+				r.POST("/api/login", usrsesshndler.Login)
+				r.POST("/api/logout", usrsesshndler.Logout)
 			}
 		}
 
