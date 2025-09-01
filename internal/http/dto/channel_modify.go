@@ -6,18 +6,18 @@ import (
 	"github.com/edirooss/zmux-server/internal/domain/channel"
 )
 
-// ModifyChannel is the DTO for updating a Zmux channel via
+// ChannelModify is the DTO for updating a Zmux channel via
 // PATCH /api/channels/{id}. Partial-update semantics (RFC 7386):
 //   - All fields are optional.
-type ModifyChannel struct {
+type ChannelModify struct {
 	Name       W[string]              `json:"name"`        //   optional; string | null
-	Input      W[ModifyChannelInput]  `json:"input"`       //   optional; object
-	Output     W[ModifyChannelOutput] `json:"output"`      //   optional; object
+	Input      W[ChannelInputModify]  `json:"input"`       //   optional; object
+	Output     W[ChannelOutputModify] `json:"output"`      //   optional; object
 	Enabled    W[bool]                `json:"enabled"`     //   optional; bool
 	RestartSec W[uint]                `json:"restart_sec"` //   optional; uint
 }
 
-type ModifyChannelInput struct {
+type ChannelInputModify struct {
 	URL             W[string] `json:"url"`             //              optional; string | null
 	Username        W[string] `json:"username"`        //              optional; string | null
 	Password        W[string] `json:"password"`        //              optional; string | null
@@ -31,7 +31,7 @@ type ModifyChannelInput struct {
 	RTSPTransport   W[string] `json:"rtsp_transport"`  //              optional; string | null
 }
 
-type ModifyChannelOutput struct {
+type ChannelOutputModify struct {
 	URL       W[string] `json:"url"`       //                          optional; string | null
 	Localaddr W[string] `json:"localaddr"` //                          optional; string | null
 	PktSize   W[uint]   `json:"pkt_size"`  //                          optional; uint
@@ -43,7 +43,7 @@ type ModifyChannelOutput struct {
 // MergePatch applies ModifyChannel to channel.ZmuxChannel (in-memory)
 // Disallows explicit null assignment to non-nullable fields.
 // Unset fields remain unchanged.
-func (req *ModifyChannel) MergePatch(prev *channel.ZmuxChannel) error {
+func (req *ChannelModify) MergePatch(prev *channel.ZmuxChannel) error {
 	// name
 	// optional; string | null
 	if req.Name.Set {
@@ -100,7 +100,7 @@ func (req *ModifyChannel) MergePatch(prev *channel.ZmuxChannel) error {
 // MergePatch applies ModifyChannelInput to channel.ZmuxChannelInput (in-memory)
 // Disallows explicit null assignment to non-nullable fields.
 // Unset fields remain unchanged.
-func (req *ModifyChannelInput) MergePatch(prev *channel.ZmuxChannelInput) error {
+func (req *ChannelInputModify) MergePatch(prev *channel.ZmuxChannelInput) error {
 	// url
 	// optional; string | null
 	if req.URL.Set {
@@ -213,7 +213,7 @@ func (req *ModifyChannelInput) MergePatch(prev *channel.ZmuxChannelInput) error 
 // MergePatch applies ModifyChannelOutput to channel.ZmuxChannelOutput (in-memory)
 // Disallows explicit null assignment to non-nullable fields.
 // Unset fields remain unchanged.
-func (req *ModifyChannelOutput) MergePatch(prev *channel.ZmuxChannelOutput) error {
+func (req *ChannelOutputModify) MergePatch(prev *channel.ZmuxChannelOutput) error {
 	// url
 	// optional; string | null
 	if req.URL.Set {

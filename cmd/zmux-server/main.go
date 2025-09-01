@@ -6,13 +6,12 @@ import (
 	"os"
 	"time"
 
-	"github.com/edirooss/zmux-server/internal/domain/auth"
+	"github.com/edirooss/zmux-server/internal/domain/principal"
 	"github.com/edirooss/zmux-server/internal/http/handler"
 	mw "github.com/edirooss/zmux-server/internal/http/middleware"
+	"github.com/edirooss/zmux-server/internal/service"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/secure"
-	"github.com/gin-contrib/sessions"
-	"github.com/gin-contrib/sessions/redis"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -35,6 +34,10 @@ func main() {
 	r := gin.New()
 
 	// Apply middlewares
+	authsvc, err := service.NewAuthService(isDev)
+	if err != nil {
+		log.Fatal("auth service creation failed", zap.Error(err))
+	}
 	{
 		r.Use(gin.Recovery()) // Recovery first (outermost)
 
@@ -56,23 +59,9 @@ func main() {
 			}))
 		}
 
-		// Create Redis session store
-		store, err := redis.NewStoreWithDB(10, "tcp", "127.0.0.1:6379", "", "", "0",
-			[]byte("nZCowo9+aofuYO/54sK2mca+aj8M9XA2zVLrP1kh6uk=") /* TODO(security): rotate key */)
-		if err != nil {
-			log.Fatal("redis session store init failed", zap.Error(err))
-		}
-		store.Options(sessions.Options{
-			Path:     "/api",   // scope cookie strictly to /api
-			MaxAge:   4 * 3600, // session cookie lifetime (4h)
-			Secure:   !isDev,   // must be true behind HTTPS in prod
-			HttpOnly: true,
-			SameSite: http.SameSiteLaxMode,
-		})
+		r.Use(authsvc.UserSession.Middleware()) // Attach user cookie-based session for auth
 
-		r.Use(sessions.Sessions("sid" /* Session cookie name */, store))
-
-		r.Use(accessLog(log)) // Observability (logger, tracing)
+		r.Use(accessLog(log, authsvc)) // Observability (logger, tracing)
 
 		r.Use(func(c *gin.Context) {
 			// Enforce a hard 10MB max request body.
@@ -89,19 +78,18 @@ func main() {
 			r.GET("/api/ping", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"message": "pong"}) })
 
 			{
-				authhndler := handler.NewAuthHandler(log, isDev)
-				r.POST("/api/login", authhndler.Login)
-				r.POST("/api/logout", authhndler.Logout)
+				usrsesshndler := handler.NewUserSessionsHandler(log, authsvc)
+				r.POST("/api/login", usrsesshndler.Login)
+				r.POST("/api/logout", usrsesshndler.Logout)
 			}
 		}
 
 		// --- Protected endpoints (auth required) ---
 		{
-			authed := r.Group("", mw.Authentication, mw.ValidateSessionCSRF) // Any authenticated principal required (basic, session, or bearer token)
-			authed.GET("/api/me", handler.Me)
+			authed := r.Group("", mw.Authentication(authsvc)) // Any authenticated principal required (admin|service_account)
+			authed.GET("/api/me", handler.Me(authsvc))
 
-			authzed := authed.Group("", mw.Authorization(auth.Basic, auth.Session)) // Only basic or session principals are allowed (excludes bearer token access)
-			authzed.GET("/api/csrf", handler.IssueSessionCSRF)
+			authzed := authed.Group("", mw.Authorization(authsvc, principal.Admin)) // Only admin principal
 
 			{
 				// HTTP Handler for channel CRUD + summary
@@ -119,7 +107,8 @@ func main() {
 					authzed.DELETE("/api/channels/:id", mw.ConcurrentCap(10), channelshndlr.DeleteChannel) // Delete one
 				}
 
-				authzed.GET("/api/channels/summary", channelshndlr.Summary) // Generate summary for admin dashboard (Collection)
+				authzed.GET("/api/channels/summary", channelshndlr.Summary) // Get status+ifmt+metrics (Collection)
+				authed.GET("/api/channels/status", channelshndlr.Status)    // Get status (Collection)
 			}
 
 			authzed.GET("/api/system/net/localaddrs", handler.NewLocalAddrHandler(log).GetLocalAddrList)
@@ -154,7 +143,7 @@ func buildLogger() *zap.Logger {
 }
 
 // accessLog is a Gin middleware that records HTTP request/response details with Zap after handling.
-func accessLog(log *zap.Logger) gin.HandlerFunc {
+func accessLog(log *zap.Logger, authsvc *service.AuthService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		c.Next()
@@ -184,8 +173,11 @@ func accessLog(log *zap.Logger) gin.HandlerFunc {
 			zap.String("user_agent", c.Request.UserAgent()),
 			zap.Duration("latency", latency),
 		}
-		if p := auth.GetPrincipal(c); p != nil {
-			fields = append(fields, zap.Dict("auth", zap.String("kind", p.Kind.String()), zap.String("id", p.ID)))
+		if p := authsvc.WhoAmI(c); p != nil {
+			fields = append(fields, zap.Dict("auth",
+				zap.String("id", p.ID),
+				zap.String("kind", p.Kind.String()),
+			))
 		}
 		if joinedErr != nil {
 			fields = append(fields, zap.Error(joinedErr))

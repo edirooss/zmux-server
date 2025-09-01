@@ -91,7 +91,7 @@ func (h *ChannelsHandler) GetChannelList(c *gin.Context) {
 //   - 422 Unprocessable Entity → Validation failed
 //   - 500 Internal Server Error
 func (h *ChannelsHandler) CreateChannel(c *gin.Context) {
-	var req dto.CreateChannel
+	var req dto.ChannelCreate
 	if err := bind(c.Request, &req); err != nil {
 		c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
@@ -186,7 +186,7 @@ func (h *ChannelsHandler) ModifyChannel(c *gin.Context) {
 		return
 	}
 
-	var req dto.ModifyChannel
+	var req dto.ChannelModify
 	if err := bind(c.Request, &req); err != nil {
 		c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
@@ -254,7 +254,7 @@ func (h *ChannelsHandler) ReplaceChannel(c *gin.Context) {
 		return
 	}
 
-	var req dto.ReplaceChannel
+	var req dto.ChannelReplace
 	if err := bind(c.Request, &req); err != nil {
 		c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
@@ -377,4 +377,30 @@ func (h *ChannelsHandler) Summary(c *gin.Context) {
 	c.Header("X-Total-Count", strconv.Itoa(len(res.Data)))
 
 	c.JSON(http.StatusOK, res.Data)
+}
+
+// ---- Channel Status List -----
+// Prototype/demo -- quick win based on Summary.
+func (h *ChannelsHandler) Status(c *gin.Context) {
+	summaryResult, err := h.summarySvc.Get(c.Request.Context())
+	if err != nil {
+		c.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		return
+	}
+
+	data := make([]dto.ChannelStatus, 0, len(summaryResult.Data))
+	for _, item := range summaryResult.Data {
+		data = append(data, dto.ChannelStatus{
+			ID:     item.ID,
+			Online: item.Status != nil && item.Status.Liveness == "Live",
+		})
+	}
+
+	// Friendly cache headers for debugging/observability
+	c.Header("X-Cache", map[bool]string{true: "HIT", false: "MISS"}[summaryResult.CacheHit])
+	c.Header("X-Status-Generated-At", strconv.FormatInt(summaryResult.GeneratedAt.UnixMilli(), 10))
+	c.Header("X-Total-Count", strconv.Itoa(len(data)))
+
+	c.JSON(http.StatusOK, data)
 }
