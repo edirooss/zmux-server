@@ -406,9 +406,26 @@ func (h *ChannelsHandler) Status(c *gin.Context) {
 // Quota
 // Prototype/demo
 func (h *ChannelsHandler) Quota(c *gin.Context) {
+	p := h.authsvc.WhoAmI(c)
+
+	chs, err := h.svc.GetMany(c.Request.Context(), env.ServiceAccountChannelIDsIndex.ChannelIDs(p.ID))
+
+	if err != nil {
+		c.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		return
+	}
+
+	used := 0
+	for _, ch := range chs {
+		if ch.Enabled {
+			used++
+		}
+	}
+
 	c.JSON(http.StatusOK, struct {
 		Limit     *int `json:"limit"`
 		Used      int  `json:"used"`
 		Remaining *int `json:"remaining"`
-	}{nil, 0, nil})
+	}{nil, used, nil})
 }
