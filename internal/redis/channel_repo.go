@@ -157,3 +157,44 @@ func (r *ChannelRepository) List(ctx context.Context) ([]*channel.ZmuxChannel, e
 	}
 	return result, nil
 }
+
+// GetMany retrieves multiple channels by their IDs.
+// - Returns only channels that exist (missing ones are skipped).
+// - Order of returned channels follows the order of IDs that were found.
+func (r *ChannelRepository) GetMany(ctx context.Context, ids []int64) ([]*channel.ZmuxChannel, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	keys := keysForIDs(ids)
+	vals, err := r.client.MGet(ctx, keys...).Result()
+	if err != nil {
+		return nil, fmt.Errorf("mget: %w", err)
+	}
+
+	out := make([]*channel.ZmuxChannel, 0, len(vals))
+	for i, v := range vals {
+		if v == nil {
+			continue // key missing
+		}
+		s, ok := v.(string)
+		if !ok {
+			return nil, fmt.Errorf("unexpected type for key %s at index %d (got %T, want string)", keys[i], i, v)
+		}
+		var ch channel.ZmuxChannel
+		if err := json.Unmarshal([]byte(s), &ch); err != nil {
+			return nil, fmt.Errorf("unmarshal key %s: %w", keys[i], err)
+		}
+		out = append(out, &ch)
+	}
+	return out, nil
+}
+
+func keysForIDs(ids []int64) []string {
+	keys := make([]string, len(ids))
+	for i, id := range ids {
+		s := strconv.FormatInt(id, 10)
+		keys[i] = fmt.Sprintf("%s%s", channelKeyPrefix, s)
+	}
+	return keys
+}

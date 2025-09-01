@@ -94,7 +94,7 @@ func main() {
 
 			{
 				// HTTP Handler for channel CRUD + summary
-				channelshndlr, err := handler.NewChannelsHandler(log)
+				channelshndlr, err := handler.NewChannelsHandler(log, authsvc)
 				if err != nil {
 					log.Fatal("channels http handler creation failed", zap.Error(err))
 				}

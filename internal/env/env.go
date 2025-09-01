@@ -13,3 +13,12 @@ func (idx ServiceAccountChannelIDs) Has(account string, id int64) bool {
 	_, ok := idx[account][id]
 	return ok
 }
+
+// ChannelIDs returns all channel IDs the given service account is bound to.
+func (idx ServiceAccountChannelIDs) ChannelIDs(account string) []int64 {
+	ids := make([]int64, 0)
+	for id := range idx[account] {
+		ids = append(ids, id)
+	}
+	return ids
+}

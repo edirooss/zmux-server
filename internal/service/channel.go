@@ -206,6 +206,14 @@ func (s *ChannelService) ListChannels(ctx context.Context) ([]*channel.ZmuxChann
 	return chs, nil
 }
 
+func (s *ChannelService) GetMany(ctx context.Context, ids []int64) ([]*channel.ZmuxChannel, error) {
+	chs, err := s.repo.GetMany(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("get many: %w", err)
+	}
+	return chs, nil
+}
+
 // UpdateChannel loads the prev channel config,
 // toggles enablement and commits the unit if updated channel is enabled, and persists the resulting state.
 //

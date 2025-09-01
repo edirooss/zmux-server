@@ -9,6 +9,9 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/edirooss/zmux-server/internal/domain/channel"
+	"github.com/edirooss/zmux-server/internal/domain/principal"
+	"github.com/edirooss/zmux-server/internal/env"
 	"github.com/edirooss/zmux-server/internal/http/dto"
 	"github.com/edirooss/zmux-server/internal/redis"
 	"github.com/edirooss/zmux-server/internal/service"
@@ -30,12 +33,13 @@ import (
 //   - Standard REST semantics (RFC 9110, RFC 5789).
 type ChannelsHandler struct {
 	log        *zap.Logger
+	authsvc    *service.AuthService
 	svc        *service.ChannelService
 	summarySvc *service.SummaryService
 }
 
 // NewChannelsHandler constructs a ChannelsHandler instance.
-func NewChannelsHandler(log *zap.Logger) (*ChannelsHandler, error) {
+func NewChannelsHandler(log *zap.Logger, authsvc *service.AuthService) (*ChannelsHandler, error) {
 	// Service for channel CRUD
 	channelService, err := service.NewChannelService(log)
 	if err != nil {
@@ -53,6 +57,7 @@ func NewChannelsHandler(log *zap.Logger) (*ChannelsHandler, error) {
 
 	return &ChannelsHandler{
 		log:        log.Named("channels"),
+		authsvc:    authsvc,
 		svc:        channelService,
 		summarySvc: summarySvc,
 	}, nil
@@ -68,7 +73,17 @@ func NewChannelsHandler(log *zap.Logger) (*ChannelsHandler, error) {
 //   - 200 OK  → JSON array of channels
 //   - 500 Internal Server Error
 func (h *ChannelsHandler) GetChannelList(c *gin.Context) {
-	chs, err := h.svc.ListChannels(c.Request.Context())
+	p := h.authsvc.WhoAmI(c)
+
+	var chs []*channel.ZmuxChannel
+	var err error
+	switch p.Kind {
+	case principal.Admin:
+		chs, err = h.svc.ListChannels(c.Request.Context())
+	case principal.ServiceAccount:
+		chs, err = h.svc.GetMany(c.Request.Context(), env.ServiceAccountChannelIDsIndex.ChannelIDs(p.ID))
+	}
+
 	if err != nil {
 		c.Error(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
@@ -368,13 +383,16 @@ func (h *ChannelsHandler) Status(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 		return
 	}
+	p := h.authsvc.WhoAmI(c)
 
 	data := make([]dto.ChannelStatus, 0, len(summaryResult.Data))
 	for _, item := range summaryResult.Data {
-		data = append(data, dto.ChannelStatus{
-			ID:     item.ID,
-			Online: item.Status != nil && item.Status.Liveness == "Live",
-		})
+		if p.Kind == principal.Admin || (p.Kind == principal.ServiceAccount && env.ServiceAccountChannelIDsIndex.Has(p.ID, item.ID)) {
+			data = append(data, dto.ChannelStatus{
+				ID:     item.ID,
+				Online: item.Status != nil && item.Status.Liveness == "Live",
+			})
+		}
 	}
 
 	// Friendly cache headers for debugging/observability
