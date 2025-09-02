@@ -20,6 +20,9 @@ var (
 	channelIDsKey    = "zmux:channels" // SET of string IDs: {"1", "2", ...}
 )
 
+func channelKeyInt(id int64) string  { return channelKeyPrefix + strconv.FormatInt(id, 10) }
+func channelKeyStr(id string) string { return channelKeyPrefix + id }
+
 // ChannelRepository provides Redis-backed persistence for ZmuxChannel entities.
 type ChannelRepository struct {
 	client *Client
@@ -47,7 +50,7 @@ func (r *ChannelRepository) GenerateID(ctx context.Context) (int64, error) {
 
 // Upsert persists a ZmuxChannel and adds its ID to the Redis index set.
 func (r *ChannelRepository) Upsert(ctx context.Context, ch *channel.ZmuxChannel) error {
-	key := channelKey(ch.ID)
+	key := channelKeyInt(ch.ID)
 
 	payload, err := encodeChannel(ch)
 	if err != nil {
@@ -68,7 +71,7 @@ func (r *ChannelRepository) Upsert(ctx context.Context, ch *channel.ZmuxChannel)
 // Returns ErrChannelNotFound if the channel key was not present in Redis.
 // Logs a warning if the channel record and index set are inconsistent.
 func (r *ChannelRepository) Delete(ctx context.Context, id int64) error {
-	key := channelKey(id)
+	key := channelKeyInt(id)
 	idStr := strconv.FormatInt(id, 10)
 
 	pipe := r.client.TxPipeline()
@@ -113,7 +116,7 @@ func (r *ChannelRepository) HasID(ctx context.Context, id int64) (bool, error) {
 // GetByID fetches a channel by its ID.
 // Returns ErrChannelNotFound if the key does not exist.
 func (r *ChannelRepository) GetByID(ctx context.Context, id int64) (*channel.ZmuxChannel, error) {
-	key := channelKey(id)
+	key := channelKeyInt(id)
 
 	value, err := r.client.Get(ctx, key).Bytes()
 	if err != nil {
@@ -136,7 +139,7 @@ func (r *ChannelRepository) GetByIDs(ctx context.Context, ids []int64) ([]*chann
 		return nil, nil
 	}
 
-	keys := channelKeys(ids)
+	keys := channelKeysInt(ids)
 	vals, err := r.client.MGet(ctx, keys...).Result()
 	if err != nil {
 		return nil, fmt.Errorf("mget: %w", err)
@@ -167,7 +170,7 @@ func (r *ChannelRepository) GetAll(ctx context.Context) ([]*channel.ZmuxChannel,
 		return nil, nil
 	}
 
-	keys := channelKeys(ids)
+	keys := channelKeysStr(ids)
 	vals, err := r.client.MGet(ctx, keys...).Result()
 	if err != nil {
 		return nil, fmt.Errorf("mget: %w", err)
@@ -176,23 +179,20 @@ func (r *ChannelRepository) GetAll(ctx context.Context) ([]*channel.ZmuxChannel,
 	return r.parseMGetResult(keys, vals)
 }
 
-// channelKey constructs the Redis key for a channel ID.
-func channelKey[T int64 | string](id T) string {
-	switch v := any(id).(type) {
-	case int64:
-		return fmt.Sprintf("%s%d", channelKeyPrefix, v)
-	case string:
-		return fmt.Sprintf("%s%s", channelKeyPrefix, v)
-	default:
-		panic("unsupported type") // programming fault
-	}
-}
-
-// channelKeys constructs the Redis keys for multiple channel IDs.
-func channelKeys[T int64 | string](ids []T) []string {
+// channelKeysInt builds Redis keys for multiple int64 channel IDs.
+func channelKeysInt(ids []int64) []string {
 	keys := make([]string, len(ids))
 	for i, id := range ids {
-		keys[i] = channelKey(id)
+		keys[i] = channelKeyInt(id)
+	}
+	return keys
+}
+
+// channelKeysStr builds Redis keys for multiple string channel IDs.
+func channelKeysStr(ids []string) []string {
+	keys := make([]string, len(ids))
+	for i, id := range ids {
+		keys[i] = channelKeyStr(id)
 	}
 	return keys
 }
