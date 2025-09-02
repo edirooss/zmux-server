@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"github.com/edirooss/zmux-server/internal/domain/channel"
-	"github.com/edirooss/zmux-server/internal/redis"
+	"github.com/edirooss/zmux-server/internal/repo"
 	"go.uber.org/zap"
 )
 
@@ -48,7 +48,7 @@ import (
 // -----------------------------------------------------------------------------
 
 type ChannelService struct {
-	repo    *redis.Repository
+	repo    *repo.Repository
 	systemd *SystemdService
 
 	// per-channel locks to serialize mutations on the same ID
@@ -91,7 +91,7 @@ func NewChannelService(log *zap.Logger) (*ChannelService, error) {
 		return nil, fmt.Errorf("new systemd service: %w", err)
 	}
 	return &ChannelService{
-		repo:    redis.NewRepository(log),
+		repo:    repo.NewRepository(log),
 		systemd: systemd,
 	}, nil
 }

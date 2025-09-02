@@ -9,7 +9,7 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	"github.com/edirooss/zmux-server/internal/http/dto"
-	"github.com/edirooss/zmux-server/internal/redis"
+	"github.com/edirooss/zmux-server/internal/repo"
 	"go.uber.org/zap"
 )
 
@@ -42,7 +42,7 @@ type SummaryResult struct {
 
 type SummaryService struct {
 	log  *zap.Logger
-	repo *redis.Repository
+	repo *repo.Repository
 
 	mu      sync.RWMutex
 	cache   []dto.ChannelSummary
@@ -63,7 +63,7 @@ func NewSummaryService(log *zap.Logger, opts SummaryOptions) *SummaryService {
 
 	return &SummaryService{
 		log:  log,
-		repo: redis.NewRepository(log),
+		repo: repo.NewRepository(log),
 		opts: opts,
 		now:  time.Now,
 	}

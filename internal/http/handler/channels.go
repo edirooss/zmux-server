@@ -13,7 +13,7 @@ import (
 	"github.com/edirooss/zmux-server/internal/domain/principal"
 	"github.com/edirooss/zmux-server/internal/env"
 	"github.com/edirooss/zmux-server/internal/http/dto"
-	"github.com/edirooss/zmux-server/internal/redis"
+	"github.com/edirooss/zmux-server/internal/repo"
 	"github.com/edirooss/zmux-server/internal/service"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -153,8 +153,8 @@ func (h *ChannelsHandler) GetChannel(c *gin.Context) {
 	ch, err := h.svc.GetChannel(c.Request.Context(), id)
 	if err != nil {
 		c.Error(err)
-		if errors.Is(err, redis.ErrChannelNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"message": redis.ErrChannelNotFound.Error()})
+		if errors.Is(err, repo.ErrChannelNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"message": repo.ErrChannelNotFound.Error()})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
@@ -183,8 +183,8 @@ func (h *ChannelsHandler) ModifyChannel(c *gin.Context) {
 	ch, err := h.svc.GetChannel(c.Request.Context(), id)
 	if err != nil {
 		c.Error(err)
-		if errors.Is(err, redis.ErrChannelNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"message": redis.ErrChannelNotFound.Error()})
+		if errors.Is(err, repo.ErrChannelNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"message": repo.ErrChannelNotFound.Error()})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
@@ -218,8 +218,8 @@ func (h *ChannelsHandler) ModifyChannel(c *gin.Context) {
 			c.JSON(http.StatusLocked, gin.H{"message": service.ErrLocked.Error()})
 			return
 		}
-		if errors.Is(err, redis.ErrChannelNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"message": redis.ErrChannelNotFound.Error()})
+		if errors.Is(err, repo.ErrChannelNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"message": repo.ErrChannelNotFound.Error()})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
@@ -281,8 +281,8 @@ func (h *ChannelsHandler) ReplaceChannel(c *gin.Context) {
 			c.JSON(http.StatusLocked, gin.H{"message": service.ErrLocked.Error()})
 			return
 		}
-		if errors.Is(err, redis.ErrChannelNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"message": redis.ErrChannelNotFound.Error()})
+		if errors.Is(err, repo.ErrChannelNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"message": repo.ErrChannelNotFound.Error()})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
@@ -311,8 +311,8 @@ func (h *ChannelsHandler) DeleteChannel(c *gin.Context) {
 			c.JSON(http.StatusLocked, gin.H{"message": service.ErrLocked.Error()})
 			return
 		}
-		if errors.Is(err, redis.ErrChannelNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"message": redis.ErrChannelNotFound.Error()})
+		if errors.Is(err, repo.ErrChannelNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"message": repo.ErrChannelNotFound.Error()})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
