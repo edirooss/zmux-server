@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -73,16 +74,8 @@ func NewChannelsHandler(log *zap.Logger, authsvc *service.AuthService) (*Channel
 //   - 200 OK  → JSON array of channels
 //   - 500 Internal Server Error
 func (h *ChannelsHandler) GetChannelList(c *gin.Context) {
-	p := h.authsvc.WhoAmI(c)
-
-	var chs []*channel.ZmuxChannel
-	var err error
-	switch p.Kind {
-	case principal.Admin:
-		chs, err = h.svc.ListChannels(c.Request.Context())
-	case principal.B2BClient:
-		chs, err = h.svc.GetMany(c.Request.Context(), env.B2BClientChannelIDsIndex.ChannelIDs(p.ID))
-	}
+	p := h.authsvc.WhoAmI(c) // extract principal (already set by other middleware)
+	chs, err := h.getChannelListByPrincipal(c.Request.Context(), p)
 
 	if err != nil {
 		c.Error(err)
@@ -91,6 +84,21 @@ func (h *ChannelsHandler) GetChannelList(c *gin.Context) {
 	}
 	c.Header("X-Total-Count", strconv.Itoa(len(chs))) // RA needs this
 	c.JSON(http.StatusOK, chs)
+}
+
+func (h *ChannelsHandler) getChannelListByPrincipal(ctx context.Context, p *principal.Principal) ([]*channel.ZmuxChannel, error) {
+	if p == nil {
+		return nil, fmt.Errorf("nil principal")
+	}
+
+	switch p.Kind {
+	case principal.Admin:
+		return h.svc.ListChannels(ctx)
+	case principal.B2BClient:
+		return h.svc.ListChannelsByID(ctx, env.B2BClientChannelIDsIndex.ChannelIDs(p.ID))
+	}
+
+	return nil, fmt.Errorf("unsupported principal")
 }
 
 // CreateChannel handles POST /channels.
@@ -407,15 +415,14 @@ func (h *ChannelsHandler) Status(c *gin.Context) {
 // Prototype/demo
 func (h *ChannelsHandler) Quota(c *gin.Context) {
 	p := h.authsvc.WhoAmI(c)
-
-	chs, err := h.svc.GetMany(c.Request.Context(), env.B2BClientChannelIDsIndex.ChannelIDs(p.ID))
-
+	chs, err := h.getChannelListByPrincipal(c.Request.Context(), p)
 	if err != nil {
 		c.Error(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 		return
 	}
 
+	// Compute used enabled
 	used := 0
 	for _, ch := range chs {
 		if ch.Enabled {

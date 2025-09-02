@@ -206,7 +206,7 @@ func (s *ChannelService) ListChannels(ctx context.Context) ([]*channel.ZmuxChann
 	return chs, nil
 }
 
-func (s *ChannelService) GetMany(ctx context.Context, ids []int64) ([]*channel.ZmuxChannel, error) {
+func (s *ChannelService) ListChannelsByID(ctx context.Context, ids []int64) ([]*channel.ZmuxChannel, error) {
 	chs, err := s.repo.Channels.GetByIDs(ctx, ids)
 	if err != nil {
 		return nil, fmt.Errorf("get many: %w", err)
