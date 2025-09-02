@@ -15,11 +15,11 @@ func remuxMetricsKey(id int64) string { return "remux:" + strconv.FormatInt(id, 
 
 // RemuxRepository deals with monitoring keys remux:<id>:*
 type RemuxRepository struct {
-	client *Client
+	client *RedisClient
 	log    *zap.Logger
 }
 
-func newRemuxRepository(log *zap.Logger, client *Client) *RemuxRepository {
+func newRemuxRepository(log *zap.Logger, client *RedisClient) *RemuxRepository {
 	log = log.Named("remux")
 	return &RemuxRepository{
 		log:    log,

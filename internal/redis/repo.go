@@ -4,7 +4,7 @@ import "go.uber.org/zap"
 
 type Repository struct {
 	log    *zap.Logger
-	client *Client
+	client *RedisClient
 
 	Channels *ChannelRepository
 	Remuxers *RemuxRepository
@@ -12,7 +12,7 @@ type Repository struct {
 
 func NewRepository(log *zap.Logger) *Repository {
 	log = log.Named("repo")
-	client := NewClient("localhost:6379", 0, log)
+	client := newRedisClient("localhost:6379", 0, log)
 
 	return &Repository{
 		log,

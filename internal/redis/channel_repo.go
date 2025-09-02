@@ -25,12 +25,12 @@ func channelKeyStr(id string) string { return channelKeyPrefix + id }
 
 // ChannelRepository provides Redis-backed persistence for ZmuxChannel entities.
 type ChannelRepository struct {
-	client *Client
+	client *RedisClient
 	log    *zap.Logger
 }
 
 // newChannelRepository initializes a new ChannelRepository instance.
-func newChannelRepository(log *zap.Logger, client *Client) *ChannelRepository {
+func newChannelRepository(log *zap.Logger, client *RedisClient) *ChannelRepository {
 	log = log.Named("channels")
 
 	return &ChannelRepository{
