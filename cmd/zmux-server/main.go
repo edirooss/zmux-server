@@ -6,7 +6,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/edirooss/zmux-server/internal/domain/principal"
 	"github.com/edirooss/zmux-server/internal/env"
 	"github.com/edirooss/zmux-server/internal/http/handler"
 	mw "github.com/edirooss/zmux-server/internal/http/middleware"
@@ -87,43 +86,43 @@ func main() {
 
 		// --- Protected endpoints (auth required) ---
 		{
-			authed := r.Group("", mw.Authentication(authsvc)) // Any authenticated principal required (admin|b2b_client)
+			authed := r.Group("", mw.Authentication(authsvc)) // any authenticated principal (admin|b2b_client)
 			authed.GET("/api/me", handler.Me(authsvc))
 
-			authzed := authed.Group("", mw.Authorization(authsvc, principal.Admin)) // Only admin principal
-
+			admins := authed.Group("", mw.Authorization(authsvc)) // only admins
 			{
-				// HTTP Handler for channel CRUD + summary
+				// Channel resource handler
 				channelshndlr, err := handler.NewChannelsHandler(log, authsvc)
 				if err != nil {
 					log.Fatal("channels http handler creation failed", zap.Error(err))
 				}
 
-				{
-					authed.GET("/api/channels", channelshndlr.GetChannelList)                                // Get all (Collection)
-					authzed.POST("/api/channels", mw.CapConcurrentRequests(10), channelshndlr.CreateChannel) // Create new (Collection)
-					authed.GET("/api/channels/:id",
-						mw.RequireValidID(),
-						mw.RequireChannelIDAccess(authsvc, env.B2BClientChannelIDsIndex),
-						channelshndlr.GetChannel,
-					) // Get one
-					authzed.PUT("/api/channels/:id", mw.RequireValidID(), mw.CapConcurrentRequests(10), channelshndlr.ReplaceChannel) // Replace one (full update)
-					authed.PATCH("/api/channels/:id",
-						mw.RequireValidID(),
-						mw.RequireChannelIDAccess(authsvc, env.B2BClientChannelIDsIndex),
-						mw.CapConcurrentRequests(10),
-						channelshndlr.ModifyChannel,
-					) // Modify one (partial update)
-					authzed.DELETE("/api/channels/:id", mw.RequireValidID(), mw.CapConcurrentRequests(10), channelshndlr.DeleteChannel) // Delete one
-				}
+				limitConcurrency := mw.LimitConcurrentRequests(10) // cap at 10 in-flight writes (POST/PUT/PATCH/DELETE)
 
-				authzed.GET("/api/channels/summary", channelshndlr.Summary) // Get status+ifmt+metrics
-				authed.GET("/api/channels/status", channelshndlr.Status)    // Get status
+				// --- Channel collection ---
+				admins.POST("/api/channels", limitConcurrency, channelshndlr.CreateChannel) // create new channel
+				authed.GET("/api/channels", channelshndlr.GetChannelList)                   // get all channels
 
-				authed.GET("/api/channels/quota", mw.OnlyB2BClients(authsvc), channelshndlr.Quota) // Get channel-quota (only applicable to b2b clients)
+				// --- Channel resource ---
+				validateID := mw.RequireValidID()
+				admins.PUT("/api/channels/:id", validateID, limitConcurrency, channelshndlr.ReplaceChannel)   // replace/full-update channel
+				admins.DELETE("/api/channels/:id", validateID, limitConcurrency, channelshndlr.DeleteChannel) // delete channel
+
+				authzChannelAcc := mw.AuthorizeChannelAccess(authsvc, env.B2BClientChannelIDsIndex)
+				authed.GET("/api/channels/:id", validateID, authzChannelAcc, channelshndlr.GetChannel)                        // get one channel
+				authed.PATCH("/api/channels/:id", validateID, authzChannelAcc, limitConcurrency, channelshndlr.ModifyChannel) // modify/partial-update channel
+
+				// --- Channel views ---
+				admins.GET("/api/channels/summary", channelshndlr.Summary)
+				authed.GET("/api/channels/status", channelshndlr.Status)
+
+				// --- Channel quota ---
+				b2bClients := mw.RequireB2BClient(authsvc)
+				authed.GET("/api/channels/quota", b2bClients, channelshndlr.Quota) // enabled channel quota (B2B only)
 			}
 
-			authzed.GET("/api/system/net/localaddrs", handler.NewLocalAddrHandler(log).GetLocalAddrList)
+			// --- System ---
+			admins.GET("/api/system/net/localaddrs", handler.NewLocalAddrHandler(log).GetLocalAddrList) // GET local network addresses
 		}
 	}
 
