@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
-  title: Zmux Channels – B2B Client API (DRAFT – INTERNAL USE ONLY)
-  version: 0.0.3
+  title: Zmux – B2B Client API
+  version: 1.0.0
   description: |
     B2B client API for reading Zmux channels configuration and performing partial updates.
 
@@ -172,13 +172,12 @@ paths:
             The entire patch was discarded. No partial updates occurred.
             This status is **never** returned when quota is unlimited.
           headers:
-            X-Request-Id:
-              $ref: "#/components/headers/X-Request-Id"
             Quota-Limit:
               $ref: "#/components/headers/Quota-Limit"
             Quota-Remaining:
               $ref: "#/components/headers/Quota-Remaining"
-
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
         "415":
           description: Unsupported Media Type — only `application/merge-patch+json` is accepted for patch operations.
           headers:
