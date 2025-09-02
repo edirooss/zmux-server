@@ -45,15 +45,6 @@ func (r *ChannelRepository) GenerateID(ctx context.Context) (int64, error) {
 	return id, nil
 }
 
-// HasID returns true if a channel with the given ID exists.
-func (r *ChannelRepository) HasID(ctx context.Context, id int64) (bool, error) {
-	ok, err := r.client.SIsMember(ctx, channelIDsKey, strconv.FormatInt(id, 10)).Result()
-	if err != nil {
-		return false, fmt.Errorf("set is member: %w", err)
-	}
-	return ok, nil
-}
-
 // Upsert persists a ZmuxChannel and adds its ID to the Redis index set.
 func (r *ChannelRepository) Upsert(ctx context.Context, ch *channel.ZmuxChannel) error {
 	key := channelKey(ch.ID)
@@ -71,6 +62,52 @@ func (r *ChannelRepository) Upsert(ctx context.Context, ch *channel.ZmuxChannel)
 		return fmt.Errorf("exec: %w", err)
 	}
 	return nil
+}
+
+// Delete removes a channel by ID.
+// Returns ErrChannelNotFound if the channel key was not present in Redis.
+// Logs a warning if the channel record and index set are inconsistent.
+func (r *ChannelRepository) Delete(ctx context.Context, id int64) error {
+	key := channelKey(id)
+	idStr := strconv.FormatInt(id, 10)
+
+	pipe := r.client.TxPipeline()
+	delRes := pipe.Del(ctx, key)
+	sremRes := pipe.SRem(ctx, channelIDsKey, idStr)
+
+	if _, err := pipe.Exec(ctx); err != nil {
+		return fmt.Errorf("exec: %w", err)
+	}
+
+	delCount := delRes.Val()
+	sremCount := sremRes.Val()
+
+	// If both returned 0, nothing existed
+	if delCount == 0 && sremCount == 0 {
+		return ErrChannelNotFound
+	}
+
+	// If they differ, log it — data/index mismatch
+	if delCount != sremCount {
+		r.log.Warn(
+			"channel delete mismatch",
+			zap.String("key", key),
+			zap.String("id", idStr),
+			zap.Int64("del_count", delCount),
+			zap.Int64("srem_count", sremCount),
+		)
+	}
+
+	return nil
+}
+
+// HasID returns true if a channel with the given ID exists.
+func (r *ChannelRepository) HasID(ctx context.Context, id int64) (bool, error) {
+	ok, err := r.client.SIsMember(ctx, channelIDsKey, strconv.FormatInt(id, 10)).Result()
+	if err != nil {
+		return false, fmt.Errorf("ismember: %w", err)
+	}
+	return ok, nil
 }
 
 // GetByID fetches a channel by its ID.
@@ -105,14 +142,26 @@ func (r *ChannelRepository) GetByIDs(ctx context.Context, ids []int64) ([]*chann
 		return nil, fmt.Errorf("mget: %w", err)
 	}
 
-	return parseMGetValues(r.log, keys, vals)
+	return r.parseMGetResult(keys, vals)
 }
 
-// GetAll returns all known ZmuxChannels stored in Redis.
+// GetAll returns all ZmuxChannels currently indexed in Redis.
+//
+// Note: This operation is **not strongly consistent**. It issues two separate calls:
+//  1. SMEMBERS to collect the set of channel IDs.
+//  2. MGET to fetch the channel payloads.
+//
+// If channels are created or deleted between those two calls, the result may
+// contain transient inconsistencies (e.g. an ID with no value, or a value not
+// yet indexed). Callers should treat the result as **an eventually consistent**
+// snapshot, not a transactional view.
+//
+// If we require atomic semantics (point-in-time snapshot), we must implement
+// this as a Lua script or handle versioning at the application layer.
 func (r *ChannelRepository) GetAll(ctx context.Context) ([]*channel.ZmuxChannel, error) {
 	ids, err := r.client.SMembers(ctx, channelIDsKey).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
-		return nil, fmt.Errorf("set members: %w", err)
+		return nil, fmt.Errorf("smembers: %w", err)
 	}
 	if len(ids) == 0 {
 		return nil, nil
@@ -124,24 +173,7 @@ func (r *ChannelRepository) GetAll(ctx context.Context) ([]*channel.ZmuxChannel,
 		return nil, fmt.Errorf("mget: %w", err)
 	}
 
-	return parseMGetValues(r.log, keys, vals)
-}
-
-// Delete removes a channel by ID. Returns ErrChannelNotFound if the key was not present.
-func (r *ChannelRepository) Delete(ctx context.Context, id int64) error {
-	key := channelKey(id)
-
-	pipe := r.client.TxPipeline()
-	del := pipe.Del(ctx, key)
-	pipe.SRem(ctx, channelIDsKey, strconv.FormatInt(id, 10))
-
-	if _, err := pipe.Exec(ctx); err != nil {
-		return fmt.Errorf("exec: %w", err)
-	}
-	if n := del.Val(); n == 0 {
-		return ErrChannelNotFound
-	}
-	return nil
+	return r.parseMGetResult(keys, vals)
 }
 
 // channelKey constructs the Redis key for a channel ID.
@@ -179,13 +211,20 @@ func decodeChannel(raw []byte) (*channel.ZmuxChannel, error) {
 	return &ch, nil
 }
 
-// parseMGetValues converts Redis MGET results to ZmuxChannel structs.
-func parseMGetValues(_ *zap.Logger, keys []string, vals []interface{}) ([]*channel.ZmuxChannel, error) {
+// parseMGetResult converts Redis MGET results to ZmuxChannel structs.
+// It logs warnings for missing keys and errors for unexpected payload types.
+// Callers should treat missing keys as eventual-consistency artifacts, not hard failures.
+func (r *ChannelRepository) parseMGetResult(keys []string, vals []interface{}) ([]*channel.ZmuxChannel, error) {
 	out := make([]*channel.ZmuxChannel, 0, len(vals))
 
 	for i, v := range vals {
 		if v == nil {
-			return nil, fmt.Errorf("key %s at index %d: %w", keys[i], i, ErrChannelNotFound)
+			r.log.Warn(
+				"channel missing during MGET",
+				zap.String("key", keys[i]),
+				zap.Int("index", i),
+			)
+			continue
 		}
 
 		s, ok := v.(string)
