@@ -87,7 +87,7 @@ func main() {
 
 		// --- Protected endpoints (auth required) ---
 		{
-			authed := r.Group("", mw.Authentication(authsvc)) // Any authenticated principal required (admin|service_account)
+			authed := r.Group("", mw.Authentication(authsvc)) // Any authenticated principal required (admin|b2b_client)
 			authed.GET("/api/me", handler.Me(authsvc))
 
 			authzed := authed.Group("", mw.Authorization(authsvc, principal.Admin)) // Only admin principal
@@ -104,13 +104,13 @@ func main() {
 					authzed.POST("/api/channels", mw.CapConcurrentRequests(10), channelshndlr.CreateChannel) // Create new (Collection)
 					authed.GET("/api/channels/:id",
 						mw.RequireValidID(),
-						mw.RequireChannelIDAccess(authsvc, env.ServiceAccountChannelIDsIndex),
+						mw.RequireChannelIDAccess(authsvc, env.B2BClientChannelIDsIndex),
 						channelshndlr.GetChannel,
 					) // Get one
 					authzed.PUT("/api/channels/:id", mw.RequireValidID(), mw.CapConcurrentRequests(10), channelshndlr.ReplaceChannel) // Replace one (full update)
 					authed.PATCH("/api/channels/:id",
 						mw.RequireValidID(),
-						mw.RequireChannelIDAccess(authsvc, env.ServiceAccountChannelIDsIndex),
+						mw.RequireChannelIDAccess(authsvc, env.B2BClientChannelIDsIndex),
 						mw.CapConcurrentRequests(10),
 						channelshndlr.ModifyChannel,
 					) // Modify one (partial update)
@@ -120,7 +120,7 @@ func main() {
 				authzed.GET("/api/channels/summary", channelshndlr.Summary) // Get status+ifmt+metrics
 				authed.GET("/api/channels/status", channelshndlr.Status)    // Get status
 
-				authed.GET("/api/channels/quota", mw.ServiceAccountOnly(authsvc), channelshndlr.Quota) // Get channel-quota (applicable to service-accounts)
+				authed.GET("/api/channels/quota", mw.OnlyB2BClients(authsvc), channelshndlr.Quota) // Get channel-quota (only applicable to b2b clients)
 			}
 
 			authzed.GET("/api/system/net/localaddrs", handler.NewLocalAddrHandler(log).GetLocalAddrList)

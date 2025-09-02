@@ -36,10 +36,10 @@ func Authorization(authsvc *service.AuthService, allowed ...principal.PrincipalK
 	}
 }
 
-// ServiceAccountOnly permits only ServiceAccount principals.
+// OnlyB2BClients permits only B2BClient principals.
 // - 401 if no principal (auth missing)
-// - 422 if principal exists but is not applicable (e.g., Admin trying a service-account-only endpoint)
-func ServiceAccountOnly(authsvc *service.AuthService) gin.HandlerFunc {
+// - 422 if principal exists but is not applicable (e.g., Admin trying a b2b-client-only endpoint)
+func OnlyB2BClients(authsvc *service.AuthService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		p := authsvc.WhoAmI(c)
 		if p == nil {
@@ -48,7 +48,7 @@ func ServiceAccountOnly(authsvc *service.AuthService) gin.HandlerFunc {
 			return
 		}
 
-		if p.Kind != principal.ServiceAccount {
+		if p.Kind != principal.B2BClient {
 			// Authenticated but the endpoint is not relevant/applicable to this principal kind
 			// Using 422 Unprocessable Content to signal semantic mismatch
 			c.AbortWithStatus(http.StatusUnprocessableEntity)
@@ -59,9 +59,9 @@ func ServiceAccountOnly(authsvc *service.AuthService) gin.HandlerFunc {
 	}
 }
 
-// RequireChannelIDAccess enforces that a service account is bound
+// RequireChannelIDAccess enforces that a b2b client is bound
 // to the channel ID. Admin principals bypass this check entirely.
-func RequireChannelIDAccess(authsvc *service.AuthService, idx env.ServiceAccountChannelIDs) gin.HandlerFunc {
+func RequireChannelIDAccess(authsvc *service.AuthService, idx env.B2BClientChannelIDs) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		p := authsvc.WhoAmI(c)
 		if p == nil {
@@ -75,8 +75,8 @@ func RequireChannelIDAccess(authsvc *service.AuthService, idx env.ServiceAccount
 			return
 		}
 
-		// Must be a service account
-		if p.Kind != principal.ServiceAccount {
+		// Must be a b2b client
+		if p.Kind != principal.B2BClient {
 			c.AbortWithStatus(http.StatusForbidden)
 			return
 		}

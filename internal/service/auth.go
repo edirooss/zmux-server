@@ -63,10 +63,10 @@ func (s *AuthService) AuthenticateWithSession(c *gin.Context) (*principal.Princi
 
 // AuthenticateWithBearerToken authenticates using a bearer token.
 func (s *AuthService) AuthenticateWithBearerToken(c *gin.Context, token string) (*principal.Principal, bool) {
-	if subtle.ConstantTimeCompare([]byte(token), []byte("svc_test_2vV7Q2hksN8KzLpXWq3jUm5Ay4oRxE9b")) == 1 {
+	if subtle.ConstantTimeCompare([]byte(token), []byte("sk_test_2vV7Q2hksN8KzLpXWq3jUm5Ay4oRxE9b")) == 1 {
 		p := &principal.Principal{
-			ID:   "service-account-test-1",
-			Kind: principal.ServiceAccount,
+			ID:   "b2b-client-test-1",
+			Kind: principal.B2BClient,
 		}
 		s.setPrincipal(c, p)
 		return p, true

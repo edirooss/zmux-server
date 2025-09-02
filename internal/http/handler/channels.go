@@ -80,8 +80,8 @@ func (h *ChannelsHandler) GetChannelList(c *gin.Context) {
 	switch p.Kind {
 	case principal.Admin:
 		chs, err = h.svc.ListChannels(c.Request.Context())
-	case principal.ServiceAccount:
-		chs, err = h.svc.GetMany(c.Request.Context(), env.ServiceAccountChannelIDsIndex.ChannelIDs(p.ID))
+	case principal.B2BClient:
+		chs, err = h.svc.GetMany(c.Request.Context(), env.B2BClientChannelIDsIndex.ChannelIDs(p.ID))
 	}
 
 	if err != nil {
@@ -387,7 +387,7 @@ func (h *ChannelsHandler) Status(c *gin.Context) {
 
 	data := make([]dto.ChannelStatus, 0, len(summaryResult.Data))
 	for _, item := range summaryResult.Data {
-		if p.Kind == principal.Admin || (p.Kind == principal.ServiceAccount && env.ServiceAccountChannelIDsIndex.Has(p.ID, item.ID)) {
+		if p.Kind == principal.Admin || (p.Kind == principal.B2BClient && env.B2BClientChannelIDsIndex.Has(p.ID, item.ID)) {
 			data = append(data, dto.ChannelStatus{
 				ID:     item.ID,
 				Online: item.Status != nil && item.Status.Liveness == "Live",
@@ -408,7 +408,7 @@ func (h *ChannelsHandler) Status(c *gin.Context) {
 func (h *ChannelsHandler) Quota(c *gin.Context) {
 	p := h.authsvc.WhoAmI(c)
 
-	chs, err := h.svc.GetMany(c.Request.Context(), env.ServiceAccountChannelIDsIndex.ChannelIDs(p.ID))
+	chs, err := h.svc.GetMany(c.Request.Context(), env.B2BClientChannelIDsIndex.ChannelIDs(p.ID))
 
 	if err != nil {
 		c.Error(err)
