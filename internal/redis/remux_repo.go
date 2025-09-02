@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"go.uber.org/zap"
 )
 
-func remuxStatusKey(id int64) string  { return fmt.Sprintf("remux:%d:status", id) }
-func remuxIfmtKey(id int64) string    { return fmt.Sprintf("remux:%d:ifmt", id) }
-func remuxMetricsKey(id int64) string { return fmt.Sprintf("remux:%d:metrics", id) }
+func remuxStatusKey(id int64) string  { return "remux:" + strconv.FormatInt(id, 10) + ":status" }
+func remuxIfmtKey(id int64) string    { return "remux:" + strconv.FormatInt(id, 10) + ":ifmt" }
+func remuxMetricsKey(id int64) string { return "remux:" + strconv.FormatInt(id, 10) + ":metrics" }
 
 // RemuxRepository deals with monitoring keys remux:<id>:*
 type RemuxRepository struct {
@@ -18,11 +19,11 @@ type RemuxRepository struct {
 	log    *zap.Logger
 }
 
-func NewRemuxRepository(log *zap.Logger) *RemuxRepository {
-	log = log.Named("remux_repo")
+func newRemuxRepository(log *zap.Logger, client *Client) *RemuxRepository {
+	log = log.Named("remux")
 	return &RemuxRepository{
-		client: NewClient("localhost:6379", 0, log),
 		log:    log,
+		client: client,
 	}
 }
 

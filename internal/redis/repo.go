@@ -3,9 +3,11 @@ package redis
 import "go.uber.org/zap"
 
 type Repository struct {
-	log      *zap.Logger
-	client   *Client
+	log    *zap.Logger
+	client *Client
+
 	Channels *ChannelRepository
+	Remuxers *RemuxRepository
 }
 
 func NewRepository(log *zap.Logger) *Repository {
@@ -16,5 +18,6 @@ func NewRepository(log *zap.Logger) *Repository {
 		log,
 		client,
 		newChannelRepository(log, client),
+		newRemuxRepository(log, client),
 	}
 }

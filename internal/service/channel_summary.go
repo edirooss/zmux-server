@@ -41,9 +41,8 @@ type SummaryResult struct {
 }
 
 type SummaryService struct {
-	log       *zap.Logger
-	repo      *redis.Repository
-	remuxRepo *redis.RemuxRepository
+	log  *zap.Logger
+	repo *redis.Repository
 
 	mu      sync.RWMutex
 	cache   []dto.ChannelSummary
@@ -63,11 +62,10 @@ func NewSummaryService(log *zap.Logger, opts SummaryOptions) *SummaryService {
 	opts.setDefaults()
 
 	return &SummaryService{
-		log:       log,
-		repo:      redis.NewRepository(log),
-		remuxRepo: redis.NewRemuxRepository(log),
-		opts:      opts,
-		now:       time.Now,
+		log:  log,
+		repo: redis.NewRepository(log),
+		opts: opts,
+		now:  time.Now,
 	}
 }
 
@@ -154,7 +152,7 @@ func (s *SummaryService) refresh(ctx context.Context) ([]dto.ChannelSummary, err
 		}
 	}
 
-	statusMap, err := s.remuxRepo.BulkStatus(ctx, enabledIDs)
+	statusMap, err := s.repo.Remuxers.BulkStatus(ctx, enabledIDs)
 	if err != nil {
 		// Non-fatal: still assemble response
 		s.log.Warn("bulk status failed", zap.Error(err))
@@ -167,7 +165,7 @@ func (s *SummaryService) refresh(ctx context.Context) ([]dto.ChannelSummary, err
 		}
 	}
 
-	extras, err := s.remuxRepo.BulkIfmtMetrics(ctx, liveIDs)
+	extras, err := s.repo.Remuxers.BulkIfmtMetrics(ctx, liveIDs)
 	if err != nil {
 		s.log.Warn("bulk ifmt/metrics failed", zap.Error(err))
 	}
