@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/edirooss/zmux-server/internal/domain/channel"
+	"github.com/edirooss/zmux-server/internal/domain/channel/views"
 	"github.com/edirooss/zmux-server/internal/domain/principal"
 	"github.com/edirooss/zmux-server/internal/env"
 	"github.com/edirooss/zmux-server/internal/http/dto"
@@ -75,30 +75,44 @@ func NewChannelsHandler(log *zap.Logger, authsvc *service.AuthService) (*Channel
 //   - 500 Internal Server Error
 func (h *ChannelsHandler) GetChannelList(c *gin.Context) {
 	p := h.authsvc.WhoAmI(c) // extract principal (already set by other middleware)
-	chs, err := h.getChannelListByPrincipal(c.Request.Context(), p)
+	chs, total, err := h.getChannelListByPrincipal(c.Request.Context(), p)
 
 	if err != nil {
 		c.Error(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 		return
 	}
-	c.Header("X-Total-Count", strconv.Itoa(len(chs))) // RA needs this
+	c.Header("X-Total-Count", strconv.Itoa(total)) // RA needs this
 	c.JSON(http.StatusOK, chs)
 }
 
-func (h *ChannelsHandler) getChannelListByPrincipal(ctx context.Context, p *principal.Principal) ([]*channel.ZmuxChannel, error) {
+func (h *ChannelsHandler) getChannelListByPrincipal(ctx context.Context, p *principal.Principal) (interface{}, int, error) {
 	if p == nil {
-		return nil, fmt.Errorf("nil principal")
+		return nil, 0, fmt.Errorf("nil principal")
 	}
 
 	switch p.Kind {
+
 	case principal.Admin:
-		return h.svc.ListChannels(ctx)
+		chs, err := h.svc.ListChannels(ctx)
+		if err != nil {
+			return nil, 0, fmt.Errorf("list channels: %w", err)
+		}
+		return chs, len(chs), nil
+
 	case principal.B2BClient:
-		return h.svc.ListChannelsByID(ctx, env.B2BClientChannelIDsIndex.ChannelIDs(p.ID))
+		chs, err := h.svc.ListChannelsByID(ctx, env.B2BClientChannelIDsIndex.ChannelIDs(p.ID))
+		if err != nil {
+			return nil, 0, fmt.Errorf("list channels by id: %w", err)
+		}
+		b2bClientView := make([]*views.ZmuxChannel, len(chs))
+		for i := range chs {
+			b2bClientView[i] = chs[i].AsB2BClientView()
+		}
+		return b2bClientView, len(b2bClientView), nil
 	}
 
-	return nil, fmt.Errorf("unsupported principal")
+	return nil, 0, fmt.Errorf("unsupported principal")
 }
 
 // CreateChannel handles POST /channels.
@@ -156,9 +170,10 @@ func (h *ChannelsHandler) CreateChannel(c *gin.Context) {
 //   - 404 Not Found → Channel not found
 //   - 500 Internal Server Error
 func (h *ChannelsHandler) GetChannel(c *gin.Context) {
+	p := h.authsvc.WhoAmI(c)                         // extract principal (already set by other middleware)
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64) // extract :id (already validated by middleware)
 
-	ch, err := h.svc.GetChannel(c.Request.Context(), id)
+	ch, err := h.getChannelByPrincipal(c.Request.Context(), p, id)
 	if err != nil {
 		c.Error(err)
 		if errors.Is(err, repo.ErrChannelNotFound) {
@@ -170,6 +185,28 @@ func (h *ChannelsHandler) GetChannel(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ch)
+}
+
+func (h *ChannelsHandler) getChannelByPrincipal(ctx context.Context, p *principal.Principal, id int64) (interface{}, error) {
+	if p == nil {
+		return nil, fmt.Errorf("nil principal")
+	}
+
+	ch, err := h.svc.GetChannel(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("get channel: %w", err)
+	}
+
+	switch p.Kind {
+
+	case principal.Admin:
+		return ch, nil
+
+	case principal.B2BClient:
+		return ch.AsB2BClientView(), nil
+	}
+
+	return nil, fmt.Errorf("unsupported principal")
 }
 
 // ModifyChannel handles PATCH /channels/{id}.
@@ -415,7 +452,7 @@ func (h *ChannelsHandler) Status(c *gin.Context) {
 // Prototype/demo
 func (h *ChannelsHandler) Quota(c *gin.Context) {
 	p := h.authsvc.WhoAmI(c)
-	chs, err := h.getChannelListByPrincipal(c.Request.Context(), p)
+	chs, err := h.svc.ListChannelsByID(c.Request.Context(), env.B2BClientChannelIDsIndex.ChannelIDs(p.ID))
 	if err != nil {
 		c.Error(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
