@@ -2,7 +2,7 @@ package service
 
 import (
 	"context"
-	"strings"
+	"fmt"
 	"sync"
 	"time"
 
@@ -152,34 +152,19 @@ func (s *SummaryService) refresh(ctx context.Context) ([]dto.ChannelSummary, err
 		}
 	}
 
-	statusMap, err := s.repo.Remuxers.BulkStatus(ctx, enabledIDs)
+	summeriesByID, err := s.repo.Remuxers.GetSummariesByID(ctx, enabledIDs)
 	if err != nil {
-		// Non-fatal: still assemble response
-		s.log.Warn("bulk status failed", zap.Error(err))
-	}
-
-	liveIDs := make([]int64, 0, len(enabledIDs))
-	for _, id := range enabledIDs {
-		if st, ok := statusMap[id]; ok && strings.EqualFold(st.Liveness, "Live") {
-			liveIDs = append(liveIDs, id)
-		}
-	}
-
-	extras, err := s.repo.Remuxers.BulkIfmtMetrics(ctx, liveIDs)
-	if err != nil {
-		s.log.Warn("bulk ifmt/metrics failed", zap.Error(err))
+		return nil, fmt.Errorf("get summaries by id: %w", err)
 	}
 
 	out := make([]dto.ChannelSummary, 0, len(chs))
 	for _, ch := range chs {
 		sum := dto.ChannelSummary{ZmuxChannel: *ch}
 		if ch.Enabled {
-			if st, ok := statusMap[ch.ID]; ok {
-				sum.Status = st
-				if extra, ok := extras[ch.ID]; ok {
-					sum.Ifmt = extra.Ifmt
-					sum.Metrics = extra.Metrics
-				}
+			if st, ok := summeriesByID[ch.ID]; ok {
+				sum.Status = st.Status
+				sum.Ifmt = st.Ifmt
+				sum.Metrics = st.Metrics
 			}
 		}
 		out = append(out, sum)

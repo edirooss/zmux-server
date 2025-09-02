@@ -134,6 +134,15 @@ func (r *ChannelRepository) GetByID(ctx context.Context, id int64) (*channel.Zmu
 }
 
 // GetByIDs retrieves multiple channels by ID.
+//
+//   - Uses Redis MGET under the hood, which returns one value per key.
+//     If the key exists, the stored channel JSON is returned.
+//     If the key does not exist (e.g. channel never created or already deleted),
+//     Redis returns nil at that index.
+//   - Missing keys are *not treated as errors*. They are logged as warnings and skipped.
+//   - Positional alignment with the input list is *not preserved*: the returned slice will
+//     only contain the channels that actually exist in Redis, so callers should not assume
+//     a 1:1 mapping between input IDs and returned results.
 func (r *ChannelRepository) GetByIDs(ctx context.Context, ids []int64) ([]*channel.ZmuxChannel, error) {
 	if len(ids) == 0 {
 		return []*channel.ZmuxChannel{}, nil
@@ -150,24 +159,26 @@ func (r *ChannelRepository) GetByIDs(ctx context.Context, ids []int64) ([]*chann
 
 // GetAll returns all ZmuxChannels currently indexed in Redis.
 //
-// Note: This operation is **not strongly consistent**. It issues two separate calls:
-//  1. SMEMBERS to collect the set of channel IDs.
-//  2. MGET to fetch the channel payloads.
+// This method is *not strongly consistent*. It performs two independent calls:
+//   - SMEMBERS to collect the set of channel IDs.
+//   - MGET to fetch the corresponding channel payloads.
 //
-// If channels are created or deleted between those two calls, the result may
-// contain transient inconsistencies (e.g. an ID with no value, or a value not
-// yet indexed). Callers should treat the result as **an eventually consistent**
-// snapshot, not a transactional view.
-//
-// If we require atomic semantics (point-in-time snapshot), we must implement
-// this as a Lua script or handle versioning at the application layer.
+// Eventual Consistency vs. Strong Consistency
+//   - If channels are created or deleted between those two calls, results may
+//     include temporary inconsistencies (e.g. an ID with no backing value, or a
+//     value that is not yet indexed).
+//   - Callers should treat the result as an *eventually consistent snapshot*,
+//     not a transactional or point-in-time view.
+//   - These gaps are expected and not considered fatal.
+//   - For strict atomic semantics, use a Lua script or implement versioning at the
+//     application layer.
 func (r *ChannelRepository) GetAll(ctx context.Context) ([]*channel.ZmuxChannel, error) {
 	ids, err := r.client.SMembers(ctx, channelIDsKey).Result()
-	if err != nil && !errors.Is(err, redis.Nil) {
+	if err != nil {
 		return nil, fmt.Errorf("smembers: %w", err)
 	}
 	if len(ids) == 0 {
-		return nil, nil
+		return []*channel.ZmuxChannel{}, nil
 	}
 
 	keys := channelKeysStr(ids)
@@ -213,7 +224,9 @@ func decodeChannel(raw []byte) (*channel.ZmuxChannel, error) {
 
 // parseMGetResult converts Redis MGET results to ZmuxChannel structs.
 // It logs warnings for missing keys and errors for unexpected payload types.
-// Callers should treat missing keys as eventual-consistency artifacts, not hard failures.
+//   - This design is intentional to support eventual consistency: transient gaps
+//     (e.g. an ID present in the index set but no stored value, or vice versa) are expected
+//     and not considered fatal.
 func (r *ChannelRepository) parseMGetResult(keys []string, vals []interface{}) ([]*channel.ZmuxChannel, error) {
 	out := make([]*channel.ZmuxChannel, 0, len(vals))
 
