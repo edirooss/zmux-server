@@ -142,7 +142,7 @@ func (s *SummaryService) Invalidate() {
 
 // refresh runs the Redis pipeline: channels -> statuses -> ifmt/metrics
 func (s *SummaryService) refresh(ctx context.Context) ([]dto.ChannelSummary, error) {
-	chs, err := s.chanRepo.List(ctx)
+	chs, err := s.chanRepo.GetAll(ctx)
 	if err != nil {
 		return nil, err
 	}

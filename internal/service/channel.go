@@ -120,9 +120,9 @@ func (s *ChannelService) tryLock(id int64) (func(), error) {
 //   - Redis error → returned as wrapped error.
 //   - Missing ID → (false, nil).
 func (s *ChannelService) ChannelExists(ctx context.Context, id int64) (bool, error) {
-	exists, err := s.repo.Exists(ctx, id)
+	exists, err := s.repo.HasID(ctx, id)
 	if err != nil {
-		return false, fmt.Errorf("exists: %w", err)
+		return false, fmt.Errorf("has id: %w", err)
 	}
 	return exists, nil
 }
@@ -174,12 +174,12 @@ func (s *ChannelService) CreateChannel(ctx context.Context, ch *channel.ZmuxChan
 	}
 
 	// Persist the final, *actual* state to Redis.
-	if err := s.repo.Set(ctx, ch); err != nil {
+	if err := s.repo.Upsert(ctx, ch); err != nil {
 		// DEV: Avoid drift where runtime says enabled but Redis has no record.
 		if ch.Enabled {
 			_ = s.disableChannel(ch.ID) // best-effort rollback; do not mask Set error
 		}
-		return fmt.Errorf("set: %w", err)
+		return fmt.Errorf("upsert: %w", err)
 	}
 	return nil
 }
@@ -188,7 +188,7 @@ func (s *ChannelService) CreateChannel(ctx context.Context, ch *channel.ZmuxChan
 // Failure modes
 //   - redis.ErrChannelNotFound wrapped → callers should map to 404.
 func (s *ChannelService) GetChannel(ctx context.Context, id int64) (*channel.ZmuxChannel, error) {
-	ch, err := s.repo.Get(ctx, id)
+	ch, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("get: %w", err)
 	}
@@ -199,15 +199,15 @@ func (s *ChannelService) GetChannel(ctx context.Context, id int64) (*channel.Zmu
 // Failure modes
 //   - Any Redis error is returned as-is (wrapped) → callers map to 500.
 func (s *ChannelService) ListChannels(ctx context.Context) ([]*channel.ZmuxChannel, error) {
-	chs, err := s.repo.List(ctx)
+	chs, err := s.repo.GetAll(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list: %w", err)
+		return nil, fmt.Errorf("get all: %w", err)
 	}
 	return chs, nil
 }
 
 func (s *ChannelService) GetMany(ctx context.Context, ids []int64) ([]*channel.ZmuxChannel, error) {
-	chs, err := s.repo.GetMany(ctx, ids)
+	chs, err := s.repo.GetByIDs(ctx, ids)
 	if err != nil {
 		return nil, fmt.Errorf("get many: %w", err)
 	}
@@ -244,7 +244,7 @@ func (s *ChannelService) UpdateChannel(ctx context.Context, ch *channel.ZmuxChan
 	defer unlock()
 
 	// Load current from Redis
-	cur, err := s.repo.Get(ctx, ch.ID)
+	cur, err := s.repo.GetByID(ctx, ch.ID)
 	if err != nil {
 		return fmt.Errorf("get: %w", err)
 	}
@@ -277,7 +277,7 @@ func (s *ChannelService) UpdateChannel(ctx context.Context, ch *channel.ZmuxChan
 	}
 
 	// Persist final state to Redis.
-	if err := s.repo.Set(ctx, ch); err != nil {
+	if err := s.repo.Upsert(ctx, ch); err != nil {
 		// DEV: We do not attempt to roll back runtime here because the unit config
 		// already changed and may be live. Rolling back could be more disruptive.
 		// If we want to require strict no-drift, we need to introduce a compensating write
@@ -309,7 +309,7 @@ func (s *ChannelService) DeleteChannel(ctx context.Context, id int64) error {
 	}
 	defer unlock()
 
-	ch, err := s.repo.Get(ctx, id)
+	ch, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return fmt.Errorf("get: %w", err)
 	}

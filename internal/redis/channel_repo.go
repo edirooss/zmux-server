@@ -6,40 +6,37 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/edirooss/zmux-server/internal/domain/channel"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
-var ErrChannelNotFound = errors.New("channel not found")
+var (
+	ErrChannelNotFound = errors.New("channel not found")
 
-const (
 	channelKeyPrefix = "zmux:channel:"
 	nextIDKey        = "zmux:channel:next_id"
+	channelIDsKey    = "zmux:channels" // SET of string IDs: {"1", "2", ...}
 )
 
-// ChannelRepository handles Redis operations for channels
+// ChannelRepository provides Redis-backed persistence for ZmuxChannel entities.
 type ChannelRepository struct {
 	client *Client
 	log    *zap.Logger
 }
 
-// NewChannelRepository creates a new channel repository
+// NewChannelRepository initializes a new ChannelRepository instance.
 func NewChannelRepository(log *zap.Logger) *ChannelRepository {
 	log = log.Named("channel_repo")
+
 	return &ChannelRepository{
-		client: NewClient("localhost:6379", 0, log),
 		log:    log,
+		client: NewClient("localhost:6379", 0, log),
 	}
 }
 
-func keyFor(id int64) string {
-	return fmt.Sprintf("%s%d", channelKeyPrefix, id)
-}
-
-// GenerateID generates a new unique ID for a channel
+// GenerateID increments and returns the next unique channel ID.
 func (r *ChannelRepository) GenerateID(ctx context.Context) (int64, error) {
 	id, err := r.client.Incr(ctx, nextIDKey).Result()
 	if err != nil {
@@ -48,38 +45,38 @@ func (r *ChannelRepository) GenerateID(ctx context.Context) (int64, error) {
 	return id, nil
 }
 
-// Exists checks whether a channel ID exists in Redis.
-// Uses the maintained SET of channel IDs for efficiency.
-func (r *ChannelRepository) Exists(ctx context.Context, id int64) (bool, error) {
-	ok, err := r.client.SIsMember(ctx, channelIDSetKey, strconv.FormatInt(id, 10)).Result()
+// HasID returns true if a channel with the given ID exists.
+func (r *ChannelRepository) HasID(ctx context.Context, id int64) (bool, error) {
+	ok, err := r.client.SIsMember(ctx, channelIDsKey, strconv.FormatInt(id, 10)).Result()
 	if err != nil {
-		return false, fmt.Errorf("sismember: %w", err)
+		return false, fmt.Errorf("set is member: %w", err)
 	}
 	return ok, nil
 }
 
-const channelIDSetKey = "zmux:channels" // SET of string ids: {"1","2",...}
+// Upsert persists a ZmuxChannel and adds its ID to the Redis index set.
+func (r *ChannelRepository) Upsert(ctx context.Context, ch *channel.ZmuxChannel) error {
+	key := channelKey(ch.ID)
 
-func (r *ChannelRepository) Set(ctx context.Context, channel *channel.ZmuxChannel) error {
-	key := keyFor(channel.ID)
-
-	payload, err := json.Marshal(channel)
+	payload, err := encodeChannel(ch)
 	if err != nil {
-		return fmt.Errorf("marshal: %w", err)
+		return fmt.Errorf("encode: %w", err)
 	}
 
 	pipe := r.client.TxPipeline()
 	pipe.Set(ctx, key, payload, 0)
-	pipe.SAdd(ctx, channelIDSetKey, strconv.FormatInt(channel.ID, 10))
+	pipe.SAdd(ctx, channelIDsKey, strconv.FormatInt(ch.ID, 10))
+
 	if _, err := pipe.Exec(ctx); err != nil {
-		return fmt.Errorf("set+sadd: %w", err)
+		return fmt.Errorf("exec: %w", err)
 	}
 	return nil
 }
 
-// Get retrieves a channel by ID (returns redis.Nil if not found)
-func (r *ChannelRepository) Get(ctx context.Context, id int64) (*channel.ZmuxChannel, error) {
-	key := keyFor(id)
+// GetByID fetches a channel by its ID.
+// Returns ErrChannelNotFound if the key does not exist.
+func (r *ChannelRepository) GetByID(ctx context.Context, id int64) (*channel.ZmuxChannel, error) {
+	key := channelKey(id)
 
 	value, err := r.client.Get(ctx, key).Bytes()
 	if err != nil {
@@ -89,21 +86,57 @@ func (r *ChannelRepository) Get(ctx context.Context, id int64) (*channel.ZmuxCha
 		return nil, fmt.Errorf("get: %w", err)
 	}
 
-	var channel channel.ZmuxChannel
-	if err := json.Unmarshal(value, &channel); err != nil {
-		return nil, fmt.Errorf("unmarshal: %w", err)
+	ch, err := decodeChannel(value)
+	if err != nil {
+		return nil, fmt.Errorf("decode: %w", err)
 	}
-	return &channel, nil
+	return ch, nil
 }
 
-// Delete removes a single channel key. Returns ErrChannelNotFound if the key doesn't exist.
+// GetByIDs retrieves multiple channels by ID.
+func (r *ChannelRepository) GetByIDs(ctx context.Context, ids []int64) ([]*channel.ZmuxChannel, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	keys := channelKeys(ids)
+	vals, err := r.client.MGet(ctx, keys...).Result()
+	if err != nil {
+		return nil, fmt.Errorf("mget: %w", err)
+	}
+
+	return parseMGetValues(r.log, keys, vals)
+}
+
+// GetAll returns all known ZmuxChannels stored in Redis.
+func (r *ChannelRepository) GetAll(ctx context.Context) ([]*channel.ZmuxChannel, error) {
+	ids, err := r.client.SMembers(ctx, channelIDsKey).Result()
+	if err != nil && !errors.Is(err, redis.Nil) {
+		return nil, fmt.Errorf("set members: %w", err)
+	}
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	keys := channelKeys(ids)
+	vals, err := r.client.MGet(ctx, keys...).Result()
+	if err != nil {
+		return nil, fmt.Errorf("mget: %w", err)
+	}
+
+	return parseMGetValues(r.log, keys, vals)
+}
+
+// Delete removes a channel by ID. Returns ErrChannelNotFound if the key was not present.
 func (r *ChannelRepository) Delete(ctx context.Context, id int64) error {
-	key := keyFor(id)
+	key := channelKey(id)
+
 	pipe := r.client.TxPipeline()
 	del := pipe.Del(ctx, key)
-	pipe.SRem(ctx, channelIDSetKey, strconv.FormatInt(id, 10))
+	pipe.SRem(ctx, channelIDsKey, strconv.FormatInt(id, 10))
+
 	if _, err := pipe.Exec(ctx); err != nil {
-		return fmt.Errorf("del+srem: %w", err)
+		return fmt.Errorf("exec: %w", err)
 	}
 	if n := del.Val(); n == 0 {
 		return ErrChannelNotFound
@@ -111,90 +144,59 @@ func (r *ChannelRepository) Delete(ctx context.Context, id int64) error {
 	return nil
 }
 
-// List retrieves all channels by using the maintained SET of IDs.
-func (r *ChannelRepository) List(ctx context.Context) ([]*channel.ZmuxChannel, error) {
-	ids, err := r.client.SMembers(ctx, channelIDSetKey).Result()
-	if err != nil && !errors.Is(err, redis.Nil) {
-		return nil, fmt.Errorf("smembers: %w", err)
+// channelKey constructs the Redis key for a channel ID.
+func channelKey[T int64 | string](id T) string {
+	switch v := any(id).(type) {
+	case int64:
+		return fmt.Sprintf("%s%d", channelKeyPrefix, v)
+	case string:
+		return fmt.Sprintf("%s%s", channelKeyPrefix, v)
+	default:
+		panic("unsupported type") // programming fault
 	}
-	if len(ids) == 0 {
-		return nil, nil
-	}
-
-	keys := make([]string, 0, len(ids))
-	for _, idStr := range ids {
-		// guard against accidental junk in the set
-		if strings.TrimSpace(idStr) == "" {
-			continue
-		}
-		keys = append(keys, fmt.Sprintf("%s%s", channelKeyPrefix, idStr))
-	}
-
-	vals, err := r.client.MGet(ctx, keys...).Result()
-	if err != nil {
-		return nil, fmt.Errorf("mget: %w", err)
-	}
-
-	result := make([]*channel.ZmuxChannel, 0, len(vals))
-	for i, v := range vals {
-		if v == nil {
-			continue // key missing (possible if set drifted); harmless
-		}
-		var b []byte
-		switch t := v.(type) {
-		case string:
-			b = []byte(t)
-		case []byte:
-			b = t
-		default:
-			return nil, fmt.Errorf("unexpected type for key %s at index %d", keys[i], i)
-		}
-		var ch channel.ZmuxChannel
-		if err := json.Unmarshal(b, &ch); err != nil {
-			return nil, fmt.Errorf("unmarshal key %s: %w", keys[i], err)
-		}
-		result = append(result, &ch)
-	}
-	return result, nil
 }
 
-// GetMany retrieves multiple channels by their IDs.
-// - Returns only channels that exist (missing ones are skipped).
-// - Order of returned channels follows the order of IDs that were found.
-func (r *ChannelRepository) GetMany(ctx context.Context, ids []int64) ([]*channel.ZmuxChannel, error) {
-	if len(ids) == 0 {
-		return nil, nil
-	}
-
-	keys := keysForIDs(ids)
-	vals, err := r.client.MGet(ctx, keys...).Result()
-	if err != nil {
-		return nil, fmt.Errorf("mget: %w", err)
-	}
-
-	out := make([]*channel.ZmuxChannel, 0, len(vals))
-	for i, v := range vals {
-		if v == nil {
-			continue // key missing
-		}
-		s, ok := v.(string)
-		if !ok {
-			return nil, fmt.Errorf("unexpected type for key %s at index %d (got %T, want string)", keys[i], i, v)
-		}
-		var ch channel.ZmuxChannel
-		if err := json.Unmarshal([]byte(s), &ch); err != nil {
-			return nil, fmt.Errorf("unmarshal key %s: %w", keys[i], err)
-		}
-		out = append(out, &ch)
-	}
-	return out, nil
-}
-
-func keysForIDs(ids []int64) []string {
+// channelKeys constructs the Redis keys for multiple channel IDs.
+func channelKeys[T int64 | string](ids []T) []string {
 	keys := make([]string, len(ids))
 	for i, id := range ids {
-		s := strconv.FormatInt(id, 10)
-		keys[i] = fmt.Sprintf("%s%s", channelKeyPrefix, s)
+		keys[i] = channelKey(id)
 	}
 	return keys
+}
+
+// encodeChannel serializes a ZmuxChannel to JSON.
+func encodeChannel(ch *channel.ZmuxChannel) ([]byte, error) {
+	return json.Marshal(ch)
+}
+
+// decodeChannel deserializes a JSON payload into a ZmuxChannel.
+func decodeChannel(raw []byte) (*channel.ZmuxChannel, error) {
+	var ch channel.ZmuxChannel
+	if err := json.Unmarshal(raw, &ch); err != nil {
+		return nil, err
+	}
+	return &ch, nil
+}
+
+// parseMGetValues converts Redis MGET results to ZmuxChannel structs.
+func parseMGetValues(_ *zap.Logger, keys []string, vals []interface{}) ([]*channel.ZmuxChannel, error) {
+	out := make([]*channel.ZmuxChannel, 0, len(vals))
+
+	for i, v := range vals {
+		if v == nil {
+			return nil, fmt.Errorf("key %s at index %d: %w", keys[i], i, ErrChannelNotFound)
+		}
+
+		s, ok := v.(string)
+		if !ok {
+			return nil, fmt.Errorf("key %s at index %d: unexpected type (got %T, want string)", keys[i], i, v)
+		}
+		ch, err := decodeChannel([]byte(s))
+		if err != nil {
+			return nil, fmt.Errorf("key %s at index %d: decode channel: %w", keys[i], i, err)
+		}
+		out = append(out, ch)
+	}
+	return out, nil
 }
