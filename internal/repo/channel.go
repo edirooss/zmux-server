@@ -136,7 +136,7 @@ func (r *ChannelRepository) GetByID(ctx context.Context, id int64) (*channel.Zmu
 // GetByIDs retrieves multiple channels by ID.
 func (r *ChannelRepository) GetByIDs(ctx context.Context, ids []int64) ([]*channel.ZmuxChannel, error) {
 	if len(ids) == 0 {
-		return nil, nil
+		return []*channel.ZmuxChannel{}, nil
 	}
 
 	keys := channelKeysInt(ids)
