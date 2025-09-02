@@ -48,7 +48,7 @@ import (
 // -----------------------------------------------------------------------------
 
 type ChannelService struct {
-	repo    *redis.ChannelRepository
+	repo    *redis.Repository
 	systemd *SystemdService
 
 	// per-channel locks to serialize mutations on the same ID
@@ -91,7 +91,7 @@ func NewChannelService(log *zap.Logger) (*ChannelService, error) {
 		return nil, fmt.Errorf("new systemd service: %w", err)
 	}
 	return &ChannelService{
-		repo:    redis.NewChannelRepository(log),
+		repo:    redis.NewRepository(log),
 		systemd: systemd,
 	}, nil
 }
@@ -120,7 +120,7 @@ func (s *ChannelService) tryLock(id int64) (func(), error) {
 //   - Redis error → returned as wrapped error.
 //   - Missing ID → (false, nil).
 func (s *ChannelService) ChannelExists(ctx context.Context, id int64) (bool, error) {
-	exists, err := s.repo.HasID(ctx, id)
+	exists, err := s.repo.Channels.HasID(ctx, id)
 	if err != nil {
 		return false, fmt.Errorf("has id: %w", err)
 	}
@@ -147,7 +147,7 @@ func (s *ChannelService) ChannelExists(ctx context.Context, id int64) (bool, err
 // Postconditions on success
 //   - Unit committed; service enabled iff ch.Enabled=true; Redis reflects that.
 func (s *ChannelService) CreateChannel(ctx context.Context, ch *channel.ZmuxChannel) error {
-	id, err := s.repo.GenerateID(ctx)
+	id, err := s.repo.Channels.GenerateID(ctx)
 	if err != nil {
 		return err
 	}
@@ -174,7 +174,7 @@ func (s *ChannelService) CreateChannel(ctx context.Context, ch *channel.ZmuxChan
 	}
 
 	// Persist the final, *actual* state to Redis.
-	if err := s.repo.Upsert(ctx, ch); err != nil {
+	if err := s.repo.Channels.Upsert(ctx, ch); err != nil {
 		// DEV: Avoid drift where runtime says enabled but Redis has no record.
 		if ch.Enabled {
 			_ = s.disableChannel(ch.ID) // best-effort rollback; do not mask Set error
@@ -188,7 +188,7 @@ func (s *ChannelService) CreateChannel(ctx context.Context, ch *channel.ZmuxChan
 // Failure modes
 //   - redis.ErrChannelNotFound wrapped → callers should map to 404.
 func (s *ChannelService) GetChannel(ctx context.Context, id int64) (*channel.ZmuxChannel, error) {
-	ch, err := s.repo.GetByID(ctx, id)
+	ch, err := s.repo.Channels.GetByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("get: %w", err)
 	}
@@ -199,7 +199,7 @@ func (s *ChannelService) GetChannel(ctx context.Context, id int64) (*channel.Zmu
 // Failure modes
 //   - Any Redis error is returned as-is (wrapped) → callers map to 500.
 func (s *ChannelService) ListChannels(ctx context.Context) ([]*channel.ZmuxChannel, error) {
-	chs, err := s.repo.GetAll(ctx)
+	chs, err := s.repo.Channels.GetAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get all: %w", err)
 	}
@@ -207,7 +207,7 @@ func (s *ChannelService) ListChannels(ctx context.Context) ([]*channel.ZmuxChann
 }
 
 func (s *ChannelService) GetMany(ctx context.Context, ids []int64) ([]*channel.ZmuxChannel, error) {
-	chs, err := s.repo.GetByIDs(ctx, ids)
+	chs, err := s.repo.Channels.GetByIDs(ctx, ids)
 	if err != nil {
 		return nil, fmt.Errorf("get many: %w", err)
 	}
@@ -244,7 +244,7 @@ func (s *ChannelService) UpdateChannel(ctx context.Context, ch *channel.ZmuxChan
 	defer unlock()
 
 	// Load current from Redis
-	cur, err := s.repo.GetByID(ctx, ch.ID)
+	cur, err := s.repo.Channels.GetByID(ctx, ch.ID)
 	if err != nil {
 		return fmt.Errorf("get: %w", err)
 	}
@@ -277,7 +277,7 @@ func (s *ChannelService) UpdateChannel(ctx context.Context, ch *channel.ZmuxChan
 	}
 
 	// Persist final state to Redis.
-	if err := s.repo.Upsert(ctx, ch); err != nil {
+	if err := s.repo.Channels.Upsert(ctx, ch); err != nil {
 		// DEV: We do not attempt to roll back runtime here because the unit config
 		// already changed and may be live. Rolling back could be more disruptive.
 		// If we want to require strict no-drift, we need to introduce a compensating write
@@ -309,7 +309,7 @@ func (s *ChannelService) DeleteChannel(ctx context.Context, id int64) error {
 	}
 	defer unlock()
 
-	ch, err := s.repo.GetByID(ctx, id)
+	ch, err := s.repo.Channels.GetByID(ctx, id)
 	if err != nil {
 		return fmt.Errorf("get: %w", err)
 	}
@@ -321,7 +321,7 @@ func (s *ChannelService) DeleteChannel(ctx context.Context, id int64) error {
 		}
 	}
 
-	if err := s.repo.Delete(ctx, id); err != nil {
+	if err := s.repo.Channels.Delete(ctx, id); err != nil {
 		// Recovery path: try to put the service back up if we brought it down.
 		if wasEnabled {
 			_ = s.enableChannel(ch.ID)

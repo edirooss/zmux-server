@@ -42,7 +42,7 @@ type SummaryResult struct {
 
 type SummaryService struct {
 	log       *zap.Logger
-	chanRepo  *redis.ChannelRepository
+	repo      *redis.Repository
 	remuxRepo *redis.RemuxRepository
 
 	mu      sync.RWMutex
@@ -64,7 +64,7 @@ func NewSummaryService(log *zap.Logger, opts SummaryOptions) *SummaryService {
 
 	return &SummaryService{
 		log:       log,
-		chanRepo:  redis.NewChannelRepository(log),
+		repo:      redis.NewRepository(log),
 		remuxRepo: redis.NewRemuxRepository(log),
 		opts:      opts,
 		now:       time.Now,
@@ -142,7 +142,7 @@ func (s *SummaryService) Invalidate() {
 
 // refresh runs the Redis pipeline: channels -> statuses -> ifmt/metrics
 func (s *SummaryService) refresh(ctx context.Context) ([]dto.ChannelSummary, error) {
-	chs, err := s.chanRepo.GetAll(ctx)
+	chs, err := s.repo.Channels.GetAll(ctx)
 	if err != nil {
 		return nil, err
 	}

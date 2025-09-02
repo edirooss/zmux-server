@@ -26,13 +26,13 @@ type ChannelRepository struct {
 	log    *zap.Logger
 }
 
-// NewChannelRepository initializes a new ChannelRepository instance.
-func NewChannelRepository(log *zap.Logger) *ChannelRepository {
-	log = log.Named("channel_repo")
+// newChannelRepository initializes a new ChannelRepository instance.
+func newChannelRepository(log *zap.Logger, client *Client) *ChannelRepository {
+	log = log.Named("channels")
 
 	return &ChannelRepository{
 		log:    log,
-		client: NewClient("localhost:6379", 0, log),
+		client: client,
 	}
 }
 
