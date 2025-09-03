@@ -222,6 +222,7 @@ func (h *ChannelsHandler) getChannelByPrincipal(ctx context.Context, p *principa
 //   - 422 Unprocessable Entity → Validation failed
 //   - 500 Internal Server Error
 func (h *ChannelsHandler) ModifyChannel(c *gin.Context) {
+	p := h.authsvc.WhoAmI(c)                         // extract principal (already set by other middleware)
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64) // extract :id (already validated by middleware)
 
 	// Load current
@@ -244,7 +245,7 @@ func (h *ChannelsHandler) ModifyChannel(c *gin.Context) {
 	}
 
 	// Patch obj
-	if err := req.MergePatch(ch); err != nil {
+	if err := req.MergePatch(ch, p.Kind); err != nil {
 		c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
