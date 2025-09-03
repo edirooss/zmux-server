@@ -1,14 +1,15 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"os"
 	"time"
 
-	"github.com/edirooss/zmux-server/internal/domain/principal"
 	"github.com/edirooss/zmux-server/internal/http/handler"
 	mw "github.com/edirooss/zmux-server/internal/http/middleware"
+	"github.com/edirooss/zmux-server/internal/repo"
 	"github.com/edirooss/zmux-server/internal/service"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/secure"
@@ -33,20 +34,27 @@ func main() {
 	gin.DefaultWriter = zap.NewStdLog(log.Named("gin")).Writer() // Configure Gin's logger to use Zap
 	r := gin.New()
 
+	// Apply B2B clients confiugration
+	repo := repo.NewRepository(log)
+	if err := service.StartSpecSync(context.TODO(), log, repo, "", 0); err != nil {
+		log.Fatal("spec sync service failed", zap.Error(err))
+	}
+
 	// Apply middlewares
-	authsvc, err := service.NewAuthService(isDev)
+	authsvc, err := service.NewAuthService(log, repo, isDev)
 	if err != nil {
 		log.Fatal("auth service creation failed", zap.Error(err))
 	}
 	{
 		r.Use(gin.Recovery()) // Recovery first (outermost)
+		r.Use(mw.RequestID()) // Attach request ID for tracing; early in the chain so it's available everywhere
 
 		if isDev { // Enable CORS for local Vite dev
 			r.Use(cors.New(cors.Config{
 				AllowOrigins:     []string{"http://localhost:5173", "http://localhost:4173", "http://127.0.0.1:3000"},
 				AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-				AllowHeaders:     []string{"Content-Type", "X-CSRF-Token", "Authorization"},
-				ExposeHeaders:    []string{"X-Total-Count", "X-Cache", "X-Summary-Generated-At"},
+				AllowHeaders:     []string{"X-Request-ID", "Content-Type", "X-CSRF-Token", "Authorization"},
+				ExposeHeaders:    []string{"X-Request-ID", "X-Total-Count", "X-Cache", "X-Summary-Generated-At"},
 				AllowCredentials: true, // Allow cookies in dev
 				MaxAge:           12 * time.Hour,
 			}))
@@ -86,32 +94,43 @@ func main() {
 
 		// --- Protected endpoints (auth required) ---
 		{
-			authed := r.Group("", mw.Authentication(authsvc)) // Any authenticated principal required (admin|service_account)
+			authed := r.Group("", mw.Authentication(authsvc)) // any authenticated principal (admin|b2b_client)
 			authed.GET("/api/me", handler.Me(authsvc))
 
-			authzed := authed.Group("", mw.Authorization(authsvc, principal.Admin)) // Only admin principal
-
+			admins := authed.Group("", mw.Authorization(authsvc)) // only admins
 			{
-				// HTTP Handler for channel CRUD + summary
-				channelshndlr, err := handler.NewChannelsHandler(log)
+				// Channel resource handler
+				channelshndlr, err := handler.NewChannelsHandler(log, authsvc, repo.B2BClntChnls)
 				if err != nil {
 					log.Fatal("channels http handler creation failed", zap.Error(err))
 				}
 
-				{
-					authed.GET("/api/channels", channelshndlr.GetChannelList)                              // Get all (Collection)
-					authzed.POST("/api/channels", mw.ConcurrentCap(10), channelshndlr.CreateChannel)       // Create new (Collection)
-					authed.GET("/api/channels/:id", channelshndlr.GetChannel)                              // Get one
-					authzed.PUT("/api/channels/:id", mw.ConcurrentCap(10), channelshndlr.ReplaceChannel)   // Replace one (full update)
-					authed.PATCH("/api/channels/:id", mw.ConcurrentCap(10), channelshndlr.ModifyChannel)   // Modify one (partial update)
-					authzed.DELETE("/api/channels/:id", mw.ConcurrentCap(10), channelshndlr.DeleteChannel) // Delete one
-				}
+				limitConcurrency := mw.LimitConcurrentRequests(10) // cap at 10 in-flight writes (POST/PUT/PATCH/DELETE)
 
-				authzed.GET("/api/channels/summary", channelshndlr.Summary) // Get status+ifmt+metrics (Collection)
-				authed.GET("/api/channels/status", channelshndlr.Status)    // Get status (Collection)
+				// --- Channel collection ---
+				admins.POST("/api/channels", limitConcurrency, channelshndlr.CreateChannel) // create new channel
+				authed.GET("/api/channels", channelshndlr.GetChannelList)                   // get all channels
+
+				// --- Channel resource ---
+				validateID := mw.RequireValidChannelID()
+				admins.PUT("/api/channels/:id", validateID, limitConcurrency, channelshndlr.ReplaceChannel)   // replace/full-update channel
+				admins.DELETE("/api/channels/:id", validateID, limitConcurrency, channelshndlr.DeleteChannel) // delete channel
+
+				authzChannelAcc := mw.AuthorizeChannelIDAccess(authsvc, repo.B2BClntChnls)
+				authed.GET("/api/channels/:id", validateID, authzChannelAcc, channelshndlr.GetChannel)                        // get one channel
+				authed.PATCH("/api/channels/:id", validateID, authzChannelAcc, limitConcurrency, channelshndlr.ModifyChannel) // modify/partial-update channel
+
+				// --- Channel views ---
+				admins.GET("/api/channels/summary", channelshndlr.Summary)
+				authed.GET("/api/channels/status", channelshndlr.Status)
+
+				// --- Channel quota ---
+				b2bClients := mw.RequireB2BClient(authsvc)
+				authed.GET("/api/channels/quota", b2bClients, channelshndlr.Quota) // enabled channel quota (B2B only)
 			}
 
-			authzed.GET("/api/system/net/localaddrs", handler.NewLocalAddrHandler(log).GetLocalAddrList)
+			// --- System ---
+			admins.GET("/api/system/net/localaddrs", handler.NewLocalAddrHandler(log).GetLocalAddrList) // GET local network addresses
 		}
 	}
 

@@ -2,14 +2,14 @@ package service
 
 import (
 	"context"
-	"strings"
+	"fmt"
 	"sync"
 	"time"
 
 	"golang.org/x/sync/singleflight"
 
 	"github.com/edirooss/zmux-server/internal/http/dto"
-	"github.com/edirooss/zmux-server/internal/redis"
+	"github.com/edirooss/zmux-server/internal/repo"
 	"go.uber.org/zap"
 )
 
@@ -41,9 +41,8 @@ type SummaryResult struct {
 }
 
 type SummaryService struct {
-	log       *zap.Logger
-	chanRepo  *redis.ChannelRepository
-	remuxRepo *redis.RemuxRepository
+	log  *zap.Logger
+	repo *repo.Repository
 
 	mu      sync.RWMutex
 	cache   []dto.ChannelSummary
@@ -63,11 +62,10 @@ func NewSummaryService(log *zap.Logger, opts SummaryOptions) *SummaryService {
 	opts.setDefaults()
 
 	return &SummaryService{
-		log:       log,
-		chanRepo:  redis.NewChannelRepository(log),
-		remuxRepo: redis.NewRemuxRepository(log),
-		opts:      opts,
-		now:       time.Now,
+		log:  log,
+		repo: repo.NewRepository(log),
+		opts: opts,
+		now:  time.Now,
 	}
 }
 
@@ -142,7 +140,7 @@ func (s *SummaryService) Invalidate() {
 
 // refresh runs the Redis pipeline: channels -> statuses -> ifmt/metrics
 func (s *SummaryService) refresh(ctx context.Context) ([]dto.ChannelSummary, error) {
-	chs, err := s.chanRepo.List(ctx)
+	chs, err := s.repo.Channels.GetAll(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -154,34 +152,19 @@ func (s *SummaryService) refresh(ctx context.Context) ([]dto.ChannelSummary, err
 		}
 	}
 
-	statusMap, err := s.remuxRepo.BulkStatus(ctx, enabledIDs)
+	summeriesByID, err := s.repo.Remuxers.GetSummariesByID(ctx, enabledIDs)
 	if err != nil {
-		// Non-fatal: still assemble response
-		s.log.Warn("bulk status failed", zap.Error(err))
-	}
-
-	liveIDs := make([]int64, 0, len(enabledIDs))
-	for _, id := range enabledIDs {
-		if st, ok := statusMap[id]; ok && strings.EqualFold(st.Liveness, "Live") {
-			liveIDs = append(liveIDs, id)
-		}
-	}
-
-	extras, err := s.remuxRepo.BulkIfmtMetrics(ctx, liveIDs)
-	if err != nil {
-		s.log.Warn("bulk ifmt/metrics failed", zap.Error(err))
+		return nil, fmt.Errorf("get summaries by id: %w", err)
 	}
 
 	out := make([]dto.ChannelSummary, 0, len(chs))
 	for _, ch := range chs {
 		sum := dto.ChannelSummary{ZmuxChannel: *ch}
 		if ch.Enabled {
-			if st, ok := statusMap[ch.ID]; ok {
-				sum.Status = st
-				if extra, ok := extras[ch.ID]; ok {
-					sum.Ifmt = extra.Ifmt
-					sum.Metrics = extra.Metrics
-				}
+			if st, ok := summeriesByID[ch.ID]; ok {
+				sum.Status = st.Status
+				sum.Ifmt = st.Ifmt
+				sum.Metrics = st.Metrics
 			}
 		}
 		out = append(out, sum)

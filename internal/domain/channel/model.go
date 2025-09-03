@@ -1,6 +1,7 @@
 package channel
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -48,14 +49,43 @@ var depRules = map[string][]string{
 }
 
 func (ch *ZmuxChannel) Validate() error {
-	// Cross-field dependency check
-	if err := ch.crossDependencyCheck(); err != nil {
-		return err
+	// name: nullable, minLength 1, maxLength 100
+	if ch.Name != nil {
+		if len(*ch.Name) < 1 {
+			return errors.New("name must be at least 1 character")
+		}
+		if len(*ch.Name) > 100 {
+			return errors.New("name must be at most 100 characters")
+		}
 	}
 
+	// input.url: uri, maxLength 2048
 	if ch.Input.URL != nil {
+		if len(*ch.Input.URL) > 2048 {
+			return errors.New("input.url must be at most 2048 characters")
+		}
 		if err := validateInputURL(*ch.Input.URL); err != nil {
 			return fmt.Errorf("invalid input.url: %s", err)
+		}
+	}
+
+	// input.username: nullable, minLength 1, maxLength 128
+	if ch.Input.Username != nil {
+		if len(*ch.Input.Username) < 1 {
+			return errors.New("input.username must be at least 1 character")
+		}
+		if len(*ch.Input.Username) > 128 {
+			return errors.New("input.username must be at most 128 characters")
+		}
+	}
+
+	// input.password: nullable, minLength 1, maxLength 128
+	if ch.Input.Password != nil {
+		if len(*ch.Input.Password) < 1 {
+			return errors.New("input.password must be at least 1 character")
+		}
+		if len(*ch.Input.Password) > 128 {
+			return errors.New("input.password must be at most 128 characters")
 		}
 	}
 
@@ -63,6 +93,11 @@ func (ch *ZmuxChannel) Validate() error {
 		if err := validateOutputURL(*ch.Output.URL); err != nil {
 			return fmt.Errorf("invalid output.url: %s", err)
 		}
+	}
+
+	// Cross-field dependency check
+	if err := ch.crossDependencyCheck(); err != nil {
+		return err
 	}
 
 	return nil

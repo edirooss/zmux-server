@@ -1,4 +1,4 @@
-package redis
+package repo
 
 import (
 	"context"
@@ -8,14 +8,14 @@ import (
 	"go.uber.org/zap"
 )
 
-// Client wraps the Redis client with additional functionality
-type Client struct {
+// RedisClient wraps the Redis client with additional functionality
+type RedisClient struct {
 	*redis.Client
 	log *zap.Logger
 }
 
-// NewClient creates a new Redis client with configuration
-func NewClient(addr string, db int, log *zap.Logger) *Client {
+// newRedisClient creates a new Redis client with configuration
+func newRedisClient(addr string, db int, log *zap.Logger) *RedisClient {
 	opts := &redis.Options{
 		Addr:         addr,
 		DB:           db,
@@ -27,7 +27,7 @@ func NewClient(addr string, db int, log *zap.Logger) *Client {
 		MaxRetries:   3,
 	}
 
-	client := &Client{
+	client := &RedisClient{
 		Client: redis.NewClient(opts),
 		log:    log.Named("Redis"),
 	}
@@ -38,12 +38,12 @@ func NewClient(addr string, db int, log *zap.Logger) *Client {
 }
 
 // Close closes the Redis client connection
-func (c *Client) Close() error {
+func (c *RedisClient) Close() error {
 	return c.Client.Close()
 }
 
 // Ping uses opTimeout and logs connection diagnostics.
-func (c *Client) Ping(ctx context.Context) {
+func (c *RedisClient) Ping(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 	defer cancel()
 

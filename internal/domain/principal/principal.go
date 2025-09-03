@@ -5,19 +5,19 @@ import (
 	"fmt"
 )
 
-type PrincipalKind int // principal kind (admin|service_account)
+type PrincipalKind int // principal kind (admin|b2b_client)
 
 const (
-	Admin          PrincipalKind = iota // Zmux Admin
-	ServiceAccount                      // Zmux Service Account
+	Admin     PrincipalKind = iota // Zmux Admins
+	B2BClient                      // Zmux B2B Clients
 )
 
 func (k PrincipalKind) String() string {
 	switch k {
 	case Admin:
 		return "admin"
-	case ServiceAccount:
-		return "service_account"
+	case B2BClient:
+		return "b2b_client"
 	default:
 		return "unknown"
 	}
@@ -37,8 +37,8 @@ func (k *PrincipalKind) UnmarshalJSON(data []byte) error {
 	switch s {
 	case "admin":
 		*k = Admin
-	case "service_account":
-		*k = ServiceAccount
+	case "b2b_client":
+		*k = B2BClient
 	default:
 		return fmt.Errorf("invalid PrincipalKind: %s", s)
 	}
@@ -46,6 +46,6 @@ func (k *PrincipalKind) UnmarshalJSON(data []byte) error {
 }
 
 type Principal struct {
-	ID   string        `json:"id"`   // user id for admins, account id for service accounts
+	ID   string        `json:"id"`   // user id for admins, client id for b2b clients
 	Kind PrincipalKind `json:"kind"` // string marshaled
 }

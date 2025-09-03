@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/edirooss/zmux-server/internal/domain/channel"
+	"github.com/edirooss/zmux-server/internal/domain/principal"
 )
 
 // ChannelModify is the DTO for updating a Zmux channel via
@@ -43,7 +44,8 @@ type ChannelOutputModify struct {
 // MergePatch applies ModifyChannel to channel.ZmuxChannel (in-memory)
 // Disallows explicit null assignment to non-nullable fields.
 // Unset fields remain unchanged.
-func (req *ChannelModify) MergePatch(prev *channel.ZmuxChannel) error {
+// Enforce field-level authorization based on principal kind.
+func (req *ChannelModify) MergePatch(prev *channel.ZmuxChannel, pKind principal.PrincipalKind) error {
 	// name
 	// optional; string | null
 	if req.Name.Set {
@@ -60,14 +62,18 @@ func (req *ChannelModify) MergePatch(prev *channel.ZmuxChannel) error {
 		if req.Input.Null {
 			return errors.New("input cannot be null")
 		}
-		if err := req.Input.V.MergePatch(&prev.Input); err != nil {
+		if err := req.Input.V.MergePatch(&prev.Input, pKind); err != nil {
 			return err
 		}
 	}
 
 	// output
 	// optional; object
+	// admin-only
 	if req.Output.Set {
+		if pKind != principal.Admin {
+			return errors.New("output set unauthorized")
+		}
 		if req.Output.Null {
 			return errors.New("output cannot be null")
 		}
@@ -87,7 +93,11 @@ func (req *ChannelModify) MergePatch(prev *channel.ZmuxChannel) error {
 
 	// restart_sec
 	// optional; uint
+	// admin-only
 	if req.RestartSec.Set {
+		if pKind != principal.Admin {
+			return errors.New("restart_sec set unauthorized")
+		}
 		if req.RestartSec.Null {
 			return errors.New("restart_sec cannot be null")
 		}
@@ -100,7 +110,8 @@ func (req *ChannelModify) MergePatch(prev *channel.ZmuxChannel) error {
 // MergePatch applies ModifyChannelInput to channel.ZmuxChannelInput (in-memory)
 // Disallows explicit null assignment to non-nullable fields.
 // Unset fields remain unchanged.
-func (req *ChannelInputModify) MergePatch(prev *channel.ZmuxChannelInput) error {
+// Enforce permission based on principal kind.
+func (req *ChannelInputModify) MergePatch(prev *channel.ZmuxChannelInput, pKind principal.PrincipalKind) error {
 	// url
 	// optional; string | null
 	if req.URL.Set {
@@ -133,7 +144,11 @@ func (req *ChannelInputModify) MergePatch(prev *channel.ZmuxChannelInput) error 
 
 	// avioflags
 	// optional; string | null
+	// admin-only
 	if req.AVIOFlags.Set {
+		if pKind != principal.Admin {
+			return errors.New("avioflags set unauthorized")
+		}
 		if req.AVIOFlags.Null {
 			prev.AVIOFlags = nil
 		} else {
@@ -143,7 +158,11 @@ func (req *ChannelInputModify) MergePatch(prev *channel.ZmuxChannelInput) error 
 
 	// probesize
 	// optional; uint
+	// admin-only
 	if req.Probesize.Set {
+		if pKind != principal.Admin {
+			return errors.New("probesize set unauthorized")
+		}
 		if req.Probesize.Null {
 			return errors.New("probesize cannot be null")
 		}
@@ -152,7 +171,11 @@ func (req *ChannelInputModify) MergePatch(prev *channel.ZmuxChannelInput) error 
 
 	// analyzeduration
 	// optional; uint
+	// admin-only
 	if req.Analyzeduration.Set {
+		if pKind != principal.Admin {
+			return errors.New("analyzeduration set unauthorized")
+		}
 		if req.Analyzeduration.Null {
 			return errors.New("analyzeduration cannot be null")
 		}
@@ -161,7 +184,11 @@ func (req *ChannelInputModify) MergePatch(prev *channel.ZmuxChannelInput) error 
 
 	// fflags
 	// optional; string | null
+	// admin-only
 	if req.FFlags.Set {
+		if pKind != principal.Admin {
+			return errors.New("fflags set unauthorized")
+		}
 		if req.FFlags.Null {
 			prev.FFlags = nil
 		} else {
@@ -171,7 +198,11 @@ func (req *ChannelInputModify) MergePatch(prev *channel.ZmuxChannelInput) error 
 
 	// max_delay
 	// optional; int
+	// admin-only
 	if req.MaxDelay.Set {
+		if pKind != principal.Admin {
+			return errors.New("max_delay set unauthorized")
+		}
 		if req.MaxDelay.Null {
 			return errors.New("max_delay cannot be null")
 		}
@@ -180,7 +211,11 @@ func (req *ChannelInputModify) MergePatch(prev *channel.ZmuxChannelInput) error 
 
 	// localaddr
 	// optional; string | null
+	// admin-only
 	if req.Localaddr.Set {
+		if pKind != principal.Admin {
+			return errors.New("localaddr set unauthorized")
+		}
 		if req.Localaddr.Null {
 			prev.Localaddr = nil
 		} else {
@@ -190,7 +225,11 @@ func (req *ChannelInputModify) MergePatch(prev *channel.ZmuxChannelInput) error 
 
 	// timeout
 	// optional; uint
+	// admin-only
 	if req.Timeout.Set {
+		if pKind != principal.Admin {
+			return errors.New("timeout set unauthorized")
+		}
 		if req.Timeout.Null {
 			return errors.New("timeout cannot be null")
 		}
@@ -199,7 +238,11 @@ func (req *ChannelInputModify) MergePatch(prev *channel.ZmuxChannelInput) error 
 
 	// rtsp_transport
 	// optional; string | null
+	// admin-only
 	if req.RTSPTransport.Set {
+		if pKind != principal.Admin {
+			return errors.New("rtsp_transport set unauthorized")
+		}
 		if req.RTSPTransport.Null {
 			prev.RTSPTransport = nil
 		} else {
