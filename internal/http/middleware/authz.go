@@ -1,11 +1,12 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
 	"github.com/edirooss/zmux-server/internal/domain/principal"
-	"github.com/edirooss/zmux-server/internal/env"
+	"github.com/edirooss/zmux-server/internal/repo"
 	"github.com/edirooss/zmux-server/internal/service"
 	"github.com/gin-gonic/gin"
 )
@@ -69,7 +70,7 @@ func RequireB2BClient(auth *service.AuthService) gin.HandlerFunc {
 //   - 403 if not authorized for the channel
 //
 // Admins always bypass this check.
-func AuthorizeChannelIDAccess(auth *service.AuthService, channels env.B2BClientChannelIDs) gin.HandlerFunc {
+func AuthorizeChannelIDAccess(auth *service.AuthService, b2bClntChnls *repo.B2BClntChnlsRepo) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		p := auth.WhoAmI(c)
 		if p == nil {
@@ -88,7 +89,14 @@ func AuthorizeChannelIDAccess(auth *service.AuthService, channels env.B2BClientC
 
 		// extract :id param (route param already validated by other middleware)
 		id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-		if !channels.Has(p.ID, id) {
+
+		ok, err := b2bClntChnls.HasChannelID(context.TODO(), p.ID, id)
+		if err != nil {
+			c.Error(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+			return
+		}
+		if !ok {
 			c.AbortWithStatus(http.StatusForbidden) // client not bound to this channel
 			return
 		}

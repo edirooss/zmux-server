@@ -1,10 +1,11 @@
 package service
 
 import (
-	"crypto/subtle"
+	"errors"
 	"fmt"
 
 	"github.com/edirooss/zmux-server/internal/domain/principal"
+	"github.com/edirooss/zmux-server/internal/repo"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -18,17 +19,18 @@ const principalKey contextKey = "auth.principal"
 type AuthService struct {
 	log         *zap.Logger
 	UserSession *UserSessionService
+	repo        *repo.Repository
 }
 
 // NewAuthService creates a new AuthService.
-func NewAuthService(log *zap.Logger, isDev bool) (*AuthService, error) {
+func NewAuthService(log *zap.Logger, repo *repo.Repository, isDev bool) (*AuthService, error) {
 	log = log.Named("auth")
 	usersesssvc, err := NewUserSessionService(isDev)
 	if err != nil {
 		return nil, fmt.Errorf("new user session service: %w", err)
 	}
 
-	return &AuthService{log: log, UserSession: usersesssvc}, nil
+	return &AuthService{log: log, UserSession: usersesssvc, repo: repo}, nil
 }
 
 // AuthenticateWithPassword authenticates using username and password.
@@ -65,16 +67,19 @@ func (s *AuthService) AuthenticateWithSession(c *gin.Context) (*principal.Princi
 }
 
 // AuthenticateWithBearerToken authenticates using a bearer token.
+// Looks up principal by bearer token in Redis and sets it on the request context.
+// DEV: No constant-time compare here—token is used as a Redis key; errors are logged and treated as auth failures.
 func (s *AuthService) AuthenticateWithBearerToken(c *gin.Context, token string) (*principal.Principal, bool) {
-	if subtle.ConstantTimeCompare([]byte(token), []byte("sk_test_2vV7Q2hksN8KzLpXWq3jUm5Ay4oRxE9b")) == 1 {
-		p := &principal.Principal{
-			ID:   "b2b-client-test-1",
-			Kind: principal.B2BClient,
+	p, err := s.repo.Principal.GetByToken(c.Request.Context(), token)
+	if err != nil {
+		if errors.Is(err, repo.ErrPrincipalNotFound) {
+			return nil, false
 		}
-		s.setPrincipal(c, p)
-		return p, true
+		s.log.Warn("bearer lookup failed", zap.Error(err))
+		return nil, false
 	}
-	return nil, false
+	s.setPrincipal(c, p)
+	return p, true
 }
 
 // WhoAmI returns the authenticated Principal from the Gin context.

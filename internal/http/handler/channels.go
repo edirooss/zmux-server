@@ -12,7 +12,6 @@ import (
 
 	"github.com/edirooss/zmux-server/internal/domain/channel/views"
 	"github.com/edirooss/zmux-server/internal/domain/principal"
-	"github.com/edirooss/zmux-server/internal/env"
 	"github.com/edirooss/zmux-server/internal/http/dto"
 	"github.com/edirooss/zmux-server/internal/repo"
 	"github.com/edirooss/zmux-server/internal/service"
@@ -33,14 +32,15 @@ import (
 // Notes:
 //   - Standard REST semantics (RFC 9110, RFC 5789).
 type ChannelsHandler struct {
-	log        *zap.Logger
-	authsvc    *service.AuthService
-	svc        *service.ChannelService
-	summarySvc *service.SummaryService
+	log          *zap.Logger
+	authsvc      *service.AuthService
+	svc          *service.ChannelService
+	summarySvc   *service.SummaryService
+	b2bClntChnls *repo.B2BClntChnlsRepo
 }
 
 // NewChannelsHandler constructs a ChannelsHandler instance.
-func NewChannelsHandler(log *zap.Logger, authsvc *service.AuthService) (*ChannelsHandler, error) {
+func NewChannelsHandler(log *zap.Logger, authsvc *service.AuthService, b2bClntChnls *repo.B2BClntChnlsRepo) (*ChannelsHandler, error) {
 	// Service for channel CRUD
 	channelService, err := service.NewChannelService(log)
 	if err != nil {
@@ -57,10 +57,11 @@ func NewChannelsHandler(log *zap.Logger, authsvc *service.AuthService) (*Channel
 	)
 
 	return &ChannelsHandler{
-		log:        log.Named("channels"),
-		authsvc:    authsvc,
-		svc:        channelService,
-		summarySvc: summarySvc,
+		log:          log.Named("channels"),
+		authsvc:      authsvc,
+		svc:          channelService,
+		summarySvc:   summarySvc,
+		b2bClntChnls: b2bClntChnls,
 	}, nil
 }
 
@@ -101,7 +102,11 @@ func (h *ChannelsHandler) getChannelListByPrincipal(ctx context.Context, p *prin
 		return chs, len(chs), nil
 
 	case principal.B2BClient:
-		chs, err := h.svc.ListChannelsByID(ctx, env.B2BClientChannelIDsIndex.ChannelIDs(p.ID))
+		chIDs, err := h.b2bClntChnls.GetAll(ctx, p.ID)
+		if err != nil {
+			return nil, 0, fmt.Errorf("get b2b channels ids: %w", err)
+		}
+		chs, err := h.svc.ListChannelsByID(ctx, chIDs)
 		if err != nil {
 			return nil, 0, fmt.Errorf("list channels by id: %w", err)
 		}
@@ -431,29 +436,51 @@ func (h *ChannelsHandler) Status(c *gin.Context) {
 	}
 	p := h.authsvc.WhoAmI(c)
 
-	data := make([]dto.ChannelStatus, 0, len(summaryResult.Data))
+	var clntChnlsIDs map[int64]struct{}
+	if p.Kind == principal.B2BClient {
+		clntChnlsIDs, err = h.b2bClntChnls.GetAllMap(c.Request.Context(), p.ID)
+		if err != nil {
+			c.Error(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+			return
+		}
+	}
+
+	out := make([]dto.ChannelStatus, 0, len(summaryResult.Data))
 	for _, item := range summaryResult.Data {
-		if p.Kind == principal.Admin || (p.Kind == principal.B2BClient && env.B2BClientChannelIDsIndex.Has(p.ID, item.ID)) {
-			data = append(data, dto.ChannelStatus{
-				ID:     item.ID,
-				Online: item.Status != nil && item.Status.Liveness == "Live",
-			})
+		channelStatus := dto.ChannelStatus{
+			ID:     item.ID,
+			Online: item.Status != nil && item.Status.Liveness == "Live",
+		}
+		switch p.Kind {
+		case principal.Admin:
+			out = append(out, channelStatus)
+		case principal.B2BClient:
+			if _, ok := clntChnlsIDs[item.ID]; ok {
+				out = append(out, channelStatus)
+			}
 		}
 	}
 
 	// Friendly cache headers for debugging/observability
 	c.Header("X-Cache", map[bool]string{true: "HIT", false: "MISS"}[summaryResult.CacheHit])
 	c.Header("X-Status-Generated-At", strconv.FormatInt(summaryResult.GeneratedAt.UnixMilli(), 10))
-	c.Header("X-Total-Count", strconv.Itoa(len(data)))
+	c.Header("X-Total-Count", strconv.Itoa(len(out)))
 
-	c.JSON(http.StatusOK, data)
+	c.JSON(http.StatusOK, out)
 }
 
 // Quota
 // Prototype/demo
 func (h *ChannelsHandler) Quota(c *gin.Context) {
 	p := h.authsvc.WhoAmI(c)
-	chs, err := h.svc.ListChannelsByID(c.Request.Context(), env.B2BClientChannelIDsIndex.ChannelIDs(p.ID))
+	chIDs, err := h.b2bClntChnls.GetAll(c.Request.Context(), p.ID)
+	if err != nil {
+		c.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		return
+	}
+	chs, err := h.svc.ListChannelsByID(c.Request.Context(), chIDs)
 	if err != nil {
 		c.Error(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})

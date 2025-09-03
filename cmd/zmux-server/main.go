@@ -1,14 +1,15 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"os"
 	"time"
 
-	"github.com/edirooss/zmux-server/internal/env"
 	"github.com/edirooss/zmux-server/internal/http/handler"
 	mw "github.com/edirooss/zmux-server/internal/http/middleware"
+	"github.com/edirooss/zmux-server/internal/repo"
 	"github.com/edirooss/zmux-server/internal/service"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/secure"
@@ -33,8 +34,14 @@ func main() {
 	gin.DefaultWriter = zap.NewStdLog(log.Named("gin")).Writer() // Configure Gin's logger to use Zap
 	r := gin.New()
 
+	// Apply B2B clients confiugration
+	repo := repo.NewRepository(log)
+	if err := service.StartSpecSync(context.TODO(), log, repo, "", 0); err != nil {
+		log.Fatal("spec sync service failed", zap.Error(err))
+	}
+
 	// Apply middlewares
-	authsvc, err := service.NewAuthService(log, isDev)
+	authsvc, err := service.NewAuthService(log, repo, isDev)
 	if err != nil {
 		log.Fatal("auth service creation failed", zap.Error(err))
 	}
@@ -46,8 +53,8 @@ func main() {
 			r.Use(cors.New(cors.Config{
 				AllowOrigins:     []string{"http://localhost:5173", "http://localhost:4173", "http://127.0.0.1:3000"},
 				AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-				AllowHeaders:     []string{"Content-Type", "X-CSRF-Token", "Authorization"},
-				ExposeHeaders:    []string{"X-Total-Count", "X-Cache", "X-Summary-Generated-At"},
+				AllowHeaders:     []string{"X-Request-ID", "Content-Type", "X-CSRF-Token", "Authorization"},
+				ExposeHeaders:    []string{"X-Request-ID", "X-Total-Count", "X-Cache", "X-Summary-Generated-At"},
 				AllowCredentials: true, // Allow cookies in dev
 				MaxAge:           12 * time.Hour,
 			}))
@@ -93,7 +100,7 @@ func main() {
 			admins := authed.Group("", mw.Authorization(authsvc)) // only admins
 			{
 				// Channel resource handler
-				channelshndlr, err := handler.NewChannelsHandler(log, authsvc)
+				channelshndlr, err := handler.NewChannelsHandler(log, authsvc, repo.B2BClntChnls)
 				if err != nil {
 					log.Fatal("channels http handler creation failed", zap.Error(err))
 				}
@@ -109,7 +116,7 @@ func main() {
 				admins.PUT("/api/channels/:id", validateID, limitConcurrency, channelshndlr.ReplaceChannel)   // replace/full-update channel
 				admins.DELETE("/api/channels/:id", validateID, limitConcurrency, channelshndlr.DeleteChannel) // delete channel
 
-				authzChannelAcc := mw.AuthorizeChannelIDAccess(authsvc, env.B2BClientChannelIDsIndex)
+				authzChannelAcc := mw.AuthorizeChannelIDAccess(authsvc, repo.B2BClntChnls)
 				authed.GET("/api/channels/:id", validateID, authzChannelAcc, channelshndlr.GetChannel)                        // get one channel
 				authed.PATCH("/api/channels/:id", validateID, authzChannelAcc, limitConcurrency, channelshndlr.ModifyChannel) // modify/partial-update channel
 

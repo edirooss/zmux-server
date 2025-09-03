@@ -6,8 +6,10 @@ type Repository struct {
 	log    *zap.Logger
 	client *RedisClient
 
-	Channels *ChannelRepository
-	Remuxers *RemuxRepository
+	Channels     *ChannelRepository
+	Remuxers     *RemuxRepository
+	B2BClntChnls *B2BClntChnlsRepo
+	Principal    *PrincipalRepository
 }
 
 func NewRepository(log *zap.Logger) *Repository {
@@ -19,5 +21,7 @@ func NewRepository(log *zap.Logger) *Repository {
 		client,
 		newChannelRepository(log, client),
 		newRemuxRepository(log, client),
+		newB2BClntChnlsRepo(log, client),
+		newPrincipalRepository(log, client),
 	}
 }
