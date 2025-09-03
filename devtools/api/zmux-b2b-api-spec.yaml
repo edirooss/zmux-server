@@ -44,6 +44,16 @@ paths:
 
       parameters:
         - $ref: "#/components/parameters/X-Request-ID"
+        - in: query
+          name: ids
+          schema:
+            type: string
+          required: false
+          description: >
+            Comma-separated list of channel IDs to filter results (e.g., `?ids=1,2,3`).
+              - Only channels that exist and the client is authorized to access are returned.
+              - Unauthorized or non-existent IDs are silently ignored.
+              - Any invalid ID (non-numeric or ≤ 0) results in `400 Bad Request`.
       responses:
         "200":
           description: OK — array of authorized `Channel` objects, each representing a single channel as defined by its configuration; empty if none.
@@ -90,6 +100,7 @@ paths:
                 emptyList:
                   summary: No authorized channels
                   value: []
+        "400": { $ref: "#/components/responses/400BadRequest" }
         "401": { $ref: "#/components/responses/401Unauthorized" }
         "403": { $ref: "#/components/responses/403Forbidden" }
         "429": { $ref: "#/components/responses/429TooManyRequests" }
