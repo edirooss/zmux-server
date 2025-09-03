@@ -7,6 +7,7 @@ import (
 	"github.com/edirooss/zmux-server/internal/domain/principal"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 type contextKey string
@@ -15,17 +16,19 @@ const principalKey contextKey = "auth.principal"
 
 // AuthService handles authentication logic.
 type AuthService struct {
+	log         *zap.Logger
 	UserSession *UserSessionService
 }
 
 // NewAuthService creates a new AuthService.
-func NewAuthService(isDev bool) (*AuthService, error) {
+func NewAuthService(log *zap.Logger, isDev bool) (*AuthService, error) {
+	log = log.Named("auth")
 	usersesssvc, err := NewUserSessionService(isDev)
 	if err != nil {
 		return nil, fmt.Errorf("new user session service: %w", err)
 	}
 
-	return &AuthService{UserSession: usersesssvc}, nil
+	return &AuthService{log: log, UserSession: usersesssvc}, nil
 }
 
 // AuthenticateWithPassword authenticates using username and password.

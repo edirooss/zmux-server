@@ -34,7 +34,7 @@ func main() {
 	r := gin.New()
 
 	// Apply middlewares
-	authsvc, err := service.NewAuthService(isDev)
+	authsvc, err := service.NewAuthService(log, isDev)
 	if err != nil {
 		log.Fatal("auth service creation failed", zap.Error(err))
 	}
