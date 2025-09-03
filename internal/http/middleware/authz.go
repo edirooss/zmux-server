@@ -63,13 +63,13 @@ func RequireB2BClient(auth *service.AuthService) gin.HandlerFunc {
 	}
 }
 
-// AuthorizeChannelAccess ensures a B2B client is bound to the requested channel ID.
+// AuthorizeChannelIDAccess ensures a B2B client is bound to the requested channel ID.
 //
 //   - 401 if unauthenticated
 //   - 403 if not authorized for the channel
 //
 // Admins always bypass this check.
-func AuthorizeChannelAccess(auth *service.AuthService, channels env.B2BClientChannelIDs) gin.HandlerFunc {
+func AuthorizeChannelIDAccess(auth *service.AuthService, channels env.B2BClientChannelIDs) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		p := auth.WhoAmI(c)
 		if p == nil {

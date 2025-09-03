@@ -40,6 +40,7 @@ func main() {
 	}
 	{
 		r.Use(gin.Recovery()) // Recovery first (outermost)
+		r.Use(mw.RequestID()) // Attach request ID for tracing; early in the chain so it's available everywhere
 
 		if isDev { // Enable CORS for local Vite dev
 			r.Use(cors.New(cors.Config{
@@ -104,11 +105,11 @@ func main() {
 				authed.GET("/api/channels", channelshndlr.GetChannelList)                   // get all channels
 
 				// --- Channel resource ---
-				validateID := mw.RequireValidID()
+				validateID := mw.RequireValidChannelID()
 				admins.PUT("/api/channels/:id", validateID, limitConcurrency, channelshndlr.ReplaceChannel)   // replace/full-update channel
 				admins.DELETE("/api/channels/:id", validateID, limitConcurrency, channelshndlr.DeleteChannel) // delete channel
 
-				authzChannelAcc := mw.AuthorizeChannelAccess(authsvc, env.B2BClientChannelIDsIndex)
+				authzChannelAcc := mw.AuthorizeChannelIDAccess(authsvc, env.B2BClientChannelIDsIndex)
 				authed.GET("/api/channels/:id", validateID, authzChannelAcc, channelshndlr.GetChannel)                        // get one channel
 				authed.PATCH("/api/channels/:id", validateID, authzChannelAcc, limitConcurrency, channelshndlr.ModifyChannel) // modify/partial-update channel
 
