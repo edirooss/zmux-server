@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/edirooss/zmux-server/internal/domain/channel/views"
@@ -68,7 +69,9 @@ func NewChannelsHandler(log *zap.Logger, authsvc *service.AuthService, b2bClntCh
 // GetChannelList handles GET /channels.
 //
 // Behavior:
-//   - Returns all available channels.
+//   - If no ID filters are provided, returns all available channels per principal.
+//   - If ID filters are provided (?id=... repeated or ?ids=comma,separated),
+//     returns only those channels (intersected with principal's visibility for B2B).
 //   - Adds `X-Total-Count` header.
 //
 // Status Codes:
@@ -76,8 +79,15 @@ func NewChannelsHandler(log *zap.Logger, authsvc *service.AuthService, b2bClntCh
 //   - 500 Internal Server Error
 func (h *ChannelsHandler) GetChannelList(c *gin.Context) {
 	p := h.authsvc.WhoAmI(c) // extract principal (already set by other middleware)
-	chs, total, err := h.getChannelListByPrincipal(c.Request.Context(), p)
 
+	requestedIDs, err := collectRequestedIDs(c)
+	if err != nil {
+		c.Error(err)
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+
+	chs, total, err := h.getChannelListByPrincipal(c.Request.Context(), p, requestedIDs)
 	if err != nil {
 		c.Error(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
@@ -87,14 +97,62 @@ func (h *ChannelsHandler) GetChannelList(c *gin.Context) {
 	c.JSON(http.StatusOK, chs)
 }
 
-func (h *ChannelsHandler) getChannelListByPrincipal(ctx context.Context, p *principal.Principal) (interface{}, int, error) {
+func collectRequestedIDs(c *gin.Context) ([]int64, error) {
+	ids := make([]string, 0, 4)
+
+	// Repeated: ?id=x&id=y
+	if arr := c.QueryArray("id"); len(arr) > 0 {
+		ids = append(ids, arr...)
+	}
+	// Comma-separated: ?ids=x,y,z
+	if csv := c.Query("ids"); csv != "" {
+		for _, s := range strings.Split(csv, ",") {
+			s = strings.TrimSpace(s)
+			if s != "" {
+				ids = append(ids, s)
+			}
+		}
+	}
+
+	// Dedupe while preserving order and cast to int64
+	seen := make(map[string]struct{}, len(ids))
+	out := make([]int64, 0, len(ids))
+	for _, id := range ids {
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+
+		n, err := strconv.ParseInt(id, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid id %q: %w", id, err)
+		}
+		if n <= 0 {
+			return nil, fmt.Errorf("id must be > 0, got %d", n)
+		}
+		out = append(out, n)
+	}
+
+	return out, nil
+}
+
+func (h *ChannelsHandler) getChannelListByPrincipal(ctx context.Context, p *principal.Principal, requestedIDs []int64,
+) (interface{}, int, error) {
 	if p == nil {
 		return nil, 0, fmt.Errorf("nil principal")
 	}
 
 	switch p.Kind {
-
 	case principal.Admin:
+		// Admin can either fetch all or a filtered subset
+		if len(requestedIDs) > 0 {
+			chs, err := h.svc.ListChannelsByID(ctx, requestedIDs)
+			if err != nil {
+				return nil, 0, fmt.Errorf("list channels by id: %w", err)
+			}
+			return chs, len(chs), nil
+		}
+
 		chs, err := h.svc.ListChannels(ctx)
 		if err != nil {
 			return nil, 0, fmt.Errorf("list channels: %w", err)
@@ -102,11 +160,32 @@ func (h *ChannelsHandler) getChannelListByPrincipal(ctx context.Context, p *prin
 		return chs, len(chs), nil
 
 	case principal.B2BClient:
-		chIDs, err := h.b2bClntChnls.GetAll(ctx, p.ID)
+		// Get allowed IDs
+		allowedIDs, err := h.b2bClntChnls.GetAllMap(ctx, p.ID)
 		if err != nil {
 			return nil, 0, fmt.Errorf("get b2b channels ids: %w", err)
 		}
-		chs, err := h.svc.ListChannelsByID(ctx, chIDs)
+
+		var toFetch []int64
+		if len(requestedIDs) > 0 {
+			// Intersect requestedIDs ∩ allowedIDs
+			for _, id := range requestedIDs {
+				if _, ok := allowedIDs[id]; ok {
+					toFetch = append(toFetch, id)
+				}
+			}
+			if len(toFetch) == 0 {
+				// Nothing permitted from the requested subset
+				return []*views.ZmuxChannel{}, 0, nil
+			}
+		} else {
+			// No filter → fetch all allowed
+			for allowedID := range allowedIDs {
+				toFetch = append(toFetch, allowedID)
+			}
+		}
+
+		chs, err := h.svc.ListChannelsByID(ctx, toFetch)
 		if err != nil {
 			return nil, 0, fmt.Errorf("list channels by id: %w", err)
 		}
