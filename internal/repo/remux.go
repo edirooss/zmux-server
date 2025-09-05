@@ -32,10 +32,16 @@ func newRemuxRepository(log *zap.Logger, client *RedisClient) *RemuxRepository {
 }
 
 // RemuxStatus mirrors the JSON stored at remux:<id>:status.
+//
+//   - Online: true when media reading/processing is currently active/successful.
+//   - Event:  contains a user-facing message (step label or error details) and
+//     a timestamp of when it was recorded.
 type RemuxStatus struct {
-	Liveness  string `json:"liveness"` // "Live" | "Dead"
-	Metadata  string `json:"metadata"`
-	Timestamp int64  `json:"timestamp"`
+	Online bool `json:"online"`
+	Event  struct {
+		Message string `json:"msg"` // step label OR error message
+		At      int64  `json:"at"`  // UTC millis when this event was recorded
+	} `json:"event"`
 }
 
 // RemuxSummary bundles RemuxStatus with optional ifmt/metrics JSON blobs for "Live" remuxers.
@@ -127,7 +133,7 @@ func (r *RemuxRepository) GetSummariesByID(ctx context.Context, ids []int64) (ma
 
 	for id, status := range currentStatusList {
 		summariesByID[id] = &RemuxSummary{Status: status}
-		if status.Liveness == "Live" {
+		if status.Online {
 			liveIDs = append(liveIDs, id)
 		}
 	}

@@ -529,7 +529,7 @@ func (h *ChannelsHandler) Status(c *gin.Context) {
 	for _, item := range summaryResult.Data {
 		channelStatus := dto.ChannelStatus{
 			ID:     item.ID,
-			Online: item.Status != nil && item.Status.Liveness == "Live",
+			Online: item.Status != nil && item.Status.Online,
 		}
 		switch p.Kind {
 		case principal.Admin:
