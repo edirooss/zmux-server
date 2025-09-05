@@ -9,6 +9,7 @@ import (
 
 	"github.com/edirooss/zmux-server/internal/domain/channel"
 	"github.com/edirooss/zmux-server/internal/repo"
+	"github.com/edirooss/zmux-server/pkg/remuxcmd"
 	"go.uber.org/zap"
 )
 
@@ -340,7 +341,7 @@ func (s *ChannelService) DeleteChannel(ctx context.Context, id int64) error {
 func (s *ChannelService) commitSystemdService(ch *channel.ZmuxChannel) error {
 	cfg := SystemdServiceConfig{
 		ServiceName: fmt.Sprintf("zmux-channel-%d", ch.ID),
-		ExecStart:   BuildRemuxExecStart(ch),
+		ExecStart:   remuxcmd.BuildRemuxExec(ch),
 		RestartSec:  strconv.FormatUint(uint64(ch.RestartSec), 10),
 	}
 	if err := s.systemd.CommitService(cfg); err != nil {
