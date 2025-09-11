@@ -39,17 +39,20 @@ func BuildRemuxExec(ch *channel.ZmuxChannel) string {
 		WithStringFlag("--timeout", strconv.FormatUint(uint64(ch.Input.Timeout), 10)).
 		WithStringPFlag("--rtsp-transport", ch.Input.RTSPTransport)
 
-	// --- Positional/output section: --output [url] ---
-	builder.WithString("--output")
-	builder.WithStringP(ch.Output.URL) // optional; CLI defaults to /dev/null if omitted
+	// --- Positional/outputs section: [--output [url] [output flags]]... ---
+	for _, output := range ch.Outputs {
+		if output.Enabled {
+			builder.WithString("--output")
+			builder.WithStringP(output.URL) // optional; CLI defaults to /dev/null if omitted
 
-	// --- Output flags (CLI: StringVar for pkt-size; BoolVar for maps) ---
-	builder.
-		WithStringPFlag("--localaddr", ch.Output.Localaddr).
-		WithStringFlag("--pkt-size", strconv.FormatUint(uint64(ch.Output.PktSize), 10)).
-		WithBoolFlag("--map-video", ch.Output.MapVideo).
-		WithBoolFlag("--map-audio", ch.Output.MapAudio).
-		WithBoolFlag("--map-data", ch.Output.MapData)
-
+			// --- Output flags (CLI: StringVar for pkt-size; BoolVar for maps) ---
+			builder.
+				WithStringPFlag("--localaddr", output.Localaddr).
+				WithStringFlag("--pkt-size", strconv.FormatUint(uint64(output.PktSize), 10)).
+				WithBoolFlag("--map-video", output.StreamMapping.HasVideo()).
+				WithBoolFlag("--map-audio", output.StreamMapping.HasAudio()).
+				WithBoolFlag("--map-data", output.StreamMapping.HasData())
+		}
+	}
 	return builder.BuildString()
 }
