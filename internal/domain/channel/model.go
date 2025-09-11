@@ -8,12 +8,12 @@ import (
 )
 
 type ZmuxChannel struct {
-	ID         int64             `json:"id"`          //
-	Name       *string           `json:"name"`        // nullable
-	Input      ZmuxChannelInput  `json:"input"`       //
-	Output     ZmuxChannelOutput `json:"output"`      //
-	Enabled    bool              `json:"enabled"`     // (on true, input.url required)
-	RestartSec uint              `json:"restart_sec"` //
+	ID         int64               `json:"id"`          //
+	Name       *string             `json:"name"`        // nullable
+	Input      ZmuxChannelInput    `json:"input"`       //
+	Outputs    []ZmuxChannelOutput `json:"outputs"`     //
+	Enabled    bool                `json:"enabled"`     // (on true, input.url required)
+	RestartSec uint                `json:"restart_sec"` //
 }
 
 type ZmuxChannelInput struct {
@@ -31,12 +31,60 @@ type ZmuxChannelInput struct {
 }
 
 type ZmuxChannelOutput struct {
-	URL       *string `json:"url"`       // nullable
-	Localaddr *string `json:"localaddr"` // nullable
-	PktSize   uint    `json:"pkt_size"`  //
-	MapVideo  bool    `json:"map_video"` //
-	MapAudio  bool    `json:"map_audio"` //
-	MapData   bool    `json:"map_data"`  //
+	Ref           string        `json:"ref"`            //
+	URL           *string       `json:"url"`            // nullable
+	Localaddr     *string       `json:"localaddr"`      // nullable
+	PktSize       uint          `json:"pkt_size"`       //
+	StreamMapping StreamMapping `json:"stream_mapping"` //
+	Enabled       bool          `json:"enabled"`        // (on true, output.url required)
+}
+
+type StreamMapping []string
+
+func (sa StreamMapping) Validate() error {
+	if len(sa) == 0 {
+		return fmt.Errorf("stream_mapping must include at least one media type")
+	}
+
+	for _, s := range sa {
+		if s != "video" && s != "audio" && s != "data" {
+			return fmt.Errorf("invalid stream_mapping value: %q (must be one of: video, audio, data)", s)
+		}
+	}
+	return nil
+}
+
+func (sa StreamMapping) Has(target string) bool {
+	for _, s := range sa {
+		if s == target {
+			return true
+		}
+	}
+	return false
+}
+
+func (sa StreamMapping) HasVideo() bool { return sa.Has("video") }
+func (sa StreamMapping) HasAudio() bool { return sa.Has("audio") }
+func (sa StreamMapping) HasData() bool  { return sa.Has("data") }
+
+// OutputEntry wraps a ZmuxChannelOutput with its original index
+// in the Outputs slice.
+type OutputEntry struct {
+	Index  int
+	Output ZmuxChannelOutput
+}
+
+// OutputsByRef returns the channel outputs as a map keyed by their Ref.
+// Each entry includes both the output struct and its original index.
+func (ch *ZmuxChannel) OutputsByRef() map[string]OutputEntry {
+	outMap := make(map[string]OutputEntry, len(ch.Outputs))
+	for i, o := range ch.Outputs {
+		outMap[o.Ref] = OutputEntry{
+			Index:  i,
+			Output: o,
+		}
+	}
+	return outMap
 }
 
 // Dependency rules
@@ -89,9 +137,35 @@ func (ch *ZmuxChannel) Validate() error {
 		}
 	}
 
-	if ch.Output.URL != nil {
-		if err := validateOutputURL(*ch.Output.URL); err != nil {
-			return fmt.Errorf("invalid output.url: %s", err)
+	// outputs
+	outputsRefs := make(map[string]int)
+	for i, output := range ch.Outputs {
+		// outputs[n]: minLength 1, maxLength 100
+		refLen := len(output.Ref)
+		if refLen < 1 || refLen > 100 {
+			return fmt.Errorf("outputs[%d].ref length must be between 1 and 128 characters", i)
+		}
+
+		// outputs[n].ref: must be unique
+		if j, ok := outputsRefs[output.Ref]; ok {
+			return fmt.Errorf("outputs[%d].ref must be unique (ref=%s also used at outputs[%d])", i, output.Ref, j)
+		}
+		outputsRefs[output.Ref] = i
+
+		// outputs[n].url: uri
+		if output.URL != nil {
+			if err := validateOutputURL(*output.URL); err != nil {
+				return fmt.Errorf("invalid outputs[%d].url (ref=%s): %d", i, output.Ref, err)
+			}
+		}
+
+		// outputs[n].stream_mapping: must only contain valid values
+		if err := output.StreamMapping.Validate(); err != nil {
+			return fmt.Errorf("invalid outputs[%d].stream_mapping (ref=%s): %w", i, output.Ref, err)
+		}
+
+		if output.Enabled && output.URL == nil {
+			return fmt.Errorf("outputs[%d].enabled=true missing required field outputs[%d].url", i, i)
 		}
 	}
 

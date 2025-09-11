@@ -1,7 +1,9 @@
 package dto
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/edirooss/zmux-server/internal/domain/channel"
 	"github.com/edirooss/zmux-server/internal/domain/principal"
@@ -11,11 +13,11 @@ import (
 // PATCH /api/channels/{id}. Partial-update semantics (RFC 7386):
 //   - All fields are optional.
 type ChannelModify struct {
-	Name       W[string]              `json:"name"`        //   optional; string | null
-	Input      W[ChannelInputModify]  `json:"input"`       //   optional; object
-	Output     W[ChannelOutputModify] `json:"output"`      //   optional; object
-	Enabled    W[bool]                `json:"enabled"`     //   optional; bool
-	RestartSec W[uint]                `json:"restart_sec"` //   optional; uint
+	Name       W[string]             `json:"name"`        //   optional; string | null
+	Input      W[ChannelInputModify] `json:"input"`       //   optional; object
+	Outputs    W[json.RawMessage]    `json:"outputs"`     //   optional; array[object] | object[string:object]
+	Enabled    W[bool]               `json:"enabled"`     //   optional; bool
+	RestartSec W[uint]               `json:"restart_sec"` //   optional; uint
 }
 
 type ChannelInputModify struct {
@@ -33,12 +35,12 @@ type ChannelInputModify struct {
 }
 
 type ChannelOutputModify struct {
-	URL       W[string] `json:"url"`       //                          optional; string | null
-	Localaddr W[string] `json:"localaddr"` //                          optional; string | null
-	PktSize   W[uint]   `json:"pkt_size"`  //                          optional; uint
-	MapVideo  W[bool]   `json:"map_video"` //                          optional; bool
-	MapAudio  W[bool]   `json:"map_audio"` //                          optional; bool
-	MapData   W[bool]   `json:"map_data"`  //                          optional; bool
+	Ref           W[string]   `json:"ref"`            //                          optional; string
+	URL           W[string]   `json:"url"`            //                          optional; string | null
+	Localaddr     W[string]   `json:"localaddr"`      //                          optional; string | null
+	PktSize       W[uint]     `json:"pkt_size"`       //                          optional; uint
+	StreamMapping W[[]string] `json:"stream_mapping"` //                          optional; []string
+	Enabled       W[bool]     `json:"enabled"`        //                          optional; bool
 }
 
 // MergePatch applies ModifyChannel to channel.ZmuxChannel (in-memory)
@@ -67,18 +69,57 @@ func (req *ChannelModify) MergePatch(prev *channel.ZmuxChannel, pKind principal.
 		}
 	}
 
-	// output
-	// optional; object
-	// admin-only
-	if req.Output.Set {
-		if pKind != principal.Admin {
-			return errors.New("output set unauthorized")
+	// outputs
+	// optional; array[object] | object[string:object]
+	if req.Outputs.Set {
+		if req.Outputs.Null {
+			return errors.New("outputs cannot be null")
 		}
-		if req.Output.Null {
-			return errors.New("output cannot be null")
-		}
-		if err := req.Output.V.MergePatch(&prev.Output); err != nil {
-			return err
+
+		// array[object]
+		var outputsList []W[ChannelOutputModify]
+		if err := json.Unmarshal(req.Outputs.V, &outputsList); err == nil {
+			// per RFC 7396 (JSON Merge Patch), arrays treated as atomic values.
+			// i.e., not “merging” elements — replacing the whole array (PUT-like semantics)
+			chOutputs := make([]channel.ZmuxChannelOutput, 0, len(outputsList))
+			for i, output := range outputsList {
+				if output.Null {
+					return fmt.Errorf("outputs[%d] cannot be null", i)
+				}
+				chOutput, err := output.V.ToChannelOutput()
+				if err != nil {
+					return fmt.Errorf("outputs[%d] is invalid: %w", i, err)
+				}
+				chOutputs = append(chOutputs, *chOutput)
+			}
+			prev.Outputs = chOutputs
+		} else {
+			// object[string:object]
+			var outputsByRef map[string]W[ChannelOutputModify]
+			if err := json.Unmarshal(req.Outputs.V, &outputsByRef); err == nil {
+				prevOutputsByRef := prev.OutputsByRef()
+				for ref, output := range outputsByRef {
+					outputEntry, ok := prevOutputsByRef[ref]
+					if !ok {
+						return fmt.Errorf("outputs ref %q does not exist", ref)
+					}
+
+					// Existing ref → merge
+					if output.Null {
+						return fmt.Errorf("outputs[%s] cannot be null", ref)
+					}
+					if pKind != principal.Admin &&
+						(ref != "onprem_mr01" && ref != "onprem_mz01" && ref != "pubcloud_sky320") {
+						return fmt.Errorf("outputs[%s] set unauthorized", ref)
+					}
+					if err := output.V.MergePatch(&prev.Outputs[outputEntry.Index], pKind); err != nil {
+						return fmt.Errorf("outputs[%s]: %w", ref, err)
+					}
+				}
+			} else {
+				// fallback; neither array nor object
+				return errors.New("outputs must be of type array or object")
+			}
 		}
 	}
 
@@ -256,10 +297,27 @@ func (req *ChannelInputModify) MergePatch(prev *channel.ZmuxChannelInput, pKind 
 // MergePatch applies ModifyChannelOutput to channel.ZmuxChannelOutput (in-memory)
 // Disallows explicit null assignment to non-nullable fields.
 // Unset fields remain unchanged.
-func (req *ChannelOutputModify) MergePatch(prev *channel.ZmuxChannelOutput) error {
+// Enforce permission based on principal kind.
+func (req *ChannelOutputModify) MergePatch(prev *channel.ZmuxChannelOutput, pKind principal.PrincipalKind) error {
+	// ref
+	// optional; string
+	if req.Ref.Set {
+		if pKind != principal.Admin {
+			return errors.New("ref set unauthorized")
+		}
+		if req.Ref.Null {
+			return errors.New("ref cannot be null")
+		} else {
+			prev.Ref = req.Ref.V
+		}
+	}
+
 	// url
 	// optional; string | null
 	if req.URL.Set {
+		if pKind != principal.Admin {
+			return errors.New("url set unauthorized")
+		}
 		if req.URL.Null {
 			prev.URL = nil
 		} else {
@@ -270,6 +328,9 @@ func (req *ChannelOutputModify) MergePatch(prev *channel.ZmuxChannelOutput) erro
 	// localaddr
 	// optional; string | null
 	if req.Localaddr.Set {
+		if pKind != principal.Admin {
+			return errors.New("localaddr set unauthorized")
+		}
 		if req.Localaddr.Null {
 			prev.Localaddr = nil
 		} else {
@@ -280,38 +341,114 @@ func (req *ChannelOutputModify) MergePatch(prev *channel.ZmuxChannelOutput) erro
 	// pkt_size
 	// optional; uint
 	if req.PktSize.Set {
+		if pKind != principal.Admin {
+			return errors.New("pkt_size set unauthorized")
+		}
 		if req.PktSize.Null {
 			return errors.New("pkt_size cannot be null")
 		}
 		prev.PktSize = req.PktSize.V
 	}
 
-	// map_video
-	// optional; bool
-	if req.MapVideo.Set {
-		if req.MapVideo.Null {
-			return errors.New("map_video cannot be null")
+	// stream_mapping
+	// optional; []string
+	if req.StreamMapping.Set {
+		if pKind != principal.Admin {
+			return errors.New("stream_mapping set unauthorized")
 		}
-		prev.MapVideo = req.MapVideo.V
+		if req.StreamMapping.Null {
+			return errors.New("stream_mapping cannot be null")
+		}
+		prev.StreamMapping = req.StreamMapping.V
 	}
 
-	// map_audio
+	// enabled
 	// optional; bool
-	if req.MapAudio.Set {
-		if req.MapAudio.Null {
-			return errors.New("map_audio cannot be null")
+	if req.Enabled.Set {
+		if req.Enabled.Null {
+			return errors.New("enabled cannot be null")
 		}
-		prev.MapAudio = req.MapAudio.V
-	}
-
-	// map_data
-	// optional; bool
-	if req.MapData.Set {
-		if req.MapData.Null {
-			return errors.New("map_data cannot be null")
-		}
-		prev.MapData = req.MapData.V
+		prev.Enabled = req.Enabled.V
 	}
 
 	return nil
+}
+
+// ToChannelOutput maps ChannelOutputModify → channel.ZmuxChannelOutput
+// Disallows explicit null assignment to non-nullable fields.
+// JSON Merge Patch replaces arrays wholesale, it doesn’t merge them element-by-element.
+// Requires all fields to be set (PUT-like semantics; require a new, complete object).
+func (req *ChannelOutputModify) ToChannelOutput() (*channel.ZmuxChannelOutput, error) {
+	output := &channel.ZmuxChannelOutput{}
+
+	// ref
+	// required; string
+	if req.Ref.Set {
+		if req.Ref.Null {
+			return nil, errors.New("ref cannot be null")
+		} else {
+			output.Ref = req.Ref.V
+		}
+	} else {
+		return nil, errors.New("ref is required")
+	}
+
+	// url
+	// required; string | null
+	if req.URL.Set {
+		if req.URL.Null {
+			output.URL = nil
+		} else {
+			output.URL = &req.URL.V
+		}
+	} else {
+		return nil, errors.New("url is required")
+	}
+
+	// localaddr
+	// required; string | null
+	if req.Localaddr.Set {
+		if req.Localaddr.Null {
+			output.Localaddr = nil
+		} else {
+			output.Localaddr = &req.Localaddr.V
+		}
+	} else {
+		return nil, errors.New("localaddr is required")
+	}
+
+	// pkt_size
+	// required; uint
+	if req.PktSize.Set {
+		if req.PktSize.Null {
+			return nil, errors.New("pkt_size cannot be null")
+		}
+		output.PktSize = req.PktSize.V
+	} else {
+		return nil, errors.New("pkt_size is required")
+	}
+
+	// stream_mapping
+	// required; []string
+	if req.StreamMapping.Set {
+		if req.StreamMapping.Null {
+			return nil, errors.New("stream_mapping cannot be null")
+		}
+		output.StreamMapping = req.StreamMapping.V
+	} else {
+		return nil, errors.New("stream_mapping is required")
+	}
+
+	// enabled
+	// required; bool
+	if req.Enabled.Set {
+		if req.Enabled.Null {
+			return nil, errors.New("enabled cannot be null")
+		}
+		output.Enabled = req.Enabled.V
+	} else {
+		return nil, errors.New("enabled is required")
+	}
+
+	return output, nil
 }

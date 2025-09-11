@@ -3,6 +3,7 @@ package dto
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/edirooss/zmux-server/internal/domain/channel"
 )
@@ -11,11 +12,11 @@ import (
 // PUT /api/channels/{id}. Full-replacement semantics (RFC 9110):
 //   - All fields are required.
 type ChannelReplace struct {
-	Name       W[string]        `json:"name"`        //         required; string | null
-	Input      W[InputReplace]  `json:"input"`       //         required; object
-	Output     W[OutputReplace] `json:"output"`      //         required; object
-	Enabled    W[bool]          `json:"enabled"`     //         required; bool
-	RestartSec W[uint]          `json:"restart_sec"` //         required; uint
+	Name       W[string]             `json:"name"`        //         required; string | null
+	Input      W[InputReplace]       `json:"input"`       //         required; object
+	Outputs    W[[]W[OutputReplace]] `json:"outputs"`     //         required; array
+	Enabled    W[bool]               `json:"enabled"`     //         required; bool
+	RestartSec W[uint]               `json:"restart_sec"` //         required; uint
 }
 
 type InputReplace struct {
@@ -33,12 +34,12 @@ type InputReplace struct {
 }
 
 type OutputReplace struct {
-	URL       W[string] `json:"url"`       //                   required; string | null
-	Localaddr W[string] `json:"localaddr"` //                   required; string | null
-	PktSize   W[uint]   `json:"pkt_size"`  //                   required; uint
-	MapVideo  W[bool]   `json:"map_video"` //                   required; bool
-	MapAudio  W[bool]   `json:"map_audio"` //                   required; bool
-	MapData   W[bool]   `json:"map_data"`  //                   required; bool
+	Ref           W[string]   `json:"ref"`            //                   required; string
+	URL           W[string]   `json:"url"`            //                   required; string | null
+	Localaddr     W[string]   `json:"localaddr"`      //                   required; string | null
+	PktSize       W[uint]     `json:"pkt_size"`       //                   required; uint
+	StreamMapping W[[]string] `json:"stream_mapping"` //                   required; []string
+	Enabled       W[bool]     `json:"enabled"`        //                   required; bool
 }
 
 // ToChannel maps ReplaceChannel → channel.ZmuxChannel
@@ -75,19 +76,26 @@ func (req *ChannelReplace) ToChannel(id int64) (*channel.ZmuxChannel, error) {
 		return nil, errors.New("input is required")
 	}
 
-	// output
-	// required; object
-	if req.Output.Set {
-		if req.Output.Null {
-			return nil, errors.New("output cannot be null")
+	// outputs
+	// required; array
+	if req.Outputs.Set {
+		if req.Outputs.Null {
+			return nil, errors.New("outputs cannot be null")
 		}
-		output, err := req.Output.V.ToChannelOutput()
-		if err != nil {
-			return nil, err
+		chOutputs := make([]channel.ZmuxChannelOutput, 0, len(req.Outputs.V))
+		for i, output := range req.Outputs.V {
+			if output.Null {
+				return nil, fmt.Errorf("outputs[%d] cannot be null", i)
+			}
+			chOutput, err := output.V.ToChannelOutput()
+			if err != nil {
+				return nil, fmt.Errorf("outputs[%d] is invalid: %w", i, err)
+			}
+			chOutputs = append(chOutputs, *chOutput)
 		}
-		ch.Output = *output
+		ch.Outputs = chOutputs
 	} else {
-		return nil, errors.New("output is required")
+		return nil, errors.New("outputs is required")
 	}
 
 	// enabled
@@ -258,6 +266,18 @@ func (req *InputReplace) ToChannelInput() (*channel.ZmuxChannelInput, error) {
 func (req *OutputReplace) ToChannelOutput() (*channel.ZmuxChannelOutput, error) {
 	output := &channel.ZmuxChannelOutput{}
 
+	// ref
+	// required; string
+	if req.Ref.Set {
+		if req.Ref.Null {
+			return nil, errors.New("output.ref cannot be null")
+		} else {
+			output.Ref = req.Ref.V
+		}
+	} else {
+		return nil, errors.New("output.ref is required")
+	}
+
 	// url
 	// required; string | null
 	if req.URL.Set {
@@ -293,37 +313,26 @@ func (req *OutputReplace) ToChannelOutput() (*channel.ZmuxChannelOutput, error) 
 		return nil, errors.New("output.pkt_size is required")
 	}
 
-	// map_video
-	// required; bool
-	if req.MapVideo.Set {
-		if req.MapVideo.Null {
-			return nil, errors.New("output.map_video cannot be null")
+	// stream_mapping
+	// required; []string
+	if req.StreamMapping.Set {
+		if req.StreamMapping.Null {
+			return nil, errors.New("output.stream_mapping cannot be null")
 		}
-		output.MapVideo = req.MapVideo.V
+		output.StreamMapping = req.StreamMapping.V
 	} else {
-		return nil, errors.New("output.map_video is required")
+		return nil, errors.New("output.stream_mapping is required")
 	}
 
-	// map_audio
+	// enabled
 	// required; bool
-	if req.MapAudio.Set {
-		if req.MapAudio.Null {
-			return nil, errors.New("output.map_audio cannot be null")
+	if req.Enabled.Set {
+		if req.Enabled.Null {
+			return nil, errors.New("output.enabled cannot be null")
 		}
-		output.MapAudio = req.MapAudio.V
+		output.Enabled = req.Enabled.V
 	} else {
-		return nil, errors.New("output.map_audio is required")
-	}
-
-	// map_data
-	// required; bool
-	if req.MapData.Set {
-		if req.MapData.Null {
-			return nil, errors.New("output.map_data cannot be null")
-		}
-		output.MapData = req.MapData.V
-	} else {
-		return nil, errors.New("output.map_data is required")
+		return nil, errors.New("output.enabled is required")
 	}
 
 	return output, nil

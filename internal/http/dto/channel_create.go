@@ -2,6 +2,8 @@ package dto
 
 import (
 	"errors"
+	"fmt"
+	"strconv"
 
 	"github.com/edirooss/zmux-server/internal/domain/channel"
 )
@@ -10,11 +12,11 @@ import (
 // POST /api/channels.
 //   - All fields are optional. Defaults applied.
 type ChannelCreate struct {
-	Name       W[string]              `json:"name"`        //   optional; string | null   (default: null)
-	Input      W[ChannelInputCreate]  `json:"input"`       //   optional; object          (default: {})
-	Output     W[ChannelOutputCreate] `json:"output"`      //   optional; object          (default: {})
-	Enabled    W[bool]                `json:"enabled"`     //   optional; bool            (default: false)
-	RestartSec W[uint]                `json:"restart_sec"` //   optional; uint            (default: 3)
+	Name       W[string]                   `json:"name"`        //   optional; string | null                       (default: null)
+	Input      W[ChannelInputCreate]       `json:"input"`       //   optional; object                              (default: {})
+	Outputs    W[[]W[ChannelOutputCreate]] `json:"outputs"`     //   optional; array[object]                       (default: [])
+	Enabled    W[bool]                     `json:"enabled"`     //   optional; bool                                (default: false)
+	RestartSec W[uint]                     `json:"restart_sec"` //   optional; uint                                (default: 3)
 }
 
 type ChannelInputCreate struct {
@@ -32,12 +34,12 @@ type ChannelInputCreate struct {
 }
 
 type ChannelOutputCreate struct {
-	URL       W[string] `json:"url"`       //                   optional; string | null   (default: null)
-	Localaddr W[string] `json:"localaddr"` //                   optional; string | null   (default: null)
-	PktSize   W[uint]   `json:"pkt_size"`  //                   optional; uint            (default: 1316)
-	MapVideo  W[bool]   `json:"map_video"` //                   optional; bool            (default: true)
-	MapAudio  W[bool]   `json:"map_audio"` //                   optional; bool            (default: true)
-	MapData   W[bool]   `json:"map_data"`  //                   optional; bool            (default: true)
+	Ref           W[string]   `json:"ref"`            //                   optional; string          (default: itoa(index))
+	URL           W[string]   `json:"url"`            //                   optional; string | null   (default: null)
+	Localaddr     W[string]   `json:"localaddr"`      //                   optional; string | null   (default: null)
+	PktSize       W[uint]     `json:"pkt_size"`       //                   optional; uint            (default: 1316)
+	StreamMapping W[[]string] `json:"stream_mapping"` //                   optional; []string        (default: ["video"])
+	Enabled       W[bool]     `json:"enabled"`        //                   optional; bool            (default: true)
 }
 
 // ToChannel maps CreateChannel → channel.ZmuxChannel
@@ -77,23 +79,27 @@ func (req *ChannelCreate) ToChannel() (*channel.ZmuxChannel, error) {
 		ch.Input = *input
 	}
 
-	// output
-	// optional; object (default: {})
-	if req.Output.Set {
-		if req.Output.Null {
-			return nil, errors.New("output cannot be null")
+	// outputs
+	// optional; array[object] (default: [])
+	if req.Outputs.Set {
+		if req.Outputs.Null {
+			return nil, errors.New("outputs cannot be null")
 		}
-		output, err := req.Output.V.ToChannelOutput()
-		if err != nil {
-			return nil, err
+		outputs := req.Outputs.V
+		chOutputs := make([]channel.ZmuxChannelOutput, 0)
+		for i, output := range outputs {
+			if output.Null {
+				return nil, fmt.Errorf("outputs[%d] cannot be null", i)
+			}
+			chOutput, err := output.V.ToChannelOutput(i)
+			if err != nil {
+				return nil, fmt.Errorf("outputs[%d]: %w", i, err)
+			}
+			chOutputs = append(chOutputs, *chOutput)
 		}
-		ch.Output = *output
+		ch.Outputs = chOutputs
 	} else {
-		output, err := new(ChannelOutputCreate).ToChannelOutput()
-		if err != nil {
-			return nil, err
-		}
-		ch.Output = *output
+		ch.Outputs = make([]channel.ZmuxChannelOutput, 0)
 	}
 
 	// enabled
@@ -262,8 +268,19 @@ func (req *ChannelInputCreate) ToChannelInput() (*channel.ZmuxChannelInput, erro
 // ToChannelOutput maps CreateChannelOutput → channel.ZmuxChannelOutput
 // Disallows explicit null assignment to non-nullable fields.
 // Fills unset fields with defaults.
-func (req *ChannelOutputCreate) ToChannelOutput() (*channel.ZmuxChannelOutput, error) {
+func (req *ChannelOutputCreate) ToChannelOutput(index int) (*channel.ZmuxChannelOutput, error) {
 	output := &channel.ZmuxChannelOutput{}
+
+	// ref
+	// optional; string (default: itoa(index))
+	if req.Ref.Set {
+		if req.Ref.Null {
+			return nil, errors.New("ref cannot be null")
+		}
+		output.Ref = req.Ref.V
+	} else {
+		output.Ref = strconv.Itoa(index)
+	}
 
 	// url
 	// optional; string | null (default: null)
@@ -300,37 +317,26 @@ func (req *ChannelOutputCreate) ToChannelOutput() (*channel.ZmuxChannelOutput, e
 		output.PktSize = 1316
 	}
 
-	// map_video
-	// optional; bool (default: true)
-	if req.MapVideo.Set {
-		if req.MapVideo.Null {
-			return nil, errors.New("map_video cannot be null")
+	// stream_mapping
+	// optional; []string (default: ["video"])
+	if req.StreamMapping.Set {
+		if req.StreamMapping.Null {
+			return nil, errors.New("stream_mapping cannot be null")
 		}
-		output.MapVideo = req.MapVideo.V
+		output.StreamMapping = req.StreamMapping.V
 	} else {
-		output.MapVideo = true
+		output.StreamMapping = channel.StreamMapping{"video"}
 	}
 
-	// map_audio
+	// enabled
 	// optional; bool (default: true)
-	if req.MapAudio.Set {
-		if req.MapAudio.Null {
-			return nil, errors.New("map_audio cannot be null")
+	if req.Enabled.Set {
+		if req.Enabled.Null {
+			return nil, errors.New("enabled cannot be null")
 		}
-		output.MapAudio = req.MapAudio.V
+		output.Enabled = req.Enabled.V
 	} else {
-		output.MapAudio = true
-	}
-
-	// map_data
-	// optional; bool (default: true)
-	if req.MapData.Set {
-		if req.MapData.Null {
-			return nil, errors.New("map_data cannot be null")
-		}
-		output.MapData = req.MapData.V
-	} else {
-		output.MapData = true
+		output.Enabled = true
 	}
 
 	return output, nil
