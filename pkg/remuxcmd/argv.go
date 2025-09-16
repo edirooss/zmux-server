@@ -7,7 +7,7 @@ import (
 	"github.com/edirooss/zmux-server/pkg/avurl"
 )
 
-// BuildRemuxExec maps channel.ZmuxChannel → safe exec string for systemd and POSIX shells.
+// BuildArgs constructs the argv slice for invoking remux.
 //
 // Ordering matches the CLI usage to minimize surprises:
 //
@@ -17,30 +17,31 @@ import (
 // - All numeric/bool fields are always emitted (including 0 and false).
 // - Optional strings (pointers) are emitted only when non-nil and non-empty.
 // - Flags the CLI defines as StringVar are emitted via decimal strings.
-func BuildRemuxExec(ch *channel.ZmuxChannel) string {
+func BuildArgs(c *channel.ZmuxChannel) []string {
 	// Usage: remux [flags] --input <url> [input flags] [--output [url] [output flags]]
-	builder := NewRemuxCommandBuilder()
+
+	builder := NewRemuxCommandBuilder() // pre-seeded with the binary name ("remux")
 
 	// --- Global flags (CLI: StringVar) ---
-	builder.WithStringFlag("--id", strconv.FormatInt(ch.ID, 10))
+	builder.WithStringFlag("--id", strconv.FormatInt(c.ID, 10)+"_"+strconv.FormatInt(c.Revision, 10))
 
 	// --- Positional: --input <url> ---
 	builder.WithString("--input")
-	builder.WithStringP(avurl.EmbeddUserinfo(ch.Input.URL, ch.Input.Username, ch.Input.Password))
+	builder.WithStringP(avurl.EmbeddUserinfo(c.Input.URL, c.Input.Username, c.Input.Password))
 
 	// --- Input flags (CLI: StringVar unless explicitly noted) ---
 	builder.
-		WithStringPFlag("--avioflags", ch.Input.AVIOFlags).
-		WithStringFlag("--probesize", strconv.FormatUint(uint64(ch.Input.Probesize), 10)).
-		WithStringFlag("--analyzeduration", strconv.FormatUint(uint64(ch.Input.Analyzeduration), 10)).
-		WithStringPFlag("--fflags", ch.Input.FFlags).
-		WithStringFlag("--max-delay", strconv.FormatInt(int64(ch.Input.MaxDelay), 10)).
-		WithStringPFlag("--localaddr", ch.Input.Localaddr).
-		WithStringFlag("--timeout", strconv.FormatUint(uint64(ch.Input.Timeout), 10)).
-		WithStringPFlag("--rtsp-transport", ch.Input.RTSPTransport)
+		WithStringPFlag("--avioflags", c.Input.AVIOFlags).
+		WithStringFlag("--probesize", strconv.FormatUint(uint64(c.Input.Probesize), 10)).
+		WithStringFlag("--analyzeduration", strconv.FormatUint(uint64(c.Input.Analyzeduration), 10)).
+		WithStringPFlag("--fflags", c.Input.FFlags).
+		WithStringFlag("--max-delay", strconv.FormatInt(int64(c.Input.MaxDelay), 10)).
+		WithStringPFlag("--localaddr", c.Input.Localaddr).
+		WithStringFlag("--timeout", strconv.FormatUint(uint64(c.Input.Timeout), 10)).
+		WithStringPFlag("--rtsp-transport", c.Input.RTSPTransport)
 
 	// --- Positional/outputs section: [--output [url] [output flags]]... ---
-	for _, output := range ch.Outputs {
+	for _, output := range c.Outputs {
 		if output.Enabled {
 			builder.WithString("--output")
 			builder.WithStringP(output.URL) // optional; CLI defaults to /dev/null if omitted
@@ -54,5 +55,5 @@ func BuildRemuxExec(ch *channel.ZmuxChannel) string {
 				WithBoolFlag("--map-data", output.StreamMapping.HasData())
 		}
 	}
-	return builder.BuildString()
+	return builder.BuildArgs()
 }

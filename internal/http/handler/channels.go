@@ -150,14 +150,23 @@ func (h *ChannelsHandler) getChannelListByPrincipal(ctx context.Context, p *prin
 			if err != nil {
 				return nil, 0, fmt.Errorf("list channels by id: %w", err)
 			}
-			return chs, len(chs), nil
+
+			adminView := make([]*views.AdminZmuxChannel, len(chs))
+			for i := range chs {
+				adminView[i] = chs[i].AdminView()
+			}
+			return adminView, len(adminView), nil
 		}
 
 		chs, err := h.svc.ListChannels(ctx)
 		if err != nil {
 			return nil, 0, fmt.Errorf("list channels: %w", err)
 		}
-		return chs, len(chs), nil
+		adminView := make([]*views.AdminZmuxChannel, len(chs))
+		for i := range chs {
+			adminView[i] = chs[i].AdminView()
+		}
+		return adminView, len(adminView), nil
 
 	case principal.B2BClient:
 		// Get allowed IDs
@@ -176,7 +185,7 @@ func (h *ChannelsHandler) getChannelListByPrincipal(ctx context.Context, p *prin
 			}
 			if len(toFetch) == 0 {
 				// Nothing permitted from the requested subset
-				return []*views.ZmuxChannel{}, 0, nil
+				return []*views.B2BClientZmuxChannel{}, 0, nil
 			}
 		} else {
 			// No filter → fetch all allowed
@@ -189,9 +198,9 @@ func (h *ChannelsHandler) getChannelListByPrincipal(ctx context.Context, p *prin
 		if err != nil {
 			return nil, 0, fmt.Errorf("list channels by id: %w", err)
 		}
-		b2bClientView := make([]*views.ZmuxChannel, len(chs))
+		b2bClientView := make([]*views.B2BClientZmuxChannel, len(chs))
 		for i := range chs {
-			b2bClientView[i] = chs[i].AsB2BClientView()
+			b2bClientView[i] = chs[i].B2BClientView()
 		}
 		return b2bClientView, len(b2bClientView), nil
 	}
@@ -284,10 +293,10 @@ func (h *ChannelsHandler) getChannelByPrincipal(ctx context.Context, p *principa
 	switch p.Kind {
 
 	case principal.Admin:
-		return ch, nil
+		return ch.AdminView(), nil
 
 	case principal.B2BClient:
-		return ch.AsB2BClientView(), nil
+		return ch.B2BClientView(), nil
 	}
 
 	return nil, fmt.Errorf("unsupported principal")

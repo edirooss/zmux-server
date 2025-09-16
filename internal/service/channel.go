@@ -5,63 +5,64 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/edirooss/zmux-server/internal/domain/channel"
 	"github.com/edirooss/zmux-server/internal/repo"
 	"github.com/edirooss/zmux-server/pkg/remuxcmd"
+	"github.com/godbus/dbus/v5"
 	"go.uber.org/zap"
 )
 
 // -----------------------------------------------------------------------------
 // ChannelService
 // -----------------------------------------------------------------------------
-// DESIGN CONTRACT
 //
 // Runtime model
-//  • Single server process, many concurrent requests.
-//  • Mutations to the SAME channel ID are serialized via a per-ID *sync.Mutex*.
-//  • Reads (Get/List) are lock-free for throughput.
+//   • Single process, many concurrent requests.
+//   • Mutations for the SAME channel ID are serialized via a per-ID gate.
+//   • Reads (Get/List) are lock-free.
 //
-// Consistency target
-//  • systemd (runtime) is treated as the source of truth for what is actually
-//    running. Redis must reflect the runtime state only after a side-effect
-//    has succeeded. Therefore, we execute side-effects FIRST, then persist.
+// Contract (runtime-first)
+//   • systemd is source of truth. Side-effects land first, then we persist.
+//   • If a systemd operation fails → no Redis changes are made.
+//   • If Redis write fails AFTER a successful systemd change → we attempt to
+//     roll back the systemd change (best-effort) and return an error.
+//   • Update has compensation: if we stopped the old revision already and fail
+//     to start the new one, we try to start the old revision again.
 //
-// Failure policy
-//  • If a systemd operation fails → we DO NOT mutate Redis. Caller gets an
-//    error and the previously persisted state remains intact.
-//  • If Redis persistence fails AFTER a successful systemd change → we attempt
-//    a best-effort rollback of the systemd change to avoid drift, then return
-//    an error. Rollback errors are swallowed (logged by caller), never mask the
-//    primary error.
-//  • All mutators (Create/Update/Delete/Enable/Disable) run inside the per-ID
-//    critical section so Update↔Update/Update↔Delete etc. cannot interleave.
+// Idempotency / semantics
+//   • Create(Enabled=false): pure persist.
+//   • Create(Enabled=true): start runtime first, then persist.
+//   • Update:
+//       - Enabled↔Enabled + config changed → stop old rev → start new rev → persist.
+//       - Enabled↔Enabled + config same   → no runtime change → persist spec.
+//       - false→true                      → start desired rev → persist.
+//       - true→false                      → stop current rev → persist disabled.
+//   • Delete: stop if running, then delete from Redis; on delete failure and if
+//     we stopped it, best-effort re-start the prior revision.
 //
-// Idempotency contract
-//  • EnableChannel & DisableChannel are idempotent: calling twice is safe.
-//  • UpdateChannel will (re)enable the unit when Enabled=true (treat as a
-//    restart if already enabled) and disable when Enabled=false.
-//
-// API mapping guidance (caller-level)
-//  • Wraps redis.ErrChannelNotFound. Callers should map to HTTP 404.
-//  • All other errors are 5xx (usually 500). Validation happens at handlers.
-// -----------------------------------------------------------------------------
+// Naming / revisions
+//   • Units are transient and revisioned: "zmux-channel-<id>_<rev>.service".
+//   • Revision increments when effective runtime args (or restart policy) change.
 
+// ChannelService coordinates repo (Redis) and systemd (via DBus).
 type ChannelService struct {
+	log     *zap.Logger
 	repo    *repo.Repository
-	systemd *SystemdService
+	systemd *SystemdManager
 
-	// per-channel locks to serialize mutations on the same ID
+	// per-channel locks to serialize mutating requests on the same ID
 	muxes sync.Map // map[int64]*gate
 }
 
-// gate is a tiny semaphore (cap=1) that supports Lock/TryLock/Unlock.
+// gate is a tiny 1-token semaphore with TryLock semantics (non-blocking fast-fail).
 type gate struct{ ch chan struct{} }
 
 func newGate() *gate {
 	g := &gate{ch: make(chan struct{}, 1)}
-	g.ch <- struct{}{} // token present = unlocked
+	g.ch <- struct{}{} // token present => unlocked
 	return g
 }
 func (g *gate) Lock() { <-g.ch }
@@ -81,24 +82,38 @@ func (g *gate) Unlock() {
 	}
 }
 
+// ErrLocked signals a concurrent mutation is already in flight for this ID.
 var ErrLocked = errors.New("channel locked")
 
-// NewChannelService constructs the ChannelService with its dependencies.
+// NewChannelService wires dependencies, establishes a DBus connection to systemd,
+// then reconciles systemd runtime with the repo (stop zombies, start enabled).
 func NewChannelService(log *zap.Logger) (*ChannelService, error) {
 	log = log.Named("channel_service")
 
-	systemd, err := NewSystemdService(log)
+	// Connect to the system message bus (D-Bus).
+	conn, err := dbus.ConnectSystemBus()
 	if err != nil {
-		return nil, fmt.Errorf("new systemd service: %w", err)
+		return nil, fmt.Errorf("connect system bus: %w", err)
 	}
-	return &ChannelService{
+	// TODO: close on process shutdown.
+	// defer conn.Close()
+
+	svc := &ChannelService{
+		log:     log,
 		repo:    repo.NewRepository(log),
-		systemd: systemd,
-	}, nil
+		systemd: NewSystemdManager(conn),
+	}
+
+	// Boot-time reconciliation: enforce a clean slate + desired state.
+	if err := svc.reconcileOnStart(context.Background()); err != nil {
+		return nil, fmt.Errorf("bootstrap reconcile: %w", err)
+	}
+
+	return svc, nil
 }
 
-// lock acquires a per-channel mutex (blocking) and returns an unlock func.
-// Safe to call multiple times; the same ID always maps to the same *gate.
+// lock acquires the per-ID gate (blocking). Always returns a valid unlock func.
+// Safe to call multiple times; same ID maps to the same gate.
 func (s *ChannelService) lock(id int64) func() {
 	v, _ := s.muxes.LoadOrStore(id, newGate())
 	g := v.(*gate)
@@ -106,7 +121,7 @@ func (s *ChannelService) lock(id int64) func() {
 	return func() { g.Unlock() }
 }
 
-// tryLock attempts to acquire the per-channel mutex without blocking.
+// tryLock attempts to acquire the per-ID gate without blocking.
 func (s *ChannelService) tryLock(id int64) (func(), error) {
 	v, _ := s.muxes.LoadOrStore(id, newGate())
 	g := v.(*gate)
@@ -116,10 +131,7 @@ func (s *ChannelService) tryLock(id int64) (func(), error) {
 	return func() { g.Unlock() }, nil
 }
 
-// ChannelExists returns true if the channel ID exists in Redis, false otherwise.
-// Failure modes:
-//   - Redis error → returned as wrapped error.
-//   - Missing ID → (false, nil).
+// ChannelExists returns true if the channel ID exists in Redis.
 func (s *ChannelService) ChannelExists(ctx context.Context, id int64) (bool, error) {
 	exists, err := s.repo.Channels.HasID(ctx, id)
 	if err != nil {
@@ -128,66 +140,53 @@ func (s *ChannelService) ChannelExists(ctx context.Context, id int64) (bool, err
 	return exists, nil
 }
 
-// CreateChannel creates a new channel, optionally
-// commits its systemd unit and enables it, and only then persists the channel document to Redis.
-//
-// Happy path
-//  1. Generate ID (atomic via Redis INCR), acquire per-ID lock.
-//  2. If ch.Enabled is true → commit systemd unit (definition exists/updated for this channel) and enable the service (runtime change).
-//  3. Persist final object to Redis (reflecting the runtime state).
-//
-// Failure modes & resulting state
-//   - ID generation fails → nothing happened (no side-effects), error returned.
-//   - If ch.Enabled is true → commitSystemdService fails → NO Redis write; NO enable attempt. Unit may be
-//     absent or partially written per systemd layer’s semantics. Caller gets err.
-//   - If ch.Enabled is true → enableChannel fails → unit file was created/updated, service NOT enabled;
-//     NO Redis write. An ID has been consumed (gap is acceptable). Caller gets err.
-//   - repo.Set fails after optionally enabling the channel → service running with no record.
-//     We best‑effort DISABLE the service to remove drift, then return error.
-//
-// Postconditions on success
-//   - Unit committed; service enabled iff ch.Enabled=true; Redis reflects that.
+// CreateChannel creates a channel record and (optionally) starts its unit.
+// Runtime-first semantics:
+//   - If ch.Enabled==true: start transient unit first; on success, persist.
+//     If persistence fails, stop unit (best-effort) and return error.
+//   - If ch.Enabled==false: no runtime change; just persist.
 func (s *ChannelService) CreateChannel(ctx context.Context, ch *channel.ZmuxChannel) error {
 	id, err := s.repo.Channels.GenerateID(ctx)
 	if err != nil {
 		return err
 	}
+
 	unlock := s.lock(id)
 	defer unlock()
 
-	// Write id to obj
+	// Initialize identity and base revision.
 	ch.ID = id
+	ch.Revision = 1
 
-	// If requested, enable the channel now. If this fails, abort without persisting.
 	if ch.Enabled {
-		// Commit unit first so that the systemd definition exists.
-		if err := s.commitSystemdService(ch); err != nil {
-			// DEV: At this point nothing persisted; caller may retry safely.
-			return fmt.Errorf("commit systemd service: %w", err)
+		// Start runtime first so Redis only reflects running state after success.
+		unit := unitName(ch)
+		argv := remuxArgv(ch)
+
+		if _, err := s.systemd.StartTransientUnit(unit, "/usr/bin/remux", argv, "always", restartUSec(ch)); err != nil {
+			return fmt.Errorf("start unit: %w", err)
 		}
 
-		if err := s.enableChannel(ch.ID); err != nil {
-			// DEV: Unit file exists but runtime is not enabled; we purposely do not
-			// persist to avoid Redis claiming Enabled=true when it is not. Skip ID
-			// reuse. Observability: handler logs the error.
-			return fmt.Errorf("enable channel: %w", err)
+		// Persist the final (enabled) state.
+		if err := s.repo.Channels.Upsert(ctx, ch); err != nil {
+			// Rollback: stop new unit
+			if _, stopErr := s.systemd.StopUnit(unit); stopErr != nil {
+				s.log.Error("rollback systemd failed", zap.String("transition", "OFF→ON"), zap.Error(stopErr))
+			}
+			return fmt.Errorf("upsert: %w", err)
 		}
+
+		return nil
 	}
 
-	// Persist the final, *actual* state to Redis.
+	// Disabled create: pure persist path.
 	if err := s.repo.Channels.Upsert(ctx, ch); err != nil {
-		// DEV: Avoid drift where runtime says enabled but Redis has no record.
-		if ch.Enabled {
-			_ = s.disableChannel(ch.ID) // best-effort rollback; do not mask Set error
-		}
 		return fmt.Errorf("upsert: %w", err)
 	}
 	return nil
 }
 
-// GetChannel returns a channel by ID (read-only, no locks).
-// Failure modes
-//   - redis.ErrChannelNotFound wrapped → callers should map to 404.
+// GetChannel returns a single channel by ID (read-only).
 func (s *ChannelService) GetChannel(ctx context.Context, id int64) (*channel.ZmuxChannel, error) {
 	ch, err := s.repo.Channels.GetByID(ctx, id)
 	if err != nil {
@@ -196,9 +195,7 @@ func (s *ChannelService) GetChannel(ctx context.Context, id int64) (*channel.Zmu
 	return ch, nil
 }
 
-// ListChannels returns all channels (read-only, no locks).
-// Failure modes
-//   - Any Redis error is returned as-is (wrapped) → callers map to 500.
+// ListChannels returns all channels (read-only).
 func (s *ChannelService) ListChannels(ctx context.Context) ([]*channel.ZmuxChannel, error) {
 	chs, err := s.repo.Channels.GetAll(ctx)
 	if err != nil {
@@ -207,6 +204,7 @@ func (s *ChannelService) ListChannels(ctx context.Context) ([]*channel.ZmuxChann
 	return chs, nil
 }
 
+// ListChannelsByID returns a subset by IDs (read-only).
 func (s *ChannelService) ListChannelsByID(ctx context.Context, ids []int64) ([]*channel.ZmuxChannel, error) {
 	chs, err := s.repo.Channels.GetByIDs(ctx, ids)
 	if err != nil {
@@ -215,96 +213,132 @@ func (s *ChannelService) ListChannelsByID(ctx context.Context, ids []int64) ([]*
 	return chs, nil
 }
 
-// UpdateChannel loads the prev channel config,
-// toggles enablement and commits the unit if updated channel is enabled, and persists the resulting state.
+// UpdateChannel reconciles a channel from its current spec to the desired spec
+// using runtime-first semantics with compensation. Each transition always bumps
+// the revision (cur.Revision+1), ensuring every state change has a unique unit.
 //
-// Happy path
-//  1. Load current → prevEnabled snapshot.
-//  2. If Enabled=true → commit systemd unit (ensure definition reflects new config).
-//  3. If Enabled=true → (re)enable service (treat as restart if already running).
-//     If Enabled=false & was enabled → disable service.
-//  4. Persist the final object to Redis.
+// Transition rules (always new revision, no config-diffing):
+//   - OFF → ON:
+//     Start new unit → Upsert state.
+//     If Upsert fails: stop new unit (avoid drift).
+//   - ON → OFF:
+//     Stop old unit → Upsert disabled.
+//     If Upsert fails: restart old unit (avoid outage).
+//   - ON → ON:
+//     Stop old unit → Start new unit → Upsert state.
+//     If start new fails: restart old unit (compensate).
+//     If Upsert fails: stop new, restart old (avoid drift).
+//   - OFF → OFF:
+//     No runtime ops → Upsert only.
 //
-// Failure modes & resulting state
-//   - repo.Get fails → nothing changed; error returned.
-//   - commitSystemdService fails → NO runtime toggles, NO Redis write; error.
-//   - enableChannel/disableChannel fails → NO Redis write; unit may be updated but
-//     runtime not in the desired state; caller gets error; no drift in Redis.
-//   - repo.Set fails at the end → runtime was changed; Redis still has old state.
-//     We currently return error WITHOUT rollback (safer for update semantics
-//     because prior config might already be applied). Consider compensating
-//     actions if drift is unacceptable for your domain.
+// Invariants:
+//   - Redis only persists states that actually landed.
+//   - Any side-effect failure aborts before persistence.
 //
-// Postconditions on success
-//   - Runtime reflects desired config & enablement; Redis matches it.
+// Logging policy:
+//   - Only rollback failures are logged (structured, zap-style).
 func (s *ChannelService) UpdateChannel(ctx context.Context, ch *channel.ZmuxChannel) error {
-	unlock, err := s.tryLock(ch.ID) // non-blocking: if someone else is mutating this channel, return ErrLocked.
+	unlock, err := s.tryLock(ch.ID)
 	if err != nil {
 		return fmt.Errorf("try lock: %w", err)
 	}
 	defer unlock()
 
-	// Load current from Redis
-	cur, err := s.repo.Channels.GetByID(ctx, ch.ID)
+	// Fetch current spec for comparison & rollback context.
+	curCh, err := s.repo.Channels.GetByID(ctx, ch.ID)
 	if err != nil {
 		return fmt.Errorf("get: %w", err)
 	}
-	prevEnabled := cur.Enabled
+	oldUnit := unitName(curCh)
 
-	// Reconcile enablement.
-	if ch.Enabled {
-		// Commit (idempotent) so the unit reflects new config.
-		if err := s.commitSystemdService(ch); err != nil {
-			return fmt.Errorf("commit systemd service: %w", err)
+	// Always bump revision to ensure each state transition maps to a unique unit.
+	// This mandatory for collision-free concurrent changes within systemd-manager layer itself, since it's async by design.
+	ch.Revision = curCh.Revision + 1
+
+	switch {
+	// OFF → ON: start new unit, then persist.
+	case !curCh.Enabled && ch.Enabled:
+		newUnit := unitName(ch)
+		newArgv := remuxArgv(ch)
+
+		if _, err := s.systemd.StartTransientUnit(newUnit, "/usr/bin/remux", newArgv, "always", restartUSec(ch)); err != nil {
+			return fmt.Errorf("start unit: %w", err)
 		}
-
-		if prevEnabled {
-			// On prev enabled, we should restart the service
-			if err := s.restartChannel(ch.ID); err != nil {
-				return fmt.Errorf("re-enable channel: %w", err)
+		if err := s.repo.Channels.Upsert(ctx, ch); err != nil {
+			// Rollback: stop new unit
+			if _, stopErr := s.systemd.StopUnit(newUnit); stopErr != nil {
+				s.log.Error("rollback systemd failed", zap.String("transition", "OFF→ON"), zap.Error(stopErr))
 			}
-		} else {
-			// On prev disabled, plain enable channel call
-			if err := s.enableChannel(ch.ID); err != nil {
-				return fmt.Errorf("enable channel: %w", err)
+			return fmt.Errorf("upsert: %w", err)
+		}
+		return nil
+
+	// ON → OFF: stop unit, then persist.
+	case curCh.Enabled && !ch.Enabled:
+		if _, err := s.systemd.StopUnit(oldUnit); err != nil {
+			var dbusErr dbus.Error
+			if errors.As(err, &dbusErr) && dbusErr.Name == "org.freedesktop.systemd1.NoSuchUnit" {
+				// unit doesn’t exist — handle gracefully, just log
+				s.log.Warn("unit not loaded", zap.String("transition", "ON→OFF"), zap.String("unit_name", oldUnit))
+			} else {
+				return fmt.Errorf("stop unit: %w", err)
+			}
+		}
+		if err := s.repo.Channels.Upsert(ctx, ch); err != nil {
+			// Rollback: restart old unit
+			if _, startErr := s.systemd.StartTransientUnit(oldUnit, "/usr/bin/remux", remuxArgv(curCh), "always", restartUSec(curCh)); startErr != nil {
+				s.log.Error("rollback systemd failed", zap.String("transition", "ON→OFF"), zap.Error(startErr))
+			}
+			return fmt.Errorf("upsert: %w", err)
+		}
+		return nil
+
+	// ON → ON: stop old, start new, then persist.
+	case curCh.Enabled && ch.Enabled:
+		if _, err := s.systemd.StopUnit(oldUnit); err != nil {
+			var dbusErr dbus.Error
+			if errors.As(err, &dbusErr) && dbusErr.Name == "org.freedesktop.systemd1.NoSuchUnit" {
+				// unit doesn’t exist — handle gracefully, just log
+				s.log.Warn("old unit not loaded", zap.String("transition", "ON→ON"), zap.String("unit_name", oldUnit))
+			} else {
+				return fmt.Errorf("stop old unit: %w", err)
 			}
 		}
 
-	} else if prevEnabled {
-		// On currently disabled and prev enabled, we just disable the service
-		if err := s.disableChannel(ch.ID); err != nil {
-			return fmt.Errorf("disable channel: %w", err)
+		newUnit := unitName(ch)
+		newArgv := remuxArgv(ch)
+		if _, err := s.systemd.StartTransientUnit(newUnit, "/usr/bin/remux", newArgv, "always", restartUSec(ch)); err != nil {
+			// Rollback: restart old unit
+			if _, startErr := s.systemd.StartTransientUnit(oldUnit, "/usr/bin/remux", remuxArgv(curCh), "always", restartUSec(curCh)); startErr != nil {
+				s.log.Error("rollback systemd failed", zap.String("transition", "ON→ON"), zap.Error(startErr))
+			}
+			return fmt.Errorf("start new unit: %w", err)
 		}
-	}
+		if err := s.repo.Channels.Upsert(ctx, ch); err != nil {
+			// Rollback: stop new, restart old
+			_, stopErr := s.systemd.StopUnit(newUnit)
+			_, startErr := s.systemd.StartTransientUnit(oldUnit, "/usr/bin/remux", remuxArgv(curCh), "always", restartUSec(curCh))
+			if stopErr != nil || startErr != nil {
+				s.log.Error("rollback systemd failed", zap.String("transition", "ON→ON"), zap.Errors("rollback_errors", []error{stopErr, startErr}))
+			}
+			return fmt.Errorf("upsert: %w", err)
+		}
+		return nil
 
-	// Persist final state to Redis.
-	if err := s.repo.Channels.Upsert(ctx, ch); err != nil {
-		// DEV: We do not attempt to roll back runtime here because the unit config
-		// already changed and may be live. Rolling back could be more disruptive.
-		// If we want to require strict no-drift, we need to introduce a compensating write
-		// or a background reconciler.
-		return fmt.Errorf("set: %w", err)
+	// OFF → OFF: no runtime ops, just persist.
+	default:
+		if err := s.repo.Channels.Upsert(ctx, ch); err != nil {
+			return fmt.Errorf("upsert: %w", err)
+		}
+		return nil
 	}
-	return nil
 }
 
-// DeleteChannel disables the unit if needed and deletes the record.
-//
-// Happy path
-//  1. Load current; snapshot wasEnabled.
-//  2. If enabled → disable service.
-//  3. Delete from Redis.
-//
-// Failure modes & resulting state
-//   - repo.Get fails → nothing changed.
-//   - disableChannel fails → Redis untouched; runtime remains enabled; error.
-//   - repo.Delete fails after disabling → runtime is disabled but record remains;
-//     best‑effort re-enable to avoid accidental outage; error returned.
-//
-// Postconditions on success
-//   - Record removed from Redis; service disabled (if it had been enabled).
+// DeleteChannel disables the runtime (if running) and deletes the record.
+// If deletion fails after stopping the unit, we best-effort re-start the last
+// known revision to avoid accidental outage masked by storage failure.
 func (s *ChannelService) DeleteChannel(ctx context.Context, id int64) error {
-	unlock, err := s.tryLock(id) // non-blocking: if someone else is mutating this channel, return ErrLocked.
+	unlock, err := s.tryLock(id)
 	if err != nil {
 		return fmt.Errorf("try lock: %w", err)
 	}
@@ -316,66 +350,140 @@ func (s *ChannelService) DeleteChannel(ctx context.Context, id int64) error {
 	}
 
 	wasEnabled := ch.Enabled
+	oldUnit := unitName(ch)
+
 	if wasEnabled {
-		if err := s.disableChannel(ch.ID); err != nil {
-			return fmt.Errorf("disable channel: %w", err)
+		if _, err := s.systemd.StopUnit(oldUnit); err != nil {
+			var dbusErr dbus.Error
+			if errors.As(err, &dbusErr) && dbusErr.Name == "org.freedesktop.systemd1.NoSuchUnit" {
+				// unit doesn’t exist — handle gracefully, just log
+				s.log.Warn("unit not loaded", zap.String("unit_name", oldUnit))
+			} else {
+				return fmt.Errorf("stop unit: %w", err)
+			}
 		}
 	}
 
 	if err := s.repo.Channels.Delete(ctx, id); err != nil {
-		// Recovery path: try to put the service back up if we brought it down.
 		if wasEnabled {
-			_ = s.enableChannel(ch.ID)
+			// Rollback: restart old unit
+			if _, startErr := s.systemd.StartTransientUnit(oldUnit, "/usr/bin/remux", remuxArgv(ch), "always", restartUSec(ch)); startErr != nil {
+				s.log.Error("rollback systemd failed", zap.Error(startErr))
+			}
 		}
 		return fmt.Errorf("delete: %w", err)
 	}
 
-	s.muxes.Delete(id) // once deleted we can also drop the mutex entry.
+	// Once deleted, we can discard the per-ID gate.
+	s.muxes.Delete(id)
 	return nil
 }
 
-// commitSystemdService renders/commits the systemd unit for a channel. This is
-// called for create and update flows, and also before enabling to ensure the
-// unit exists and is up-to-date. Consider this idempotent with respect to the
-// same inputs; repeated calls are cheap compared to failed starts at runtime.
-func (s *ChannelService) commitSystemdService(ch *channel.ZmuxChannel) error {
-	cfg := SystemdServiceConfig{
-		ServiceName: fmt.Sprintf("zmux-channel-%d", ch.ID),
-		ExecStart:   remuxcmd.BuildRemuxExec(ch),
-		RestartSec:  strconv.FormatUint(uint64(ch.RestartSec), 10),
+func remuxID(ch *channel.ZmuxChannel) string {
+	return strconv.FormatInt(ch.ID, 10) + "_" + strconv.FormatInt(ch.Revision, 10)
+}
+
+func unitName(ch *channel.ZmuxChannel) string {
+	return "zmux-channel-" + remuxID(ch) + ".service"
+}
+
+func remuxArgv(ch *channel.ZmuxChannel) []string {
+	return remuxcmd.BuildArgs(ch)
+}
+
+func restartUSec(ch *channel.ZmuxChannel) uint64 {
+	return uint64(ch.RestartSec) * 1_000_000
+}
+
+// reconcileOnStart brings systemd runtime into alignment with the repo’s desired state.
+//
+// Strategy (two-phase, idempotent):
+//  1. Enumerate all currently loaded systemd units and stop any transient unit we own
+//     whose name matches "zmux-channel-*.service" but does NOT exist in the repo as
+//     an enabled channel (i.e., zombies).
+//  2. Start a transient unit for every repo-enabled channel that was not already
+//     present in systemd from phase (1).
+//
+// Semantics & failure policy:
+//   - “Zombies” are best-effort to stop: failures are WARNed and reconciliation continues.
+//   - Starting desired-but-missing units is REQUIRED: on the first failure, we return an error.
+//     This makes constructor/boot fail fast instead of drifting into split-brain.
+//   - All systemd calls are asynchronous by design; we don’t wait for state transitions
+//     here. Higher-level monitoring (e.g., JobRemoved) or health checks can be added if needed.
+//
+// Concurrency & idempotency:
+//   - Safe to run multiple times; it converges to the same state.
+//   - Assumes a single active controller instance; if you run multiple service instances,
+//     you may want external leader election to avoid thrash.
+//
+// Complexity:
+//   - O(N + M) where N = #repo channels, M = #loaded systemd units.
+//
+// Future improvements:
+//   - If available in your target systemd, ListUnitsByPatterns could filter server-side.
+//   - If you ever need to “refresh” already-present desired units, you’ll need an explicit
+//     stop/restart or ReplaceTransientUnit (not universally available).
+func (s *ChannelService) reconcileOnStart(ctx context.Context) error {
+	// 1) Load desired state from repo and index enabled units by their final unit name.
+	chs, err := s.repo.Channels.GetAll(ctx)
+	if err != nil {
+		return fmt.Errorf("load channels: %w", err)
 	}
-	if err := s.systemd.CommitService(cfg); err != nil {
-		return fmt.Errorf("commit systemd service: %w", err)
+
+	// Map of desired unitName -> channel (only for Enabled channels).
+	// Using a map gives O(1) membership checks when scanning ListUnits.
+	enabledUnits := make(map[string]*channel.ZmuxChannel, len(chs))
+	for _, ch := range chs {
+		if ch.Enabled {
+			enabledUnits[unitName(ch)] = ch
+		}
 	}
+
+	// 2) Observe actual state from systemd.
+	units, err := s.systemd.ListUnits()
+	if err != nil {
+		return fmt.Errorf("list units: %w", err)
+	}
+
+	// Pass A: stop any stray zmux transient services not declared enabled in repo.
+	for _, u := range units {
+		if !isZmuxServiceName(u.Name) {
+			continue
+		}
+
+		// If this unit is desired and already present, leave it alone
+		// and remove it from the "to start" set.
+		if _, ok := enabledUnits[u.Name]; ok {
+			delete(enabledUnits, u.Name)
+			continue
+		}
+
+		// Otherwise it's a zombie; try to stop it (async). Non-fatal on failure.
+		if _, err := s.systemd.StopUnit(u.Name); err != nil {
+			var dbusErr dbus.Error
+			if errors.As(err, &dbusErr) && dbusErr.Name == "org.freedesktop.systemd1.NoSuchUnit" {
+				// The unit raced away; not a big deal.
+				s.log.Warn("zombie unit already gone", zap.String("unit_name", u.Name))
+				continue
+			}
+			s.log.Warn("stop zombie unit failed", zap.String("unit_name", u.Name), zap.Error(err))
+		}
+	}
+
+	// Pass B: start any desired-but-missing units.
+	// If any start fails, fail the reconcile to avoid silent drift.
+	for unit, ch := range enabledUnits {
+		if _, err := s.systemd.StartTransientUnit(unit, "/usr/bin/remux", remuxArgv(ch), "always", restartUSec(ch)); err != nil {
+			return fmt.Errorf("start unit %q: %w", unit, err)
+		}
+	}
+
 	return nil
 }
 
-// enableChannel is a thin wrapper around systemd.EnableService for a channel.
-// Kept private to make higher-level flows explicit and testable.
-func (s *ChannelService) enableChannel(id int64) error {
-	serviceName := fmt.Sprintf("zmux-channel-%d", id)
-	if err := s.systemd.EnableService(serviceName); err != nil {
-		return fmt.Errorf("enable systemd service: %w", err)
-	}
-	return nil
-}
-
-// disableChannel is a thin wrapper around systemd.DisableService for a channel.
-func (s *ChannelService) disableChannel(id int64) error {
-	serviceName := fmt.Sprintf("zmux-channel-%d", id)
-	if err := s.systemd.DisableService(serviceName); err != nil {
-		return fmt.Errorf("disable systemd service: %w", err)
-	}
-	return nil
-}
-
-// restartChannel is a thin wrapper around systemd.RestartService for a channel.
-// Kept private to make higher-level flows explicit and testable.
-// Should be called on already-enabled services to provide restart semantics.
-func (s *ChannelService) restartChannel(id int64) error {
-	serviceName := fmt.Sprintf("zmux-channel-%d", id)
-	if err := s.systemd.RestartService(serviceName); err != nil {
-		return fmt.Errorf("restart systemd service: %w", err)
-	}
-	return nil
+// isZmuxServiceName reports whether the systemd unit name refers to a zmux-managed
+// transient service. We match both the expected prefix and the .service suffix to
+// avoid touching timers, slices, or other unit types with similar names.
+func isZmuxServiceName(name string) bool {
+	return strings.HasPrefix(name, "zmux-channel-") && strings.HasSuffix(name, ".service")
 }

@@ -4,14 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strconv"
 
 	"go.uber.org/zap"
 )
 
-func remuxStatusKey(id int64) string  { return "remux:" + strconv.FormatInt(id, 10) + ":status" }
-func remuxIfmtKey(id int64) string    { return "remux:" + strconv.FormatInt(id, 10) + ":ifmt" }
-func remuxMetricsKey(id int64) string { return "remux:" + strconv.FormatInt(id, 10) + ":metrics" }
+func remuxStatusKey(id string) string  { return "remux:" + id + ":status" }
+func remuxIfmtKey(id string) string    { return "remux:" + id + ":ifmt" }
+func remuxMetricsKey(id string) string { return "remux:" + id + ":metrics" }
 
 // RemuxRepository provides Redis-backed access to remux monitoring data.
 //
@@ -44,22 +43,22 @@ type RemuxStatus struct {
 	} `json:"event"`
 }
 
-// RemuxSummary bundles RemuxStatus with optional ifmt/metrics JSON blobs for "Live" remuxers.
+// RemuxSummary bundles RemuxStatus with optional ifmt/metrics JSON blobs for "Online" remuxers.
 type RemuxSummary struct {
 	Status  *RemuxStatus     `json:"status,omitempty"`
-	Ifmt    *json.RawMessage `json:"ifmt,omitempty"`    // optional; if Status.Liveness != "Live", always missing
-	Metrics *json.RawMessage `json:"metrics,omitempty"` // optional; if Status.Liveness != "Live", always missing
+	Ifmt    *json.RawMessage `json:"ifmt,omitempty"`    // optional; if Status.Online == false, always missing
+	Metrics *json.RawMessage `json:"metrics,omitempty"` // optional; if Status.Online == false, always missing
 }
 
-// GetStatusesByID fetches remux:<id>:status for the provided channel IDs via a single
+// GetStatusesByID fetches remux:<id>:status for the provided remux IDs via a single
 // MGET operation.
 //
-//   - Missing keys are ignored silently (e.g. channel never created, already deleted or never enabled, remux not yet started).
+//   - Missing keys are ignored silently (e.g. remux never created or yet to be started).
 //   - All results should be treated as *non-transactional snapshots*; concurrent
 //     writes may cause transient inconsistencies.
-func (r *RemuxRepository) GetStatusesByID(ctx context.Context, ids []int64) (map[int64]*RemuxStatus, error) {
+func (r *RemuxRepository) GetStatusesByID(ctx context.Context, ids []string) (map[string]*RemuxStatus, error) {
 	if len(ids) == 0 {
-		return map[int64]*RemuxStatus{}, nil
+		return map[string]*RemuxStatus{}, nil
 	}
 
 	keys := make([]string, len(ids))
@@ -72,7 +71,7 @@ func (r *RemuxRepository) GetStatusesByID(ctx context.Context, ids []int64) (map
 		return nil, fmt.Errorf("mget: %w", err)
 	}
 
-	out := make(map[int64]*RemuxStatus)
+	out := make(map[string]*RemuxStatus)
 	for i, v := range vals {
 		if v == nil {
 			r.log.Warn(
@@ -96,29 +95,29 @@ func (r *RemuxRepository) GetStatusesByID(ctx context.Context, ids []int64) (map
 }
 
 // GetSummariesByID retrieves a combined status/ifmt/metrics view for the
-// given channel IDs.
+// given remux IDs.
 //
 // The workflow is:
 //
 //  1. Fetch all remux:<id>:status entries in a single MGET.
-//     - Missing keys are skipped (e.g. channel never created, already deleted or never enabled, remux not yet started).
+//     - Missing keys are skipped (e.g. remux never created or yet to be started).
 //     - Results are returned in a map keyed by ID.
-//  2. For IDs where Status.Liveness == "Live", fetch corresponding optional
+//  2. For IDs where status.Online == true, fetch corresponding optional
 //     remux:<id>:ifmt and remux:<id>:metrics entries in a second batched MGET.
-//     - Missing values are treated as nil/absent (e.g., yet to be set by remux changed to "Dead" between the calls).
+//     - Missing values are treated as nil/absent (e.g., yet to be set by remux changed to status.Online == false between the calls).
 //
 // Return value:
 //   - The returned map contains one RemuxSummary per ID that had a valid status.
-//   - For non-live remuxers, Ifmt and Metrics will always be nil.
-//   - For live remuxers, Ifmt and Metrics may still be nil if not present in Redis.
+//   - For non-online remuxers, Ifmt and Metrics will always be nil.
+//   - For online remuxers, Ifmt and Metrics may still be nil if not present in Redis.
 //
 // Consistency model:
 //   - Reads are *eventually consistent snapshots*.
 //   - Status and ifmt/metrics are fetched in two separate MGETs and may not
 //     reflect an atomic point-in-time view.
-func (r *RemuxRepository) GetSummariesByID(ctx context.Context, ids []int64) (map[int64]*RemuxSummary, error) {
+func (r *RemuxRepository) GetSummariesByID(ctx context.Context, ids []string) (map[string]*RemuxSummary, error) {
 	if len(ids) == 0 {
-		return map[int64]*RemuxSummary{}, nil
+		return map[string]*RemuxSummary{}, nil
 	}
 
 	// fetch statuses
@@ -127,21 +126,21 @@ func (r *RemuxRepository) GetSummariesByID(ctx context.Context, ids []int64) (ma
 		return nil, fmt.Errorf("get status by ids: %w", err)
 	}
 
-	// build map of summaries + collect live IDs
-	summariesByID := make(map[int64]*RemuxSummary, len(currentStatusList))
-	liveIDs := make([]int64, 0, len(currentStatusList))
+	// build map of summaries + collect online IDs
+	summariesByID := make(map[string]*RemuxSummary, len(currentStatusList))
+	onlineIDs := make([]string, 0, len(currentStatusList))
 
 	for id, status := range currentStatusList {
 		summariesByID[id] = &RemuxSummary{Status: status}
 		if status.Online {
-			liveIDs = append(liveIDs, id)
+			onlineIDs = append(onlineIDs, id)
 		}
 	}
 
-	// fetch ifmt/metrics only for live IDs
-	if len(liveIDs) > 0 {
-		keys := make([]string, 0, len(liveIDs)*2)
-		for _, id := range liveIDs {
+	// fetch ifmt/metrics only for online IDs
+	if len(onlineIDs) > 0 {
+		keys := make([]string, 0, len(onlineIDs)*2)
+		for _, id := range onlineIDs {
 			keys = append(keys, remuxIfmtKey(id), remuxMetricsKey(id))
 		}
 
@@ -151,14 +150,14 @@ func (r *RemuxRepository) GetSummariesByID(ctx context.Context, ids []int64) (ma
 		}
 
 		// walk results in steps of 2 (ifmt, metrics)
-		for i, id := range liveIDs {
+		for i, id := range onlineIDs {
 			ifmt, err := optionalVal(vals[2*i])
 			if err != nil {
-				return nil, fmt.Errorf("ifmt for id %d: %w", id, err)
+				return nil, fmt.Errorf("ifmt for id %s: %w", id, err)
 			}
 			metrics, err := optionalVal(vals[2*i+1])
 			if err != nil {
-				return nil, fmt.Errorf("metrics for id %d: %w", id, err)
+				return nil, fmt.Errorf("metrics for id %s: %w", id, err)
 			}
 			summariesByID[id].Ifmt = ifmt
 			summariesByID[id].Metrics = metrics

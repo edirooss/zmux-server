@@ -5,11 +5,13 @@ go 1.23.0
 toolchain go1.23.12
 
 require (
+	github.com/davecgh/go-spew v1.1.1
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/gin-contrib/cors v1.7.6
 	github.com/gin-contrib/secure v1.1.2
 	github.com/gin-contrib/sessions v1.0.4
 	github.com/gin-gonic/gin v1.10.1
+	github.com/godbus/dbus/v5 v5.1.0
 	github.com/google/uuid v1.6.0
 	github.com/redis/go-redis/v9 v9.12.1
 	go.uber.org/zap v1.27.0
