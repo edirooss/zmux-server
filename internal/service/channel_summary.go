@@ -145,10 +145,10 @@ func (s *SummaryService) refresh(ctx context.Context) ([]dto.ChannelSummary, err
 		return nil, err
 	}
 
-	enabledIDs := make([]int64, 0, len(chs))
+	enabledIDs := make([]string, 0, len(chs))
 	for _, ch := range chs {
 		if ch.Enabled {
-			enabledIDs = append(enabledIDs, ch.ID)
+			enabledIDs = append(enabledIDs, remuxID(ch))
 		}
 	}
 
@@ -161,7 +161,7 @@ func (s *SummaryService) refresh(ctx context.Context) ([]dto.ChannelSummary, err
 	for _, ch := range chs {
 		sum := dto.ChannelSummary{ZmuxChannel: *ch}
 		if ch.Enabled {
-			if st, ok := summeriesByID[ch.ID]; ok {
+			if st, ok := summeriesByID[remuxID(ch)]; ok {
 				sum.Status = st.Status
 				sum.Ifmt = st.Ifmt
 				sum.Metrics = st.Metrics

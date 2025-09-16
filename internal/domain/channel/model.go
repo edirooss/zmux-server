@@ -9,6 +9,7 @@ import (
 
 type ZmuxChannel struct {
 	ID         int64               `json:"id"`          //
+	Revision   int64               `json:"revision"`    //
 	Name       *string             `json:"name"`        // nullable
 	Input      ZmuxChannelInput    `json:"input"`       //
 	Outputs    []ZmuxChannelOutput `json:"outputs"`     //
