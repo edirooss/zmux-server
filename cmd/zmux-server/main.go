@@ -108,17 +108,18 @@ func main() {
 				limitConcurrency := mw.LimitConcurrentRequests(10) // cap at 10 in-flight writes (POST/PUT/PATCH/DELETE)
 
 				// --- Channel collection ---
-				admins.POST("/api/channels", limitConcurrency, channelshndlr.CreateChannel) // create new channel
-				authed.GET("/api/channels", channelshndlr.GetChannelList)                   // get all channels
+				admins.POST("/api/channels", limitConcurrency, channelshndlr.CreateChannel) // create one
+				authed.GET("/api/channels", channelshndlr.GetChannelList)                   // get list, get many
+				admins.DELETE("/api/channels", channelshndlr.DeleteChannels)                // delete many
+				admins.PATCH("/api/channels", channelshndlr.ModifyChannels)                 // update many (modify/partial-update)
 
 				// --- Channel resource ---
-				validateID := mw.RequireValidChannelID()
-				admins.PUT("/api/channels/:id", validateID, limitConcurrency, channelshndlr.ReplaceChannel)   // replace/full-update channel
-				admins.DELETE("/api/channels/:id", validateID, limitConcurrency, channelshndlr.DeleteChannel) // delete channel
-
-				authzChannelAcc := mw.AuthorizeChannelIDAccess(authsvc, repo.B2BClntChnls)
-				authed.GET("/api/channels/:id", validateID, authzChannelAcc, channelshndlr.GetChannel)                        // get one channel
-				authed.PATCH("/api/channels/:id", validateID, authzChannelAcc, limitConcurrency, channelshndlr.ModifyChannel) // modify/partial-update channel
+				requireValidID := mw.RequireValidChannelID()
+				requireChannelAccess := mw.RequireChannelIDAccess(authsvc, repo.B2BClntChnls)
+				authed.GET("/api/channels/:id", requireValidID, requireChannelAccess, channelshndlr.GetChannel)                        // get one
+				admins.PUT("/api/channels/:id", requireValidID, limitConcurrency, channelshndlr.ReplaceChannel)                        // update one (replace/full-update)
+				authed.PATCH("/api/channels/:id", requireValidID, requireChannelAccess, limitConcurrency, channelshndlr.ModifyChannel) // update one (modify/partial-update)
+				admins.DELETE("/api/channels/:id", requireValidID, limitConcurrency, channelshndlr.DeleteChannel)                      // delete one
 
 				// --- Channel views ---
 				admins.GET("/api/channels/summary", channelshndlr.Summary)
