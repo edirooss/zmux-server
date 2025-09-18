@@ -110,6 +110,8 @@ func main() {
 				// --- Channel collection ---
 				admins.POST("/api/channels", limitConcurrency, channelshndlr.CreateChannel) // create one
 				authed.GET("/api/channels", channelshndlr.GetChannelList)                   // get list, get many
+				admins.DELETE("/api/channels", channelshndlr.DeleteChannels)                // delete many
+				admins.PATCH("/api/channels", channelshndlr.ModifyChannels)                 // update many (modify/partial-update)
 
 				// --- Channel resource ---
 				requireValidID := mw.RequireValidChannelID()

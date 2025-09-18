@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/edirooss/zmux-server/internal/domain/channel"
 	"github.com/edirooss/zmux-server/internal/domain/channel/views"
 	"github.com/edirooss/zmux-server/internal/domain/principal"
 	"github.com/edirooss/zmux-server/internal/http/dto"
@@ -306,7 +307,7 @@ func (h *ChannelsHandler) getChannelByPrincipal(ctx context.Context, p *principa
 //
 // Behavior:
 //   - Partially updates a channel (merge-patch style).
-//   - Only provided fields are modified.
+//   - Only provided fields are updated.
 //
 // Status Codes:
 //   - 204 No Content → Success
@@ -337,35 +338,39 @@ func (h *ChannelsHandler) ModifyChannel(c *gin.Context) {
 		return
 	}
 
-	// Patch obj
-	if err := req.MergePatch(ch, p.Kind); err != nil {
+	code, err := h.patchAndUpdate(c.Request.Context(), &req, ch, p.Kind)
+	if err != nil {
 		c.Error(err)
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		c.JSON(code, gin.H{"message": err.Error()})
 		return
 	}
 
+	c.Status(code)
+}
+
+func (h *ChannelsHandler) patchAndUpdate(ctx context.Context, req *dto.ChannelModify, ch *channel.ZmuxChannel, pKind principal.PrincipalKind) (int, error) {
+	// Apply patch
+	if err := req.MergePatch(ch, pKind); err != nil {
+		return http.StatusBadRequest, err
+	}
+
+	// Validate
 	if err := ch.Validate(); err != nil {
-		c.Error(err)
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"message": err.Error()})
-		return
+		return http.StatusUnprocessableEntity, err
 	}
 
 	// Persist
-	if err := h.svc.UpdateChannel(c.Request.Context(), ch); err != nil {
-		c.Error(err)
+	if err := h.svc.UpdateChannel(ctx, ch); err != nil {
 		if errors.Is(err, service.ErrLocked) {
-			c.JSON(http.StatusLocked, gin.H{"message": service.ErrLocked.Error()})
-			return
+			return http.StatusLocked, err
 		}
 		if errors.Is(err, repo.ErrChannelNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"message": repo.ErrChannelNotFound.Error()})
-			return
+			return http.StatusNotFound, err
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
-		return
+		return http.StatusInternalServerError, err
 	}
 
-	c.Status(http.StatusNoContent)
+	return http.StatusNoContent, nil
 }
 
 // ReplaceChannel handles PUT /channels/{id}.
@@ -460,6 +465,165 @@ func (h *ChannelsHandler) DeleteChannel(c *gin.Context) {
 
 	// RA-friendly response
 	c.JSON(http.StatusOK, gin.H{"id": id})
+}
+
+type itemResult struct {
+	ID     int64  `json:"id"`
+	Status int    `json:"status"`
+	Error  string `json:"error,omitempty"`
+}
+
+func (h *ChannelsHandler) DeleteChannels(c *gin.Context) {
+	requestedIDs, err := collectRequestedIDs(c)
+	if err != nil {
+		c.Error(err)
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+
+	results := make([]itemResult, 0, len(requestedIDs))
+	deleted := make([]int64, 0, len(requestedIDs))
+	failed := make([]int64, 0, len(requestedIDs))
+
+	// requestedIDs appears to be a set (map[string]struct{}). If it's a slice, change `range` accordingly.
+	for _, id := range requestedIDs {
+		if err := h.svc.DeleteChannel(c.Request.Context(), id); err != nil {
+			c.Error(err)
+
+			status := http.StatusInternalServerError
+			msg := err.Error()
+
+			switch {
+			case errors.Is(err, service.ErrLocked):
+				status = http.StatusLocked // 423
+				msg = service.ErrLocked.Error()
+			case errors.Is(err, repo.ErrChannelNotFound):
+				status = http.StatusNotFound // 404
+				msg = repo.ErrChannelNotFound.Error()
+			}
+
+			results = append(results, itemResult{
+				ID:     id,
+				Status: status,
+				Error:  msg,
+			})
+			failed = append(failed, id)
+			continue
+		}
+
+		results = append(results, itemResult{
+			ID:     id,
+			Status: http.StatusOK, // 200
+		})
+		deleted = append(deleted, id)
+	}
+
+	// Decide top-level HTTP status:
+	// - 200 OK when all succeeded
+	// - 207 Multi-Status when mixed outcomes (some failures)
+	status := http.StatusOK
+	if len(failed) > 0 {
+		status = http.StatusMultiStatus
+	}
+
+	c.JSON(status, gin.H{
+		"count": gin.H{
+			"attempted": len(requestedIDs),
+			"deleted":   len(deleted),
+			"failed":    len(failed),
+		},
+		"data": gin.H{
+			"deleted": deleted,
+			"failed":  failed,
+		},
+		"results": results,
+	})
+}
+
+func (h *ChannelsHandler) ModifyChannels(c *gin.Context) {
+	p := h.authsvc.WhoAmI(c) // extract principal (already set by other middleware)
+	requestedIDs, err := collectRequestedIDs(c)
+	if err != nil {
+		c.Error(err)
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+
+	var req dto.ChannelModify
+	if err := bind(c.Request, &req); err != nil {
+		c.Error(err)
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+
+	results := make([]itemResult, 0, len(requestedIDs))
+	updated := make([]int64, 0, len(requestedIDs))
+	failed := make([]int64, 0, len(requestedIDs))
+
+	for _, id := range requestedIDs {
+		// Load current
+		ch, err := h.svc.GetChannel(c.Request.Context(), id)
+		if err != nil {
+			c.Error(err)
+
+			status := http.StatusInternalServerError
+			msg := err.Error()
+
+			if errors.Is(err, repo.ErrChannelNotFound) {
+				status = http.StatusNotFound
+				msg = repo.ErrChannelNotFound.Error()
+			}
+
+			results = append(results, itemResult{
+				ID:     id,
+				Status: status,
+				Error:  msg,
+			})
+			failed = append(failed, id)
+			continue
+		}
+
+		code, err := h.patchAndUpdate(c.Request.Context(), &req, ch, p.Kind)
+		if err != nil {
+			c.Error(err)
+			status := code
+			msg := err.Error()
+			results = append(results, itemResult{
+				ID:     id,
+				Status: status,
+				Error:  msg,
+			})
+			failed = append(failed, id)
+			continue
+		}
+
+		results = append(results, itemResult{
+			ID:     id,
+			Status: http.StatusOK, // 200
+		})
+		updated = append(updated, id)
+	}
+
+	// Decide top-level HTTP status:
+	// - 200 OK when all succeeded
+	// - 207 Multi-Status when mixed outcomes (some failures)
+	status := http.StatusOK
+	if len(failed) > 0 {
+		status = http.StatusMultiStatus
+	}
+
+	c.JSON(status, gin.H{
+		"count": gin.H{
+			"attempted": len(requestedIDs),
+			"updated":   len(updated),
+			"failed":    len(failed),
+		},
+		"data": gin.H{
+			"updated": updated,
+			"failed":  failed,
+		},
+		"results": results,
+	})
 }
 
 //
