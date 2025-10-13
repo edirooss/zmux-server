@@ -10,8 +10,8 @@ import (
 	"sync"
 
 	b2bclient "github.com/edirooss/zmux-server/internal/domain/b2b-client"
-	"github.com/edirooss/zmux-server/internal/repo/datastore"
-	"github.com/edirooss/zmux-server/internal/repo/objectstore"
+	"github.com/edirooss/zmux-server/internal/infrastructure/datastore"
+	"github.com/edirooss/zmux-server/internal/infrastructure/objectstore"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )

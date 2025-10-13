@@ -15,8 +15,6 @@ import (
 	"github.com/edirooss/zmux-server/internal/domain/channel/views"
 	"github.com/edirooss/zmux-server/internal/domain/principal"
 	"github.com/edirooss/zmux-server/internal/http/dto"
-	"github.com/edirooss/zmux-server/internal/repo"
-	"github.com/edirooss/zmux-server/internal/repo/store"
 	"github.com/edirooss/zmux-server/internal/service"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -40,11 +38,11 @@ type ChannelsHandler struct {
 	svc        *service.ChannelService
 	b2bsvc     *service.B2BClientService
 	summarySvc *service.SummaryService
-	repo       *repo.RemuxRepository
+	repo       *service.RemuxRepository
 }
 
 // NewChannelsHandler constructs a ChannelsHandler instance.
-func NewChannelsHandler(log *zap.Logger, authsvc *service.AuthService, chansvc *service.ChannelService, b2bsvc *service.B2BClientService, repo *repo.RemuxRepository) (*ChannelsHandler, error) {
+func NewChannelsHandler(log *zap.Logger, authsvc *service.AuthService, chansvc *service.ChannelService, b2bsvc *service.B2BClientService, repo *service.RemuxRepository) (*ChannelsHandler, error) {
 	// Service for generating channel summaries
 	summarySvc := service.NewSummaryService(
 		log,
@@ -273,8 +271,8 @@ func (h *ChannelsHandler) GetChannel(c *gin.Context) {
 	ch, err := h.getChannelByPrincipal(p, id)
 	if err != nil {
 		c.Error(err)
-		if errors.Is(err, store.ErrNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"message": store.ErrNotFound.Error()})
+		if errors.Is(err, service.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"message": service.ErrNotFound.Error()})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
@@ -344,8 +342,8 @@ func (h *ChannelsHandler) ModifyChannel(c *gin.Context) {
 	ch, err := h.svc.GetOne(id)
 	if err != nil {
 		c.Error(err)
-		if errors.Is(err, store.ErrNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"message": store.ErrNotFound.Error()})
+		if errors.Is(err, service.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"message": service.ErrNotFound.Error()})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
@@ -382,7 +380,7 @@ func (h *ChannelsHandler) patchAndUpdate(ctx context.Context, req *dto.ChannelMo
 
 	// Persist
 	if err := h.svc.Update(ctx, ch); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.Is(err, service.ErrNotFound) {
 			return http.StatusNotFound, err
 		}
 		return http.StatusInternalServerError, err
@@ -434,8 +432,8 @@ func (h *ChannelsHandler) ReplaceChannel(c *gin.Context) {
 
 	if err := h.svc.Update(c.Request.Context(), ch); err != nil {
 		c.Error(err)
-		if errors.Is(err, store.ErrNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"message": store.ErrNotFound.Error()})
+		if errors.Is(err, service.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"message": service.ErrNotFound.Error()})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
@@ -460,8 +458,8 @@ func (h *ChannelsHandler) DeleteChannel(c *gin.Context) {
 
 	if err := h.svc.Delete(c.Request.Context(), id); err != nil {
 		c.Error(err)
-		if errors.Is(err, store.ErrNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"message": store.ErrNotFound.Error()})
+		if errors.Is(err, service.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"message": service.ErrNotFound.Error()})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
@@ -498,9 +496,9 @@ func (h *ChannelsHandler) DeleteChannels(c *gin.Context) {
 			status := http.StatusInternalServerError
 			msg := err.Error()
 
-			if errors.Is(err, store.ErrNotFound) {
+			if errors.Is(err, service.ErrNotFound) {
 				status = http.StatusNotFound // 404
-				msg = store.ErrNotFound.Error()
+				msg = service.ErrNotFound.Error()
 			}
 
 			results = append(results, itemResult{
@@ -570,9 +568,9 @@ func (h *ChannelsHandler) ModifyChannels(c *gin.Context) {
 			status := http.StatusInternalServerError
 			msg := err.Error()
 
-			if errors.Is(err, store.ErrNotFound) {
+			if errors.Is(err, service.ErrNotFound) {
 				status = http.StatusNotFound
-				msg = store.ErrNotFound.Error()
+				msg = service.ErrNotFound.Error()
 			}
 
 			results = append(results, itemResult{

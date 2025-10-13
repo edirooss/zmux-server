@@ -9,7 +9,6 @@ import (
 
 	"github.com/edirooss/zmux-server/internal/http/handler"
 	mw "github.com/edirooss/zmux-server/internal/http/middleware"
-	"github.com/edirooss/zmux-server/internal/repo"
 	"github.com/edirooss/zmux-server/internal/service"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/secure"
@@ -105,7 +104,7 @@ func main() {
 			admins := authed.Group("", mw.Authorization(authsvc)) // only admins
 			{
 				{
-					channelshndlr, err := handler.NewChannelsHandler(log, authsvc, chnlsvc, b2bclntsvc, repo.NewRemuxRepository(log, rdb))
+					channelshndlr, err := handler.NewChannelsHandler(log, authsvc, chnlsvc, b2bclntsvc, service.NewRemuxRepository(log, rdb))
 					if err != nil {
 						log.Fatal("channels http handler creation failed", zap.Error(err))
 					}
