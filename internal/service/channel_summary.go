@@ -3,11 +3,13 @@ package service
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
 	"golang.org/x/sync/singleflight"
 
+	"github.com/edirooss/zmux-server/internal/domain/channel"
 	"github.com/edirooss/zmux-server/internal/http/dto"
 	"github.com/edirooss/zmux-server/internal/repo"
 	"go.uber.org/zap"
@@ -41,8 +43,9 @@ type SummaryResult struct {
 }
 
 type SummaryService struct {
-	log  *zap.Logger
-	repo *repo.Repository
+	log         *zap.Logger
+	repo        *repo.RemuxRepository
+	chanService *ChannelService
 
 	mu      sync.RWMutex
 	cache   []dto.ChannelSummary
@@ -57,15 +60,16 @@ type SummaryService struct {
 
 // NewSummaryService wires repositories and cache policy.
 // Reuse a single instance per process (handlers call Get()).
-func NewSummaryService(log *zap.Logger, opts SummaryOptions) *SummaryService {
+func NewSummaryService(log *zap.Logger, repo *repo.RemuxRepository, chanService *ChannelService, opts SummaryOptions) *SummaryService {
 	log = log.Named("summary_service")
 	opts.setDefaults()
 
 	return &SummaryService{
-		log:  log,
-		repo: repo.NewRepository(log),
-		opts: opts,
-		now:  time.Now,
+		log:         log,
+		repo:        repo,
+		chanService: chanService,
+		opts:        opts,
+		now:         time.Now,
 	}
 }
 
@@ -140,7 +144,7 @@ func (s *SummaryService) Invalidate() {
 
 // refresh runs the Redis pipeline: channels -> statuses -> ifmt/metrics
 func (s *SummaryService) refresh(ctx context.Context) ([]dto.ChannelSummary, error) {
-	chs, err := s.repo.Channels.GetAll(ctx)
+	chs, err := s.chanService.GetList(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +156,7 @@ func (s *SummaryService) refresh(ctx context.Context) ([]dto.ChannelSummary, err
 		}
 	}
 
-	summeriesByID, err := s.repo.Remuxers.GetSummariesByID(ctx, enabledIDs)
+	summeriesByID, err := s.repo.GetSummariesByID(ctx, enabledIDs)
 	if err != nil {
 		return nil, fmt.Errorf("get summaries by id: %w", err)
 	}
@@ -179,4 +183,8 @@ func cloneSummaries(in []dto.ChannelSummary) []dto.ChannelSummary {
 	out := make([]dto.ChannelSummary, len(in))
 	copy(out, in)
 	return out
+}
+
+func remuxID(ch *channel.ZmuxChannel) string {
+	return strconv.FormatInt(ch.ID, 10)
 }

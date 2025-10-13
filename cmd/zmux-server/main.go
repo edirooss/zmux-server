@@ -14,6 +14,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/secure"
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -34,14 +35,17 @@ func main() {
 	gin.DefaultWriter = zap.NewStdLog(log.Named("gin")).Writer() // Configure Gin's logger to use Zap
 	r := gin.New()
 
-	// Apply B2B clients confiugration
-	repo := repo.NewRepository(log)
-	if err := service.StartSpecSync(context.TODO(), log, repo, "", 0); err != nil {
-		log.Fatal("spec sync service failed", zap.Error(err))
+	// Apply Gin middlewares
+	rdb := buildRedisClient("127.0.0.1:6379", 0)
+	chnlsvc, err := service.NewChannelService(context.TODO(), log, rdb)
+	if err != nil {
+		log.Fatal("channel service creation failed", zap.Error(err))
 	}
-
-	// Apply middlewares
-	authsvc, err := service.NewAuthService(log, repo, isDev)
+	b2bclntsvc, err := service.NewB2BClientService(context.TODO(), log, chnlsvc, rdb)
+	if err != nil {
+		log.Fatal("b2b client service creation failed", zap.Error(err))
+	}
+	authsvc, err := service.NewAuthService(log, isDev, b2bclntsvc)
 	if err != nil {
 		log.Fatal("auth service creation failed", zap.Error(err))
 	}
@@ -69,6 +73,7 @@ func main() {
 
 		r.Use(authsvc.UserSession.Middleware()) // Attach user cookie-based session for auth
 
+		// r.Use(accessLog(zap.NewNop(), authsvc)) // Observability (logger, tracing)
 		r.Use(accessLog(log, authsvc)) // Observability (logger, tracing)
 
 		r.Use(func(c *gin.Context) {
@@ -99,36 +104,57 @@ func main() {
 
 			admins := authed.Group("", mw.Authorization(authsvc)) // only admins
 			{
-				// Channel resource handler
-				channelshndlr, err := handler.NewChannelsHandler(log, authsvc, repo.B2BClntChnls)
-				if err != nil {
-					log.Fatal("channels http handler creation failed", zap.Error(err))
+				{
+					channelshndlr, err := handler.NewChannelsHandler(log, authsvc, chnlsvc, b2bclntsvc, repo.NewRemuxRepository(log, rdb))
+					if err != nil {
+						log.Fatal("channels http handler creation failed", zap.Error(err))
+					}
+					// --- Channel collection ---
+					admins.POST("/api/channels", channelshndlr.CreateChannel)    // create one
+					authed.GET("/api/channels", channelshndlr.GetChannelList)    // get list, get many
+					admins.DELETE("/api/channels", channelshndlr.DeleteChannels) // delete many
+					admins.PATCH("/api/channels", channelshndlr.ModifyChannels)  // update many (modify/partial-update)
+
+					// --- Channel resource ---
+					requireValidID := mw.RequireValidChannelID()
+					requireChannelAccess := mw.RequireChannelIDAccess(authsvc, b2bclntsvc)
+					authed.GET("/api/channels/:id", requireValidID, requireChannelAccess, channelshndlr.GetChannel)      // get one
+					admins.GET("/api/channels/:id/logs", requireValidID, channelshndlr.GetChannelLogs)                   // get one (logs)
+					admins.PUT("/api/channels/:id", requireValidID, channelshndlr.ReplaceChannel)                        // update one (replace/full-update)
+					authed.PATCH("/api/channels/:id", requireValidID, requireChannelAccess, channelshndlr.ModifyChannel) // update one (modify/partial-update)
+					admins.DELETE("/api/channels/:id", requireValidID, channelshndlr.DeleteChannel)                      // delete one
+
+					// --- Channel views ---
+					admins.GET("/api/channels/summary", channelshndlr.Summary)
+					authed.GET("/api/channels/status", channelshndlr.Status)
 				}
 
-				limitConcurrency := mw.LimitConcurrentRequests(10) // cap at 10 in-flight writes (POST/PUT/PATCH/DELETE)
+				{
+					// B2B Client handler
+					b2bclnthndlr := handler.NewB2BClientHandler(b2bclntsvc, chnlsvc)
 
-				// --- Channel collection ---
-				admins.POST("/api/channels", limitConcurrency, channelshndlr.CreateChannel) // create one
-				authed.GET("/api/channels", channelshndlr.GetChannelList)                   // get list, get many
-				admins.DELETE("/api/channels", channelshndlr.DeleteChannels)                // delete many
-				admins.PATCH("/api/channels", channelshndlr.ModifyChannels)                 // update many (modify/partial-update)
+					// --- B2B Client collection ---
+					admins.POST("/api/b2b-clients", b2bclnthndlr.CreateB2BClient)       // create one
+					admins.GET("/api/b2b-clients", b2bclnthndlr.GetAllB2BClients)       // get all
+					admins.GET("/api/b2b-clients/:id", b2bclnthndlr.GetB2BClient)       // get one
+					admins.PUT("/api/b2b-clients/:id", b2bclnthndlr.UpdateB2BClient)    // update one
+					admins.DELETE("/api/b2b-clients/:id", b2bclnthndlr.DeleteB2BClient) // delete one
 
-				// --- Channel resource ---
-				requireValidID := mw.RequireValidChannelID()
-				requireChannelAccess := mw.RequireChannelIDAccess(authsvc, repo.B2BClntChnls)
-				authed.GET("/api/channels/:id", requireValidID, requireChannelAccess, channelshndlr.GetChannel)                        // get one
-				admins.PUT("/api/channels/:id", requireValidID, limitConcurrency, channelshndlr.ReplaceChannel)                        // update one (replace/full-update)
-				authed.PATCH("/api/channels/:id", requireValidID, requireChannelAccess, limitConcurrency, channelshndlr.ModifyChannel) // update one (modify/partial-update)
-				admins.DELETE("/api/channels/:id", requireValidID, limitConcurrency, channelshndlr.DeleteChannel)                      // delete one
-
-				// --- Channel views ---
-				admins.GET("/api/channels/summary", channelshndlr.Summary)
-				authed.GET("/api/channels/status", channelshndlr.Status)
-
-				// --- Channel quota ---
-				b2bClients := mw.RequireB2BClient(authsvc)
-				authed.GET("/api/channels/quota", b2bClients, channelshndlr.Quota) // enabled channel quota (B2B only)
+					// bff helpers
+					admins.GET("/api/b2b-clients/channels/available", b2bclnthndlr.GetChannelsAvailable)
+					admins.GET("/api/b2b-clients/:id/channels", b2bclnthndlr.GetChannelsSelected)
+					admins.GET("/api/b2b-clients/:id/channels/available-and-selected", b2bclnthndlr.GetChannelsAvailableAndSelected)
+				}
 			}
+
+			// --- Outputs Ref ---
+			admins.GET("/api/channels/outputs/ref", func(ctx *gin.Context) {
+				type OutputRef struct {
+					ID   string `json:"id"`
+					Name string `json:"name"`
+				}
+				ctx.JSON(http.StatusOK, []OutputRef{{"onprem_mr01", "onprem_mr01"}, {"onprem_mz01", "onprem_mz01"}, {"pubcloud_sky320", "pubcloud_sky320"}})
+			})
 
 			// --- System ---
 			admins.GET("/api/system/net/localaddrs", handler.NewLocalAddrHandler(log).GetLocalAddrList) // GET local network addresses
@@ -150,16 +176,6 @@ func main() {
 		log.Fatal("server failed", zap.Error(err))
 	}
 	log.Info("server closed")
-}
-
-func buildLogger() *zap.Logger {
-	logConfig := zap.NewDevelopmentConfig()
-	logConfig.EncoderConfig.TimeKey = ""
-	logConfig.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
-	logConfig.DisableStacktrace = true
-	logConfig.DisableCaller = true
-	logConfig.Level.SetLevel(zap.DebugLevel)
-	return zap.Must(logConfig.Build())
 }
 
 // accessLog is a Gin middleware that records HTTP request/response details with Zap after handling.
@@ -212,4 +228,31 @@ func accessLog(log *zap.Logger, authsvc *service.AuthService) gin.HandlerFunc {
 			log.Info("request", fields...)
 		}
 	}
+}
+
+// helpers
+
+func buildLogger() *zap.Logger {
+	logConfig := zap.NewDevelopmentConfig()
+	logConfig.EncoderConfig.TimeKey = ""
+	logConfig.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+	logConfig.DisableStacktrace = true
+	logConfig.DisableCaller = true
+	logConfig.Level.SetLevel(zap.DebugLevel)
+	return zap.Must(logConfig.Build())
+}
+
+func buildRedisClient(addr string, db int) *redis.Client {
+	opts := &redis.Options{
+		Addr:         addr,
+		DB:           db,
+		DialTimeout:  5 * time.Second,
+		ReadTimeout:  3 * time.Second,
+		WriteTimeout: 3 * time.Second,
+		PoolSize:     10,
+		MinIdleConns: 5,
+		MaxRetries:   3,
+	}
+
+	return redis.NewClient(opts)
 }

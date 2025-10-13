@@ -5,30 +5,29 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
+
+// RemuxRepository
+type RemuxRepository struct {
+	log *zap.Logger
+	rdb *redis.Client
+}
+
+// This repository operates over monitoring data that is continuously refreshed
+// by remux processes and may disappear or changed at any time.
+// Consumers must treat all reads as *eventually consistent snapshots* rather than durable state.
+func NewRemuxRepository(log *zap.Logger, rdb *redis.Client) *RemuxRepository {
+	return &RemuxRepository{
+		log: log.Named("remux-repo"),
+		rdb: rdb,
+	}
+}
 
 func remuxStatusKey(id string) string  { return "remux:" + id + ":status" }
 func remuxIfmtKey(id string) string    { return "remux:" + id + ":ifmt" }
 func remuxMetricsKey(id string) string { return "remux:" + id + ":metrics" }
-
-// RemuxRepository provides Redis-backed access to remux monitoring data.
-//
-// This repository operates over monitoring data that is continuously refreshed
-// by remux processes and may disappear or changed at any time.
-// Consumers must treat all reads as *eventually consistent snapshots* rather than durable state.
-type RemuxRepository struct {
-	client *RedisClient
-	log    *zap.Logger
-}
-
-func newRemuxRepository(log *zap.Logger, client *RedisClient) *RemuxRepository {
-	log = log.Named("remux")
-	return &RemuxRepository{
-		log:    log,
-		client: client,
-	}
-}
 
 // RemuxStatus mirrors the JSON stored at remux:<id>:status.
 //
@@ -66,7 +65,7 @@ func (r *RemuxRepository) GetStatusesByID(ctx context.Context, ids []string) (ma
 		keys[i] = remuxStatusKey(id)
 	}
 
-	vals, err := r.client.MGet(ctx, keys...).Result()
+	vals, err := r.rdb.MGet(ctx, keys...).Result()
 	if err != nil {
 		return nil, fmt.Errorf("mget: %w", err)
 	}
@@ -144,7 +143,7 @@ func (r *RemuxRepository) GetSummariesByID(ctx context.Context, ids []string) (m
 			keys = append(keys, remuxIfmtKey(id), remuxMetricsKey(id))
 		}
 
-		vals, err := r.client.MGet(ctx, keys...).Result()
+		vals, err := r.rdb.MGet(ctx, keys...).Result()
 		if err != nil {
 			return nil, fmt.Errorf("mget ifmt/metrics: %w", err)
 		}

@@ -9,7 +9,6 @@ import (
 
 type ZmuxChannel struct {
 	ID         int64               `json:"id"`          //
-	Revision   int64               `json:"revision"`    //
 	Name       *string             `json:"name"`        // nullable
 	Input      ZmuxChannelInput    `json:"input"`       //
 	Outputs    []ZmuxChannelOutput `json:"outputs"`     //
@@ -156,7 +155,7 @@ func (ch *ZmuxChannel) Validate() error {
 		// outputs[n].url: uri
 		if output.URL != nil {
 			if err := validateOutputURL(*output.URL); err != nil {
-				return fmt.Errorf("invalid outputs[%d].url (ref=%s): %d", i, output.Ref, err)
+				return fmt.Errorf("invalid outputs[%d].url (ref=%s): %w", i, output.Ref, err)
 			}
 		}
 

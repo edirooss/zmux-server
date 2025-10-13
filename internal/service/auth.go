@@ -1,11 +1,10 @@
 package service
 
 import (
-	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/edirooss/zmux-server/internal/domain/principal"
-	"github.com/edirooss/zmux-server/internal/repo"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -19,18 +18,18 @@ const principalKey contextKey = "auth.principal"
 type AuthService struct {
 	log         *zap.Logger
 	UserSession *UserSessionService
-	repo        *repo.Repository
+	b2bsvc      *B2BClientService
 }
 
 // NewAuthService creates a new AuthService.
-func NewAuthService(log *zap.Logger, repo *repo.Repository, isDev bool) (*AuthService, error) {
+func NewAuthService(log *zap.Logger, isDev bool, b2bsvc *B2BClientService) (*AuthService, error) {
 	log = log.Named("auth")
 	usersesssvc, err := NewUserSessionService(isDev)
 	if err != nil {
 		return nil, fmt.Errorf("new user session service: %w", err)
 	}
 
-	return &AuthService{log: log, UserSession: usersesssvc, repo: repo}, nil
+	return &AuthService{log: log, UserSession: usersesssvc, b2bsvc: b2bsvc}, nil
 }
 
 // AuthenticateWithPassword authenticates using username and password.
@@ -70,13 +69,13 @@ func (s *AuthService) AuthenticateWithSession(c *gin.Context) (*principal.Princi
 // Looks up principal by bearer token in Redis and sets it on the request context.
 // DEV: No constant-time compare here—token is used as a Redis key; errors are logged and treated as auth failures.
 func (s *AuthService) AuthenticateWithBearerToken(c *gin.Context, token string) (*principal.Principal, bool) {
-	p, err := s.repo.Principal.GetByToken(c.Request.Context(), token)
-	if err != nil {
-		if errors.Is(err, repo.ErrPrincipalNotFound) {
-			return nil, false
-		}
-		s.log.Warn("bearer lookup failed", zap.Error(err))
+	b2bClient, ok := s.b2bsvc.LookupByToken(token)
+	if !ok {
 		return nil, false
+	}
+	p := &principal.Principal{
+		ID:   strconv.FormatInt(b2bClient.ID, 10),
+		Kind: principal.B2BClient,
 	}
 	s.setPrincipal(c, p)
 	return p, true
