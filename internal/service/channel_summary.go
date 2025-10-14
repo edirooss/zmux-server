@@ -3,15 +3,25 @@ package service
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
 	"golang.org/x/sync/singleflight"
 
-	"github.com/edirooss/zmux-server/internal/http/dto"
-	"github.com/edirooss/zmux-server/internal/repo"
+	"github.com/edirooss/zmux-server/internal/domain/channel"
 	"go.uber.org/zap"
 )
+
+// ChannelSummary is the API model for GET /api/channels/summary.
+// We embed ZmuxChannel so its fields are flattened (id, name, etc.) and
+// add monitoring fields conditionally.
+//   - status is present only if channel.Enabled == true AND status key exists.
+//   - ifmt/metrics are present only if status.liveness == "Live" and keys exist.
+type ChannelSummary struct {
+	channel.ZmuxChannel
+	RemuxSummary
+}
 
 type SummaryOptions struct {
 	// TTL controls how long we serve the in-memory snapshot.
@@ -35,17 +45,18 @@ func (o *SummaryOptions) setDefaults() {
 
 // SummaryResult lets the handler set headers/telemetry.
 type SummaryResult struct {
-	Data        []dto.ChannelSummary
+	Data        []ChannelSummary
 	CacheHit    bool
 	GeneratedAt time.Time // snapshot timestamp
 }
 
 type SummaryService struct {
-	log  *zap.Logger
-	repo *repo.Repository
+	log         *zap.Logger
+	repo        *RemuxRepository
+	chanService *ChannelService
 
 	mu      sync.RWMutex
-	cache   []dto.ChannelSummary
+	cache   []ChannelSummary
 	expires time.Time
 	genAt   time.Time
 
@@ -57,15 +68,16 @@ type SummaryService struct {
 
 // NewSummaryService wires repositories and cache policy.
 // Reuse a single instance per process (handlers call Get()).
-func NewSummaryService(log *zap.Logger, opts SummaryOptions) *SummaryService {
+func NewSummaryService(log *zap.Logger, repo *RemuxRepository, chanService *ChannelService, opts SummaryOptions) *SummaryService {
 	log = log.Named("summary_service")
 	opts.setDefaults()
 
 	return &SummaryService{
-		log:  log,
-		repo: repo.NewRepository(log),
-		opts: opts,
-		now:  time.Now,
+		log:         log,
+		repo:        repo,
+		chanService: chanService,
+		opts:        opts,
+		now:         time.Now,
 	}
 }
 
@@ -139,8 +151,8 @@ func (s *SummaryService) Invalidate() {
 }
 
 // refresh runs the Redis pipeline: channels -> statuses -> ifmt/metrics
-func (s *SummaryService) refresh(ctx context.Context) ([]dto.ChannelSummary, error) {
-	chs, err := s.repo.Channels.GetAll(ctx)
+func (s *SummaryService) refresh(ctx context.Context) ([]ChannelSummary, error) {
+	chs, err := s.chanService.GetList(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -152,14 +164,14 @@ func (s *SummaryService) refresh(ctx context.Context) ([]dto.ChannelSummary, err
 		}
 	}
 
-	summeriesByID, err := s.repo.Remuxers.GetSummariesByID(ctx, enabledIDs)
+	summeriesByID, err := s.repo.GetSummariesByID(ctx, enabledIDs)
 	if err != nil {
 		return nil, fmt.Errorf("get summaries by id: %w", err)
 	}
 
-	out := make([]dto.ChannelSummary, 0, len(chs))
+	out := make([]ChannelSummary, 0, len(chs))
 	for _, ch := range chs {
-		sum := dto.ChannelSummary{ZmuxChannel: *ch}
+		sum := ChannelSummary{ZmuxChannel: *ch}
 		if ch.Enabled {
 			if st, ok := summeriesByID[remuxID(ch)]; ok {
 				sum.Status = st.Status
@@ -172,11 +184,15 @@ func (s *SummaryService) refresh(ctx context.Context) ([]dto.ChannelSummary, err
 	return out, nil
 }
 
-func cloneSummaries(in []dto.ChannelSummary) []dto.ChannelSummary {
+func cloneSummaries(in []ChannelSummary) []ChannelSummary {
 	if len(in) == 0 {
 		return nil
 	}
-	out := make([]dto.ChannelSummary, len(in))
+	out := make([]ChannelSummary, len(in))
 	copy(out, in)
 	return out
+}
+
+func remuxID(ch *channel.ZmuxChannel) string {
+	return strconv.FormatInt(ch.ID, 10)
 }

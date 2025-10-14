@@ -15,7 +15,6 @@ import (
 	"github.com/edirooss/zmux-server/internal/domain/channel/views"
 	"github.com/edirooss/zmux-server/internal/domain/principal"
 	"github.com/edirooss/zmux-server/internal/http/dto"
-	"github.com/edirooss/zmux-server/internal/repo"
 	"github.com/edirooss/zmux-server/internal/service"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -34,24 +33,21 @@ import (
 // Notes:
 //   - Standard REST semantics (RFC 9110, RFC 5789).
 type ChannelsHandler struct {
-	log          *zap.Logger
-	authsvc      *service.AuthService
-	svc          *service.ChannelService
-	summarySvc   *service.SummaryService
-	b2bClntChnls *repo.B2BClntChnlsRepo
+	log        *zap.Logger
+	authsvc    *service.AuthService
+	svc        *service.ChannelService
+	b2bsvc     *service.B2BClientService
+	summarySvc *service.SummaryService
+	repo       *service.RemuxRepository
 }
 
 // NewChannelsHandler constructs a ChannelsHandler instance.
-func NewChannelsHandler(log *zap.Logger, authsvc *service.AuthService, b2bClntChnls *repo.B2BClntChnlsRepo) (*ChannelsHandler, error) {
-	// Service for channel CRUD
-	channelService, err := service.NewChannelService(log)
-	if err != nil {
-		return nil, fmt.Errorf("new channel service: %w", err)
-	}
-
+func NewChannelsHandler(log *zap.Logger, authsvc *service.AuthService, chansvc *service.ChannelService, b2bsvc *service.B2BClientService, repo *service.RemuxRepository) (*ChannelsHandler, error) {
 	// Service for generating channel summaries
 	summarySvc := service.NewSummaryService(
 		log,
+		repo,
+		chansvc,
 		service.SummaryOptions{
 			TTL:            1000 * time.Millisecond, // tune as needed
 			RefreshTimeout: 500 * time.Millisecond,
@@ -59,11 +55,12 @@ func NewChannelsHandler(log *zap.Logger, authsvc *service.AuthService, b2bClntCh
 	)
 
 	return &ChannelsHandler{
-		log:          log.Named("channels"),
-		authsvc:      authsvc,
-		svc:          channelService,
-		summarySvc:   summarySvc,
-		b2bClntChnls: b2bClntChnls,
+		log:        log.Named("channels"),
+		authsvc:    authsvc,
+		svc:        chansvc,
+		b2bsvc:     b2bsvc,
+		summarySvc: summarySvc,
+		repo:       repo,
 	}, nil
 }
 
@@ -147,7 +144,7 @@ func (h *ChannelsHandler) getChannelListByPrincipal(ctx context.Context, p *prin
 	case principal.Admin:
 		// Admin can either fetch all or a filtered subset
 		if len(requestedIDs) > 0 {
-			chs, err := h.svc.ListChannelsByID(ctx, requestedIDs)
+			chs, err := h.svc.GetMany(ctx, requestedIDs)
 			if err != nil {
 				return nil, 0, fmt.Errorf("list channels by id: %w", err)
 			}
@@ -159,7 +156,7 @@ func (h *ChannelsHandler) getChannelListByPrincipal(ctx context.Context, p *prin
 			return adminView, len(adminView), nil
 		}
 
-		chs, err := h.svc.ListChannels(ctx)
+		chs, err := h.svc.GetList(ctx)
 		if err != nil {
 			return nil, 0, fmt.Errorf("list channels: %w", err)
 		}
@@ -171,16 +168,17 @@ func (h *ChannelsHandler) getChannelListByPrincipal(ctx context.Context, p *prin
 
 	case principal.B2BClient:
 		// Get allowed IDs
-		allowedIDs, err := h.b2bClntChnls.GetAllMap(ctx, p.ID)
-		if err != nil {
-			return nil, 0, fmt.Errorf("get b2b channels ids: %w", err)
-		}
+		clientID, _ := strconv.ParseInt(p.ID, 10, 64)
 
 		var toFetch []int64
 		if len(requestedIDs) > 0 {
 			// Intersect requestedIDs ∩ allowedIDs
 			for _, id := range requestedIDs {
-				if _, ok := allowedIDs[id]; ok {
+				idOwner, err := h.b2bsvc.GetOne(id)
+				if err != nil {
+					continue
+				}
+				if idOwner.ID == clientID {
 					toFetch = append(toFetch, id)
 				}
 			}
@@ -189,13 +187,16 @@ func (h *ChannelsHandler) getChannelListByPrincipal(ctx context.Context, p *prin
 				return []*views.B2BClientZmuxChannel{}, 0, nil
 			}
 		} else {
-			// No filter → fetch all allowed
-			for allowedID := range allowedIDs {
-				toFetch = append(toFetch, allowedID)
+			b2bClient, err := h.b2bsvc.GetOne(clientID)
+			if err != nil {
+				return nil, 0, fmt.Errorf("get one: %w", err)
 			}
+
+			// No filter → fetch all allowed
+			toFetch = append(toFetch, b2bClient.ChannelIDs...)
 		}
 
-		chs, err := h.svc.ListChannelsByID(ctx, toFetch)
+		chs, err := h.svc.GetMany(ctx, toFetch)
 		if err != nil {
 			return nil, 0, fmt.Errorf("list channels by id: %w", err)
 		}
@@ -242,7 +243,7 @@ func (h *ChannelsHandler) CreateChannel(c *gin.Context) {
 		return
 	}
 
-	if err := h.svc.CreateChannel(c.Request.Context(), ch); err != nil {
+	if err := h.svc.Create(c.Request.Context(), ch); err != nil {
 		c.Error(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 		return
@@ -267,11 +268,11 @@ func (h *ChannelsHandler) GetChannel(c *gin.Context) {
 	p := h.authsvc.WhoAmI(c)                         // extract principal (already set by other middleware)
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64) // extract :id (already validated by middleware)
 
-	ch, err := h.getChannelByPrincipal(c.Request.Context(), p, id)
+	ch, err := h.getChannelByPrincipal(p, id)
 	if err != nil {
 		c.Error(err)
-		if errors.Is(err, repo.ErrChannelNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"message": repo.ErrChannelNotFound.Error()})
+		if errors.Is(err, service.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"message": service.ErrNotFound.Error()})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
@@ -281,12 +282,30 @@ func (h *ChannelsHandler) GetChannel(c *gin.Context) {
 	c.JSON(http.StatusOK, ch)
 }
 
-func (h *ChannelsHandler) getChannelByPrincipal(ctx context.Context, p *principal.Principal, id int64) (interface{}, error) {
+func (h *ChannelsHandler) GetChannelLogs(c *gin.Context) {
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64) // extract :id (already validated by middleware)
+	logs, _ := h.svc.GetLogs(context.TODO(), id)     // newest → oldest, each entry already JSON-encoded
+
+	c.Header("Content-Type", "application/json")
+	c.Status(http.StatusOK)
+
+	// Stream a JSON array without re-encoding strings
+	c.Writer.Write([]byte("["))
+	for i := 0; i < len(logs); i++ {
+		c.Writer.Write([]byte(logs[i]))
+		if i < len(logs)-1 {
+			c.Writer.Write([]byte(","))
+		}
+	}
+	c.Writer.Write([]byte("]"))
+}
+
+func (h *ChannelsHandler) getChannelByPrincipal(p *principal.Principal, id int64) (interface{}, error) {
 	if p == nil {
 		return nil, fmt.Errorf("nil principal")
 	}
 
-	ch, err := h.svc.GetChannel(ctx, id)
+	ch, err := h.svc.GetOne(id)
 	if err != nil {
 		return nil, fmt.Errorf("get channel: %w", err)
 	}
@@ -320,11 +339,11 @@ func (h *ChannelsHandler) ModifyChannel(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64) // extract :id (already validated by middleware)
 
 	// Load current
-	ch, err := h.svc.GetChannel(c.Request.Context(), id)
+	ch, err := h.svc.GetOne(id)
 	if err != nil {
 		c.Error(err)
-		if errors.Is(err, repo.ErrChannelNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"message": repo.ErrChannelNotFound.Error()})
+		if errors.Is(err, service.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"message": service.ErrNotFound.Error()})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
@@ -360,11 +379,8 @@ func (h *ChannelsHandler) patchAndUpdate(ctx context.Context, req *dto.ChannelMo
 	}
 
 	// Persist
-	if err := h.svc.UpdateChannel(ctx, ch); err != nil {
-		if errors.Is(err, service.ErrLocked) {
-			return http.StatusLocked, err
-		}
-		if errors.Is(err, repo.ErrChannelNotFound) {
+	if err := h.svc.Update(ctx, ch); err != nil {
+		if errors.Is(err, service.ErrNotFound) {
 			return http.StatusNotFound, err
 		}
 		return http.StatusInternalServerError, err
@@ -387,12 +403,7 @@ func (h *ChannelsHandler) patchAndUpdate(ctx context.Context, req *dto.ChannelMo
 func (h *ChannelsHandler) ReplaceChannel(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64) // extract :id (already validated by middleware)
 
-	exists, err := h.svc.ChannelExists(c.Request.Context(), id)
-	if err != nil {
-		c.Error(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
-		return
-	}
+	exists := h.svc.Exists(id)
 	if !exists {
 		c.Status(http.StatusNotFound)
 		return
@@ -419,14 +430,10 @@ func (h *ChannelsHandler) ReplaceChannel(c *gin.Context) {
 		return
 	}
 
-	if err := h.svc.UpdateChannel(c.Request.Context(), ch); err != nil {
+	if err := h.svc.Update(c.Request.Context(), ch); err != nil {
 		c.Error(err)
-		if errors.Is(err, service.ErrLocked) {
-			c.JSON(http.StatusLocked, gin.H{"message": service.ErrLocked.Error()})
-			return
-		}
-		if errors.Is(err, repo.ErrChannelNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"message": repo.ErrChannelNotFound.Error()})
+		if errors.Is(err, service.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"message": service.ErrNotFound.Error()})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
@@ -449,14 +456,10 @@ func (h *ChannelsHandler) ReplaceChannel(c *gin.Context) {
 func (h *ChannelsHandler) DeleteChannel(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64) // extract :id (already validated by middleware)
 
-	if err := h.svc.DeleteChannel(c.Request.Context(), id); err != nil {
+	if err := h.svc.Delete(c.Request.Context(), id); err != nil {
 		c.Error(err)
-		if errors.Is(err, service.ErrLocked) {
-			c.JSON(http.StatusLocked, gin.H{"message": service.ErrLocked.Error()})
-			return
-		}
-		if errors.Is(err, repo.ErrChannelNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"message": repo.ErrChannelNotFound.Error()})
+		if errors.Is(err, service.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"message": service.ErrNotFound.Error()})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
@@ -487,19 +490,15 @@ func (h *ChannelsHandler) DeleteChannels(c *gin.Context) {
 
 	// requestedIDs appears to be a set (map[string]struct{}). If it's a slice, change `range` accordingly.
 	for _, id := range requestedIDs {
-		if err := h.svc.DeleteChannel(c.Request.Context(), id); err != nil {
+		if err := h.svc.Delete(c.Request.Context(), id); err != nil {
 			c.Error(err)
 
 			status := http.StatusInternalServerError
 			msg := err.Error()
 
-			switch {
-			case errors.Is(err, service.ErrLocked):
-				status = http.StatusLocked // 423
-				msg = service.ErrLocked.Error()
-			case errors.Is(err, repo.ErrChannelNotFound):
+			if errors.Is(err, service.ErrNotFound) {
 				status = http.StatusNotFound // 404
-				msg = repo.ErrChannelNotFound.Error()
+				msg = service.ErrNotFound.Error()
 			}
 
 			results = append(results, itemResult{
@@ -562,16 +561,16 @@ func (h *ChannelsHandler) ModifyChannels(c *gin.Context) {
 
 	for _, id := range requestedIDs {
 		// Load current
-		ch, err := h.svc.GetChannel(c.Request.Context(), id)
+		ch, err := h.svc.GetOne(id)
 		if err != nil {
 			c.Error(err)
 
 			status := http.StatusInternalServerError
 			msg := err.Error()
 
-			if errors.Is(err, repo.ErrChannelNotFound) {
+			if errors.Is(err, service.ErrNotFound) {
 				status = http.StatusNotFound
-				msg = repo.ErrChannelNotFound.Error()
+				msg = service.ErrNotFound.Error()
 			}
 
 			results = append(results, itemResult{
@@ -688,13 +687,17 @@ func (h *ChannelsHandler) Status(c *gin.Context) {
 	}
 	p := h.authsvc.WhoAmI(c)
 
-	var clntChnlsIDs map[int64]struct{}
+	clntChnlsIDs := make(map[int64]struct{})
 	if p.Kind == principal.B2BClient {
-		clntChnlsIDs, err = h.b2bClntChnls.GetAllMap(c.Request.Context(), p.ID)
+		clientID, _ := strconv.ParseInt(p.ID, 10, 64)
+		b2bClient, err := h.b2bsvc.GetOne(clientID)
 		if err != nil {
 			c.Error(err)
 			c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 			return
+		}
+		for _, id := range b2bClient.ChannelIDs {
+			clntChnlsIDs[id] = struct{}{}
 		}
 	}
 
@@ -726,13 +729,14 @@ func (h *ChannelsHandler) Status(c *gin.Context) {
 // Prototype/demo
 func (h *ChannelsHandler) Quota(c *gin.Context) {
 	p := h.authsvc.WhoAmI(c)
-	chIDs, err := h.b2bClntChnls.GetAll(c.Request.Context(), p.ID)
+	clientID, _ := strconv.ParseInt(p.ID, 10, 64)
+	b2bClient, err := h.b2bsvc.GetOne(clientID)
 	if err != nil {
 		c.Error(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 		return
 	}
-	chs, err := h.svc.ListChannelsByID(c.Request.Context(), chIDs)
+	chs, err := h.svc.GetMany(c.Request.Context(), b2bClient.ChannelIDs)
 	if err != nil {
 		c.Error(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
