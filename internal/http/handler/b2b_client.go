@@ -22,31 +22,14 @@ func NewB2BClientHandler(b2bclntsvc *service.B2BClientService, chnlsvc *service.
 }
 
 func (h *B2BClientHandler) CreateB2BClient(c *gin.Context) {
-	var req struct {
-		Name                string `json:"name"`
-		EnabledChannelQuota int64  `json:"enabled_channel_quota"`
-		EnabledOutputQuotas []struct {
-			Ref string `json:"ref"`
-			Val int64  `json:"val"`
-		} `json:"enabled_output_quotas"`
-		OnlineChannelQuota int64   `json:"online_channel_quota"`
-		ChannelIDs         []int64 `json:"channel_ids"`
-	}
+	var req b2bclient.B2BClientResource
 	if err := bind(c.Request, &req); err != nil {
 		c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
 
-	b2bClient := &b2bclient.B2BClient{
-		Name:                req.Name,
-		EnabledChannelQuota: req.EnabledChannelQuota,
-		EnabledOutputQuotas: req.EnabledOutputQuotas,
-		OnlineChannelQuota:  req.OnlineChannelQuota,
-		ChannelIDs:          req.ChannelIDs,
-	}
-
-	if err := h.b2bclntsvc.Create(c.Request.Context(), b2bClient); err != nil {
+	if view, err := h.b2bclntsvc.Create(c.Request.Context(), &req); err != nil {
 		c.Error(err)
 
 		if errors.Is(err, service.ErrConflict) {
@@ -56,10 +39,11 @@ func (h *B2BClientHandler) CreateB2BClient(c *gin.Context) {
 		}
 
 		return
+	} else {
+		c.Header("Location", fmt.Sprintf("/api/b2b-client/%d", view.ID))
+		c.JSON(http.StatusCreated, view)
 	}
 
-	c.Header("Location", fmt.Sprintf("/api/b2b-client/%d", b2bClient.ID))
-	c.JSON(http.StatusCreated, b2bClient)
 }
 
 func (h *B2BClientHandler) UpdateB2BClient(c *gin.Context) {
@@ -71,33 +55,14 @@ func (h *B2BClientHandler) UpdateB2BClient(c *gin.Context) {
 		return
 	}
 
-	var req struct {
-		Name                string `json:"name"`
-		BearerToken         string `json:"bearer_token"`
-		EnabledChannelQuota int64  `json:"enabled_channel_quota"`
-		EnabledOutputQuotas []struct {
-			Ref string `json:"ref"`
-			Val int64  `json:"val"`
-		} `json:"enabled_output_quotas"`
-		OnlineChannelQuota int64   `json:"online_channel_quota"`
-		ChannelIDs         []int64 `json:"channel_ids"`
-	}
+	var req b2bclient.B2BClientResource
 	if err := bind(c.Request, &req); err != nil {
 		c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
 
-	b2bClient := &b2bclient.B2BClient{
-		ID:                  b2bClientID,
-		Name:                req.Name,
-		EnabledChannelQuota: req.EnabledChannelQuota,
-		EnabledOutputQuotas: req.EnabledOutputQuotas,
-		OnlineChannelQuota:  req.OnlineChannelQuota,
-		ChannelIDs:          req.ChannelIDs,
-	}
-
-	if err := h.b2bclntsvc.Update(c.Request.Context(), b2bClient); err != nil {
+	if view, err := h.b2bclntsvc.Update(c.Request.Context(), b2bClientID, &req); err != nil {
 		c.Error(err)
 
 		if errors.Is(err, service.ErrNotFound) {
@@ -109,9 +74,10 @@ func (h *B2BClientHandler) UpdateB2BClient(c *gin.Context) {
 		}
 
 		return
+	} else {
+		c.JSON(http.StatusOK, view)
 	}
 
-	c.JSON(http.StatusOK, b2bClient)
 }
 
 func (h *B2BClientHandler) GetB2BClient(c *gin.Context) {

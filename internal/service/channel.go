@@ -33,9 +33,8 @@ type ChannelService struct {
 	objs     *objectstore.ObjectStore // in-memory object store
 	procmngr *processmgr.ProcessManager
 
-	deleteChannelHook  func(channelID int64) error
-	enableChannelHook  func(channelID int64) error
-	disableChannelHook func(channelID int64)
+	deleteChannelHook func(int64) error
+	updateChannelHook func(int64, *channel.ZmuxChannel, *channel.ZmuxChannel) error
 }
 
 func NewChannelService(ctx context.Context, log *zap.Logger, rdb *redis.Client) (*ChannelService, error) {
@@ -64,7 +63,7 @@ func NewChannelService(ctx context.Context, log *zap.Logger, rdb *redis.Client) 
 }
 
 func (s *ChannelService) Create(ctx context.Context, ch *channel.ZmuxChannel) error {
-	rawCh, err := json.Marshal(ch)
+	rawCh, err := json.Marshal(ch.Model())
 	if err != nil {
 		return fmt.Errorf("json marshal: %w", err)
 	}
@@ -94,7 +93,7 @@ func (s *ChannelService) GetOne(id int64) (*channel.ZmuxChannel, error) {
 }
 
 func (s *ChannelService) GetLogs(ctx context.Context, id int64) ([]string, error) {
-	logs, ok := s.procmngr.GetLogs(id, 500)
+	logs, ok := s.procmngr.GetLogs(id, 0)
 	if !ok {
 		return nil, ErrNotFound
 	}
@@ -135,7 +134,7 @@ func (s *ChannelService) GetMany(ctx context.Context, ids []int64) ([]*channel.Z
 }
 
 func (s *ChannelService) Update(ctx context.Context, ch *channel.ZmuxChannel) error {
-	rawCh, err := json.Marshal(ch)
+	rawCh, err := json.Marshal(ch.Model())
 	if err != nil {
 		return fmt.Errorf("json marshal: %w", err)
 	}
@@ -149,23 +148,16 @@ func (s *ChannelService) Update(ctx context.Context, ch *channel.ZmuxChannel) er
 	}
 	curCh := curVal.(*channel.ZmuxChannel)
 
-	if !curCh.Enabled && ch.Enabled && s.enableChannelHook != nil {
-		if err := s.enableChannelHook(ch.ID); err != nil {
-			return fmt.Errorf("enable channel hook: %w", err)
-		}
+	if err := s.updateChannelHook(ch.ID, curCh, ch); err != nil {
+		return fmt.Errorf("update channel hook: %w", err)
 	}
 
 	if err := s.ds.Update(ctx, ch.ID, rawCh); err != nil {
-		if !curCh.Enabled && ch.Enabled && s.disableChannelHook != nil {
-			s.disableChannelHook(ch.ID)
-		}
+		_ = s.updateChannelHook(ch.ID, ch, curCh)
 		return fmt.Errorf("update: %w", err)
 	}
-	s.objs.Upsert(ch.ID, ch)
-	if curCh.Enabled && !ch.Enabled && s.disableChannelHook != nil {
-		s.disableChannelHook(ch.ID)
-	}
 
+	s.objs.Upsert(ch.ID, ch)
 	if curCh.Enabled {
 		s.procmngr.Stop(ch.ID)
 	}
@@ -187,7 +179,7 @@ func (s *ChannelService) Delete(ctx context.Context, id int64) error {
 	ch := val.(*channel.ZmuxChannel)
 
 	if s.deleteChannelHook != nil {
-		if err := s.deleteChannelHook(id); err != nil {
+		if err := s.deleteChannelHook(ch.ID); err != nil {
 			return fmt.Errorf("delete hook: %w", err)
 		}
 	}
@@ -232,6 +224,9 @@ func (s *ChannelService) reconcile(ctx context.Context) error {
 	return nil
 }
 
-func (s *ChannelService) WithDeleteHook(fn func(channelID int64) error) { s.deleteChannelHook = fn }
-func (s *ChannelService) WithEnableHook(fn func(channelID int64) error) { s.enableChannelHook = fn }
-func (s *ChannelService) WithDisableHook(fn func(channelID int64))      { s.disableChannelHook = fn }
+func (s *ChannelService) WithDeleteHook(fn func(int64) error) {
+	s.deleteChannelHook = fn
+}
+func (s *ChannelService) WithUpdateHook(fn func(int64, *channel.ZmuxChannel, *channel.ZmuxChannel) error) {
+	s.updateChannelHook = fn
+}
