@@ -99,7 +99,7 @@ func main() {
 		// --- Protected endpoints (auth required) ---
 		{
 			authed := r.Group("", mw.Authentication(authsvc)) // any authenticated principal (admin|b2b_client)
-			authed.GET("/api/me", handler.Me(authsvc))
+			authed.GET("/api/me", handler.Me(authsvc, b2bclntsvc))
 
 			admins := authed.Group("", mw.Authorization(authsvc)) // only admins
 			{

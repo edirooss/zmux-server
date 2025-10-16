@@ -237,3 +237,51 @@ func (ch *ZmuxChannel) isSet(field string) bool {
 		return false
 	}
 }
+
+func (ch *ZmuxChannel) DeepClone() *ZmuxChannel {
+	if ch == nil {
+		return nil
+	}
+
+	clone := *ch // shallow copy first
+
+	// Deep copy name
+	if ch.Name != nil {
+		nameCopy := *ch.Name
+		clone.Name = &nameCopy
+	}
+
+	// Deep copy input
+	clone.Input = ZmuxChannelInput{
+		URL:             cloneString(ch.Input.URL),
+		Username:        cloneString(ch.Input.Username),
+		Password:        cloneString(ch.Input.Password),
+		AVIOFlags:       cloneString(ch.Input.AVIOFlags),
+		Probesize:       ch.Input.Probesize,
+		Analyzeduration: ch.Input.Analyzeduration,
+		FFlags:          cloneString(ch.Input.FFlags),
+		MaxDelay:        ch.Input.MaxDelay,
+		Localaddr:       cloneString(ch.Input.Localaddr),
+		Timeout:         ch.Input.Timeout,
+		RTSPTransport:   cloneString(ch.Input.RTSPTransport),
+	}
+
+	// Deep copy outputs
+	if len(ch.Outputs) > 0 {
+		clone.Outputs = make([]ZmuxChannelOutput, len(ch.Outputs))
+		for i, out := range ch.Outputs {
+			clone.Outputs[i] = ZmuxChannelOutput{
+				Ref:           out.Ref,
+				URL:           cloneString(out.URL),
+				Localaddr:     cloneString(out.Localaddr),
+				PktSize:       out.PktSize,
+				StreamMapping: cloneStreamMapping(out.StreamMapping),
+				Enabled:       out.Enabled,
+			}
+		}
+	}
+
+	return &clone
+}
+
+// --- helpers ---

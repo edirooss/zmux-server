@@ -22,6 +22,27 @@ const (
 )
 
 var ErrConflict = errors.New("conflict")
+var ErrQuotaExceeded = errors.New("quota exceeded")
+
+// QuotaExceededError details a specific quota violation.
+type QuotaExceededError struct {
+	ClientName string
+	ClientID   int64
+	Resource   string // e.g., "enabled channel", "enabled output 'ref'"
+	Usage      int64
+	Quota      int64
+}
+
+// Error implements the error interface.
+func (e *QuotaExceededError) Error() string {
+	return fmt.Sprintf("B2B client (id='%d', name='%s') %s quota exceeded (%d/%d)",
+		e.ClientID, e.ClientName, e.Resource, e.Usage, e.Quota)
+}
+
+// Unwrap returns the base ErrQuotaExceeded sentinel error for errors.Is() checks.
+func (e *QuotaExceededError) Unwrap() error {
+	return ErrQuotaExceeded
+}
 
 type B2BClientService struct {
 	log     *zap.Logger
@@ -69,84 +90,82 @@ func NewB2BClientService(ctx context.Context, log *zap.Logger, chansvc *ChannelS
 		s.mu.Lock()
 		defer s.mu.Unlock()
 
-		if b2bclnt, ok := s.byChannelID[chnlID]; ok {
-			rollback := false
+		b2bclnt, ok := s.byChannelID[chnlID]
+		if !ok {
+			return nil
+		}
 
-			// Snapshot originals once
-			origChanUsage := b2bclnt.Quotas.EnabledChannels.Usage
-			origOutputs := map[string]struct {
-				Quota int64
-				Usage int64
-			}{}
+		// Channel delta
+		chanDelta := int64(0)
+		if next.Enabled && !prev.Enabled {
+			chanDelta = 1
+		}
+		if prev.Enabled && !next.Enabled {
+			chanDelta = -1
+		}
 
-			// Single rollback
-			defer func() {
-				if rollback {
-					b2bclnt.Quotas.EnabledChannels.Usage = origChanUsage
-					for ref, rec := range origOutputs {
-						b2bclnt.Quotas.EnabledOutputs[ref] = rec
-					}
-				}
-			}()
+		// Output deltas
+		prevByRef := prev.OutputsByRef()
+		nextByRef := next.OutputsByRef()
 
-			// Helper: ensure we snapshot an output once before first mutation
-			snapshot := func(ref string) {
-				if _, seen := origOutputs[ref]; !seen {
-					if q, ok := b2bclnt.Quotas.EnabledOutputs[ref]; ok {
-						origOutputs[ref] = q
-					}
-				}
+		outputDeltas := map[string]int64{}
+		for ref := range b2bclnt.Quotas.EnabledOutputs {
+			prevEnabled := false
+			if e, ok := prevByRef[ref]; ok {
+				prevEnabled = e.Output.Enabled
 			}
-
-			// Remove prev state
-			if prev.Enabled {
-				b2bclnt.Quotas.EnabledChannels.Usage--
-			}
-			for _, output := range prev.Outputs {
-				if q, ok := b2bclnt.Quotas.EnabledOutputs[output.Ref]; ok && output.Enabled {
-					snapshot(output.Ref)
-					b2bclnt.Quotas.EnabledOutputs[output.Ref] = struct {
-						Quota int64
-						Usage int64
-					}{
-						q.Quota,
-						q.Usage - 1,
-					}
-				}
+			nextEnabled := false
+			if e, ok := nextByRef[ref]; ok {
+				nextEnabled = e.Output.Enabled
 			}
 
-			// Check quotas for next
-			if next.Enabled {
-				if b2bclnt.Quotas.EnabledChannels.Usage >= b2bclnt.Quotas.EnabledChannels.Quota {
-					rollback = true
-					return fmt.Errorf("%w: B2B client '%d' enabled channel quota exceeded", ErrConflict, b2bclnt.ID)
-				}
+			if nextEnabled && !prevEnabled {
+				outputDeltas[ref] = 1
 			}
-			for _, output := range next.Outputs {
-				if q, ok := b2bclnt.Quotas.EnabledOutputs[output.Ref]; ok && output.Enabled {
-					if q.Usage >= q.Quota {
-						rollback = true
-						return fmt.Errorf("%w: B2B client '%d' enabled output '%s' quota exceeded", ErrConflict, b2bclnt.ID, output.Ref)
-					}
-				}
+			if prevEnabled && !nextEnabled {
+				outputDeltas[ref] = -1
 			}
+		}
 
-			// Apply next state
-			if next.Enabled {
-				b2bclnt.Quotas.EnabledChannels.Usage++
-			}
-			for _, output := range next.Outputs {
-				if q, ok := b2bclnt.Quotas.EnabledOutputs[output.Ref]; ok && output.Enabled {
-					snapshot(output.Ref)
-					b2bclnt.Quotas.EnabledOutputs[output.Ref] = struct {
-						Quota int64
-						Usage int64
-					}{
-						q.Quota,
-						q.Usage + 1,
-					}
+		// Enforce only on enables (soft-cap)
+		if chanDelta > 0 {
+			q := b2bclnt.Quotas.EnabledChannels
+			if q.Usage >= q.Quota {
+				return &QuotaExceededError{
+					ClientName: b2bclnt.Name,
+					ClientID:   b2bclnt.ID,
+					Resource:   "enabled channels",
+					Usage:      q.Usage,
+					Quota:      q.Quota,
 				}
 			}
+		}
+
+		for ref, delta := range outputDeltas {
+			if delta <= 0 {
+				continue
+			}
+			q := b2bclnt.Quotas.EnabledOutputs[ref]
+			if q.Usage >= q.Quota {
+				return &QuotaExceededError{
+					ClientName: b2bclnt.Name,
+					ClientID:   b2bclnt.ID,
+					Resource:   fmt.Sprintf("enabled outputs '%s'", ref),
+					Usage:      q.Usage,
+					Quota:      q.Quota,
+				}
+			}
+		}
+
+		// Apply deltas
+		if chanDelta != 0 {
+			b2bclnt.Quotas.EnabledChannels.Usage += chanDelta
+		}
+
+		for ref, delta := range outputDeltas {
+			q := b2bclnt.Quotas.EnabledOutputs[ref]
+			q.Usage += delta
+			b2bclnt.Quotas.EnabledOutputs[ref] = q
 		}
 
 		return nil

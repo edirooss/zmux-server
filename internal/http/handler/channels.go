@@ -174,11 +174,7 @@ func (h *ChannelsHandler) getChannelListByPrincipal(ctx context.Context, p *prin
 		if len(requestedIDs) > 0 {
 			// Intersect requestedIDs ∩ allowedIDs
 			for _, id := range requestedIDs {
-				idOwner, err := h.b2bsvc.GetOne(id)
-				if err != nil {
-					continue
-				}
-				if idOwner.ID == clientID {
+				if owner, ok := h.b2bsvc.LookupByChannelID(id); ok && owner.ID == clientID {
 					toFetch = append(toFetch, id)
 				}
 			}
@@ -335,10 +331,17 @@ func (h *ChannelsHandler) getChannelByPrincipal(p *principal.Principal, id int64
 //   - 422 Unprocessable Entity → Validation failed
 //   - 500 Internal Server Error
 func (h *ChannelsHandler) ModifyChannel(c *gin.Context) {
-	p := h.authsvc.WhoAmI(c)                         // extract principal (already set by other middleware)
-	id, _ := strconv.ParseInt(c.Param("id"), 10, 64) // extract :id (already validated by middleware)
+	p := h.authsvc.WhoAmI(c) // extract principal (already set by other middleware)
+
+	var req dto.ChannelModify
+	if err := bind(c.Request, &req); err != nil {
+		c.Error(err)
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
 
 	// Load current
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64) // extract :id (already validated by middleware)
 	ch, err := h.svc.GetOne(id)
 	if err != nil {
 		c.Error(err)
@@ -349,17 +352,20 @@ func (h *ChannelsHandler) ModifyChannel(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 		return
 	}
+	newCh := ch.DeepClone()
 
-	var req dto.ChannelModify
-	if err := bind(c.Request, &req); err != nil {
-		c.Error(err)
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
-		return
-	}
-
-	code, err := h.patchAndUpdate(c.Request.Context(), &req, ch, p.Kind)
+	code, err := h.patchAndUpdate(c.Request.Context(), &req, newCh, p.Kind)
 	if err != nil {
 		c.Error(err)
+
+		if errors.Is(err, service.ErrQuotaExceeded) { // Check for the specific quota sentinel error
+			var qee *service.QuotaExceededError
+			if errors.As(err, &qee) { // Extract the structured QuotaExceededError object
+				c.JSON(http.StatusConflict, gin.H{"message": qee.Error()})
+				return
+			}
+		}
+
 		c.JSON(code, gin.H{"message": err.Error()})
 		return
 	}
@@ -581,8 +587,8 @@ func (h *ChannelsHandler) ModifyChannels(c *gin.Context) {
 			failed = append(failed, id)
 			continue
 		}
-
-		code, err := h.patchAndUpdate(c.Request.Context(), &req, ch, p.Kind)
+		newCh := ch.DeepClone()
+		code, err := h.patchAndUpdate(c.Request.Context(), &req, newCh, p.Kind)
 		if err != nil {
 			c.Error(err)
 			status := code
