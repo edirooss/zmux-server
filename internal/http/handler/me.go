@@ -16,26 +16,46 @@ func Me(authsvc *service.AuthService, b2bclntsvc *service.B2BClientService) gin.
 			c.Status(http.StatusUnauthorized)
 			return
 		}
+
 		if p.Kind == principal.B2BClient {
-			clntID, _ := strconv.ParseInt(p.ID, 10, 64)
+			clntID, err := strconv.ParseInt(p.ID, 10, 64)
+			if err != nil {
+				c.Status(http.StatusBadRequest)
+				return
+			}
+
 			clnt, err := b2bclntsvc.GetOne(clntID)
 			if err != nil {
 				c.Status(http.StatusUnauthorized)
 				return
 			}
 
+			// Build enabled outputs
+			enabledOutputs := make(map[string]struct {
+				Quota int64 `json:"quota"`
+				Usage int64 `json:"usage"`
+			})
+			for _, outputQuota := range clnt.Quotas.EnabledOutputs {
+				enabledOutputs[outputQuota.Ref] = struct {
+					Quota int64 `json:"quota"`
+					Usage int64 `json:"usage"`
+				}{
+					Quota: outputQuota.Quota,
+					Usage: outputQuota.Usage,
+				}
+			}
+
+			// Prepare the response
 			res := struct {
-				ID     int64  `json:"id"`
 				Name   string `json:"name"`
 				Quotas struct {
 					EnabledChannels struct {
 						Quota int64 `json:"quota"`
 						Usage int64 `json:"usage"`
 					} `json:"enabled_channels"`
-					EnabledOutputs []struct {
-						Ref   string `json:"ref"`
-						Quota int64  `json:"quota"`
-						Usage int64  `json:"usage"`
+					EnabledOutputs map[string]struct {
+						Quota int64 `json:"quota"`
+						Usage int64 `json:"usage"`
 					} `json:"enabled_outputs"`
 					OnlineChannels struct {
 						Quota int64 `json:"quota"`
@@ -44,10 +64,26 @@ func Me(authsvc *service.AuthService, b2bclntsvc *service.B2BClientService) gin.
 				} `json:"quotas"`
 				ChannelIDs []int64 `json:"channel_ids"`
 			}{
-				clntID,
-				clnt.Name,
-				clnt.Quotas,
-				clnt.ChannelIDs,
+				Name: clnt.Name,
+				Quotas: struct {
+					EnabledChannels struct {
+						Quota int64 `json:"quota"`
+						Usage int64 `json:"usage"`
+					} `json:"enabled_channels"`
+					EnabledOutputs map[string]struct {
+						Quota int64 `json:"quota"`
+						Usage int64 `json:"usage"`
+					} `json:"enabled_outputs"`
+					OnlineChannels struct {
+						Quota int64 `json:"quota"`
+						Usage int64 `json:"usage"`
+					} `json:"online_channels"`
+				}{
+					EnabledChannels: clnt.Quotas.EnabledChannels,
+					EnabledOutputs:  enabledOutputs,
+					OnlineChannels:  clnt.Quotas.OnlineChannels,
+				},
+				ChannelIDs: clnt.ChannelIDs,
 			}
 
 			c.JSON(http.StatusOK, res)

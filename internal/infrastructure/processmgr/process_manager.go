@@ -1,4 +1,4 @@
-//go:build linux || darwin
+//go:build linux
 
 package processmgr
 
@@ -140,48 +140,32 @@ func (mng *ProcessManager) superviseProcess(proc *managedProcess, logBuf *logBuf
 	log := mng.log.With(zap.Int64("id", proc.id), zap.Strings("argv", proc.argv))
 	log.Info("supervisor started")
 
-	// Timer controls restart scheduling; initialized to fire immediately for first start
 	timer := time.NewTimer(0)
 	defer timer.Stop()
 
-	// Buffered channel to receive process exit status without blocking the wait goroutine
-	// Buffer size of 1 ensures the goroutine can send and exit even if we're not receiving
-	// INVARIANT: doneCh is reused but safe because:
-	// - Only ONE goroutine writes to it at a time
-	// - We ALWAYS consume the value before spawning the next goroutine
-	// - All exit paths either consume from doneCh or exit before spawning
-	doneCh := make(chan error, 1)
-	defer close(doneCh)
-
 	for {
 		select {
-		// Context cancelled while waiting to restart - supervisor shutdown requested
 		case <-proc.ctx.Done():
-			// Drain timer channel if it fired before we read ctx.Done()
-			// This prevents a stale timer value from being consumed in the next iteration
 			if !timer.Stop() {
-				<-timer.C
+				select {
+				case <-timer.C:
+				default:
+				}
 			}
 			log.Info("supervisor shutdown during restart cooldown",
 				zap.String("reason", proc.ctx.Err().Error()))
-			return // Exit supervisor loop
+			return
 
-		// Restart cooldown expired or initial start trigger
 		case <-timer.C:
-			log.Info("spawning process",
-				zap.Duration("restart_cooldown", proc.restartCooldown))
+			log.Info("spawning process", zap.Duration("restart_cooldown", proc.restartCooldown))
 
 			cmd := exec.Command(proc.argv[0], proc.argv[1:]...)
-
-			// Orphan Prevention: Pdeathsig configured before process start.
-			// If the supervisor process dies unexpectedly, all child processes will receive SIGKILL automatically.
 			cmd.SysProcAttr = &syscall.SysProcAttr{
-				Pdeathsig: syscall.SIGKILL, // Kill child when parent dies
+				Pdeathsig: syscall.SIGKILL, // Linux-only
+				Setpgid:   true,            // new process group so we can signal the group
 			}
-			// Attach env
 			cmd.Env = mng.env
 
-			// Setup stderr pipe for log collection
 			stderrPipe, err := cmd.StderrPipe()
 			if err != nil {
 				log.Error("failed to create stderr pipe", zap.Error(err))
@@ -189,12 +173,8 @@ func (mng *ProcessManager) superviseProcess(proc *managedProcess, logBuf *logBuf
 				continue
 			}
 
-			// Start the process
 			if err := cmd.Start(); err != nil {
-				log.Error("failed to spawn process",
-					zap.Error(err),
-					zap.String("command", proc.argv[0]))
-				// Schedule retry after cooldown period
+				log.Error("failed to spawn process", zap.Error(err), zap.String("command", proc.argv[0]))
 				timer.Reset(proc.restartCooldown)
 				continue
 			}
@@ -202,119 +182,78 @@ func (mng *ProcessManager) superviseProcess(proc *managedProcess, logBuf *logBuf
 			pid := cmd.Process.Pid
 			log.Info("process started successfully", zap.Int("pid", pid))
 
-			// Launch stderr reader
-			go func() {
+			// Drain stderr
+			go func(pid int) {
 				scanner := bufio.NewScanner(stderrPipe)
-				scanner.Buffer(make([]byte, 64*1024), 1024*1024) // 64KB init, 1MB max
-
+				scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 				for scanner.Scan() {
-					// Non-blocking write to buffer
 					logBuf.Append(scanner.Text())
 				}
-
-				// Scanner exited (EOF or error)
 				if err := scanner.Err(); err != nil {
-					// Log error but don't crash
 					logBuf.Append(err.Error())
 					log.Error("stderr reader exited abnormally", zap.Int("pid", pid), zap.Error(err))
 					return
 				}
 				log.Info("stderr reader exited normally", zap.Int("pid", pid))
-			}()
+			}(pid)
 
-			// Wait for process exit asynchronously to avoid blocking the supervisor
-			// This allows us to handle context cancellation while the process is running
+			// Fresh doneCh per spawn
+			doneCh := make(chan error, 1)
 			go func() {
 				doneCh <- cmd.Wait()
+				close(doneCh)
 			}()
 
-			// Wait for either process exit or shutdown signal
 			select {
-			// Process exited (normally or crashed) - schedule restart
 			case err := <-doneCh:
 				if err != nil {
-					// Process exited with error (non-zero exit code or signal)
 					if exitErr, ok := err.(*exec.ExitError); ok {
 						log.Warn("process exited abnormally",
 							zap.Int("pid", pid),
 							zap.Int("exit_code", exitErr.ExitCode()),
 							zap.Error(err))
 					} else {
-						log.Warn("process wait failed",
-							zap.Int("pid", pid),
-							zap.Error(err))
+						log.Warn("process wait failed", zap.Int("pid", pid), zap.Error(err))
 					}
 				} else {
-					// Process exited cleanly (exit code 0)
-					log.Info("process exited normally",
-						zap.Int("pid", pid))
+					log.Info("process exited normally", zap.Int("pid", pid))
 				}
-
-				// Schedule restart after cooldown
 				timer.Reset(proc.restartCooldown)
 				continue
 
-			// Context cancelled while process is running - initiate graceful shutdown
 			case <-proc.ctx.Done():
 				log.Info("supervisor shutdown requested, initiating graceful shutdown sequence",
-					zap.Int("pid", pid),
-					zap.String("reason", proc.ctx.Err().Error()))
+					zap.Int("pid", pid), zap.String("reason", proc.ctx.Err().Error()))
 
-				// Step 1: Send SIGTERM for graceful shutdown
-				if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
-					// Process may have already exited - doneCh will receive the result
-					log.Warn("failed to send SIGTERM (process may have already exited)",
-						zap.Int("pid", pid),
-						zap.Error(err))
-				} else {
-					log.Info("SIGTERM sent to process", zap.Int("pid", pid))
-				}
+				// Graceful: SIGTERM the *group*
+				_ = syscall.Kill(-pid, syscall.SIGTERM)
+				log.Info("SIGTERM sent to process group", zap.Int("pgid", pid))
 
-				// Wait up to 3 seconds for graceful shutdown
-				gracefulTimeout := 3 * time.Second
-				timer.Reset(gracefulTimeout)
+				t := time.NewTimer(3 * time.Second)
+				defer t.Stop()
 
 				select {
-				// Process exited within grace period
 				case err := <-doneCh:
-					// Stop and drain timer since we received process exit before timeout
-					if !timer.Stop() {
-						<-timer.C
+					if !t.Stop() {
+						select {
+						case <-t.C:
+						default:
+						}
 					}
-
 					if err != nil {
-						log.Info("process terminated after SIGTERM",
-							zap.Int("pid", pid),
-							zap.Error(err))
+						log.Info("process terminated after SIGTERM", zap.Int("pid", pid), zap.Error(err))
 					} else {
-						log.Info("process exited gracefully after SIGTERM",
-							zap.Int("pid", pid))
+						log.Info("process exited gracefully after SIGTERM", zap.Int("pid", pid))
 					}
-					return // Exit supervisor loop
+					return
 
-				// Grace period expired - force kill
-				case <-timer.C:
+				case <-t.C:
 					log.Warn("graceful shutdown timeout exceeded, sending SIGKILL",
-						zap.Int("pid", pid),
-						zap.Duration("timeout", gracefulTimeout))
-
-					// Step 2: Send SIGKILL for forceful termination
-					if err := cmd.Process.Kill(); err != nil {
-						// Process may have exited just before SIGKILL
-						log.Warn("failed to send SIGKILL (process may have already exited)",
-							zap.Int("pid", pid),
-							zap.Error(err))
-					} else {
-						log.Info("SIGKILL sent to process", zap.Int("pid", pid))
-					}
-
-					// Wait for the process to be reaped by the OS
-					// This should be nearly instantaneous after SIGKILL
+						zap.Int("pid", pid), zap.Duration("timeout", 3*time.Second))
+					_ = syscall.Kill(-pid, syscall.SIGKILL)
 					err := <-doneCh
-					log.Info("process forcefully terminated",
-						zap.Int("pid", pid),
-						zap.Error(err))
-					return // Exit supervisor loop
+					log.Info("process forcefully terminated", zap.Int("pid", pid), zap.Error(err))
+					return
 				}
 			}
 		}
