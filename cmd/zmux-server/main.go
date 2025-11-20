@@ -3,12 +3,16 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
+	"fmt"
 	"net/http"
 	"os"
 	"time"
 
+	"github.com/edirooss/zmux-server/internal/config"
 	"github.com/edirooss/zmux-server/internal/http/handler"
 	mw "github.com/edirooss/zmux-server/internal/http/middleware"
+	"github.com/edirooss/zmux-server/internal/infrastructure/processmgr"
 	"github.com/edirooss/zmux-server/internal/service"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/secure"
@@ -17,6 +21,11 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
+
+func init() {
+	// Handle version display
+	handleVersion()
+}
 
 func main() {
 	// Read env
@@ -36,13 +45,14 @@ func main() {
 
 	// Apply Gin middlewares
 	rdb := buildRedisClient("127.0.0.1:6379", 0)
-	chnlsvc, err := service.NewChannelService(context.TODO(), log, rdb)
-	if err != nil {
-		log.Fatal("channel service creation failed", zap.Error(err))
-	}
-	b2bclntsvc, err := service.NewB2BClientService(context.TODO(), log, chnlsvc, rdb)
+	logmngr := processmgr.NewLogManager()
+	b2bclntsvc, err := service.NewB2BClientService(context.TODO(), log, rdb, logmngr)
 	if err != nil {
 		log.Fatal("b2b client service creation failed", zap.Error(err))
+	}
+	chnlsvc, err := service.NewChannelService(context.TODO(), log, rdb, b2bclntsvc, logmngr)
+	if err != nil {
+		log.Fatal("channel service creation failed", zap.Error(err))
 	}
 	authsvc, err := service.NewAuthService(log, isDev, b2bclntsvc)
 	if err != nil {
@@ -72,8 +82,8 @@ func main() {
 
 		r.Use(authsvc.UserSession.Middleware()) // Attach user cookie-based session for auth
 
-		// r.Use(accessLog(zap.NewNop(), authsvc)) // Observability (logger, tracing)
-		r.Use(accessLog(log, authsvc)) // Observability (logger, tracing)
+		r.Use(accessLog(zap.NewNop(), authsvc)) // Observability (logger, tracing)
+		// r.Use(accessLog(log, authsvc)) // Observability (logger, tracing)
 
 		r.Use(func(c *gin.Context) {
 			// Enforce a hard 10MB max request body.
@@ -130,7 +140,7 @@ func main() {
 
 				{
 					// B2B Client handler
-					b2bclnthndlr := handler.NewB2BClientHandler(b2bclntsvc, chnlsvc)
+					b2bclnthndlr := handler.NewB2BClientHandler(b2bclntsvc)
 
 					// --- B2B Client collection ---
 					admins.POST("/api/b2b-clients", b2bclnthndlr.CreateB2BClient)       // create one
@@ -138,11 +148,6 @@ func main() {
 					admins.GET("/api/b2b-clients/:id", b2bclnthndlr.GetB2BClient)       // get one
 					admins.PUT("/api/b2b-clients/:id", b2bclnthndlr.UpdateB2BClient)    // update one
 					admins.DELETE("/api/b2b-clients/:id", b2bclnthndlr.DeleteB2BClient) // delete one
-
-					// bff helpers
-					admins.GET("/api/b2b-clients/channels/available", b2bclnthndlr.GetChannelsAvailable)
-					admins.GET("/api/b2b-clients/:id/channels", b2bclnthndlr.GetChannelsSelected)
-					admins.GET("/api/b2b-clients/:id/channels/available-and-selected", b2bclnthndlr.GetChannelsAvailableAndSelected)
 				}
 			}
 
@@ -175,6 +180,18 @@ func main() {
 		log.Fatal("server failed", zap.Error(err))
 	}
 	log.Info("server closed")
+}
+
+// handleVersion prints build metadata and exits when -v/--version is provided.
+func handleVersion() {
+	v := flag.Bool("v", false, "print version and exit")
+	flag.BoolVar(v, "version", false, "print version and exit")
+	flag.Parse()
+
+	if *v {
+		fmt.Printf("remux %s (commit %s, built %s)\n", config.Version, config.GitCommit, config.BuildDate)
+		os.Exit(0)
+	}
 }
 
 // accessLog is a Gin middleware that records HTTP request/response details with Zap after handling.

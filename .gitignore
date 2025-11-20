@@ -3,3 +3,5 @@
 /.tmp
 *.pdf
 *.zip
+/.vscode
+/*.rpm

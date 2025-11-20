@@ -89,7 +89,7 @@ func RequireChannelIDAccess(auth *service.AuthService, b2bclntsvc *service.B2BCl
 		chnlID, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 		b2bclntID, _ := strconv.ParseInt(p.ID, 10, 64)
 
-		if b2bclnt, ok := b2bclntsvc.LookupByChannelID(chnlID); !ok || b2bclnt.ID != b2bclntID {
+		if ownerID, ok := b2bclntsvc.LookupByChannelID(chnlID); !ok || ownerID != b2bclntID {
 			c.AbortWithStatus(http.StatusForbidden) // client not bound to this channel
 			return
 		}

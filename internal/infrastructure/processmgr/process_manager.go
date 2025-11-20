@@ -3,279 +3,306 @@
 package processmgr
 
 import (
-	"bufio"
-	"context"
 	"os"
-	"os/exec"
 	"sync"
-	"syscall"
 	"time"
 
 	"go.uber.org/zap"
 )
 
-// ProcessManager coordinates multiple supervised processes.
-// It is safe for concurrent use.
+// ProcessManager owns the entire supervisor model.
 //
-// Process Lifecycle:
-//   - Start(id, ...): Spawns a supervisor goroutine for the given ID.
-//     Returns immediately if the ID already exists (no-op).
-//   - Stop(id): Signals the supervisor to shutdown and removes it from the map.
-//     The supervisor goroutine continues running in the background until
-//     the process terminates gracefully (or forcefully after timeout).
+// Conceptual model:
 //
-// Restart Semantics:
+//   - UID = external identity (user-facing service name, etc.)
+//   - PID = monotonic internal identity for scheduling + lifecycle ownership
+//   - a UID maps to exactly one PID at a time
+//   - a PID is the authoritative instance of that unit
+//   - PIDs are not reused until explicitly released
+
+//   - specs[pid] describes how to launch the process (argv + restart policy)
+//   - ps[pid] is the live running process (if any)
+//   - sched is a priority-queue of future launch/restart events keyed by PID
 //
-//	Calling Stop(id) followed immediately by Start(id, ...) is supported.
-//	The new process will start immediately without waiting for the old
-//	process to fully shutdown. Both supervisors run independently with
-//	separate contexts and process instances. This enables fast restarts
-//	with minimal downtime.
+// Concurrency model:
+//   - All mutable maps + sched are protected by m.mu
+//   - Launch, exit-handling, and scheduling always mutate these structures
+//     only under the lock.
+//   - Event loop wakes on expiration or explicit signals (self-pokes).
 type ProcessManager struct {
-	log        *zap.Logger
-	env        []string
-	processes  map[int64]*managedProcess // Protected by mu
-	logBuffers map[int64]*logBuffer      // Per-process log buffers
-	mu         sync.RWMutex
+	log    *zap.Logger
+	logmgr *LogManager // per-unit aggregated logs (fan-in sink)
+	env    []string    // global environment overlay for all units
+
+	units map[int64]int64    // UID → PID (authoritative mapping)
+	specs map[int64]execSpec // PID → execSpec (argv + restart policy)
+	ps    map[int64]*process // PID → running process
+	gen   *PIDAllocator      // monotonic PID allocator
+
+	sched *scheduler    // priority queue: next processes to launch
+	sig   chan struct{} // one-deep wake-up nudge for event loop
+
+	mu sync.Mutex // guards all state transitions
 }
 
-func NewProcessManager(log *zap.Logger) *ProcessManager {
-	return &ProcessManager{
-		// log: log.Named("process-manager"),
-		log: zap.NewNop(),
-		env: append(os.Environ(),
-			"ENV=prod",
-		), // always prod (overwrite parent ENV=dev)
-		processes:  make(map[int64]*managedProcess),
-		logBuffers: make(map[int64]*logBuffer),
-	}
-}
-
-// Start spawns a supervised process
-// - id: Unique identifier for this process
-// - argv: Command and arguments (argv[0] is executable)
-// - restartCooldown: Delay between restart attempts
+// NewProcessManager constructs the supervisor and immediately starts its
+// background scheduling loop.
 //
-// Idempotent: No-op if ID already exists
-// Non-blocking: Returns immediately
-func (mng *ProcessManager) Start(id int64, argv []string, restartCooldown time.Duration) {
-	mng.mu.Lock()
-	_, ok := mng.processes[id]
-	if ok /* already exists */ {
-		// Process already running - this is idempotent
-		mng.mu.Unlock()
+// The event loop is intentionally detached: it reacts to timing signals
+// and launch/teardown events sent via m.sig.
+func NewProcessManager(log *zap.Logger, logmngr *LogManager) *ProcessManager {
+	m := &ProcessManager{
+		log:    log.Named("process-manager"),
+		logmgr: logmngr,
+
+		env: append(os.Environ(), "ENV=prod"), // override-mode overlay
+
+		units: make(map[int64]int64),
+		specs: make(map[int64]execSpec),
+		ps:    make(map[int64]*process),
+		gen:   newPIDAllocator(),
+
+		sched: newScheduler(),
+		sig:   make(chan struct{}, 1), // coalescing signal channel
+	}
+
+	go m.mainloop() // detached scheduling + lifecycle loop
+	return m
+}
+
+// Add registers a new unit and schedules its first launch.
+//
+//   - Safe to call anytime.
+//   - Idempotent: re-adding an existing UID is ignored.
+//
+// Lifecycle notes:
+//
+//   - A UID becomes a PID → this PID becomes the authoritative identity.
+//   - The PID is then inserted into specs[], ps[], sched[], etc.
+//   - All future restarts refer strictly to the PID.
+//
+// This avoids race conditions where a unit is replaced while a restart is pending.
+func (m *ProcessManager) Add(uid int64, argv []string, cooldown time.Duration) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if _, exists := m.units[uid]; exists {
+		// already known → intentionally ignored
 		return
 	}
-	p := newManagedProcess(id, argv, restartCooldown)
-	mng.processes[id] = p
 
-	// Get or create log buffer for this process
-	// We do not clear buffer on restart; logs for this ID are kept from prev session
-	logBuf, exists := mng.logBuffers[p.id]
-	if !exists {
-		logBuf = new(logBuffer)
-		mng.logBuffers[p.id] = logBuf
+	pid := m.gen.alloc()
+	m.units[uid] = pid
+	m.specs[pid] = execSpec{
+		unitID:          uid,
+		argv:            argv,
+		restartCooldown: cooldown,
 	}
-	mng.mu.Unlock()
 
-	go mng.superviseProcess(p, logBuf)
+	// schedule first launch immediately
+	m.scheduleUnsafe(pid, 0)
 }
 
-// Stop terminates a supervised process gracefully
-// - id: Process identifier to stop
+// Remove unregisters a unit and tears down any running instance.
 //
-// Idempotent: No-op if ID doesn't exist
-// Non-blocking: Returns before process fully terminates
-// Allows immediate Start() of same ID
-func (mng *ProcessManager) Stop(id int64) {
-	mng.mu.Lock()
-	p, ok := mng.processes[id]
-	if !ok /* not exists */ {
-		// Process not found - this is idempotent
-		mng.mu.Unlock()
-		return
-	}
-	delete(mng.processes, id) // Remove from config immediately
-	mng.mu.Unlock()
-
-	// Signal shutdown to supervisor goroutine
-	// The goroutine continues running until process terminates
-	// Callers can immediately Start() the same ID without waiting
-	p.cancel()
-}
-
-// GetLogs retrieves the last N log entries for a process
-// - id: Process identifier
-// - lines: Number of lines to retrieve (0 = all available, max 500)
-// Returns: Slice ordered newest → oldest, empty if process doesn't exist
-func (mng *ProcessManager) GetLogs(id int64, lines int) ([]string, bool) {
-	mng.mu.RLock()
-	buffer, exists := mng.logBuffers[id]
-	mng.mu.RUnlock()
-
-	if !exists {
-		return nil, false
-	}
-
-	// Clamp lines to [1..500] with 0 = all available (up to 500)
-	if lines <= 0 {
-		lines = 500
-	}
-	if lines > 500 {
-		lines = 500
-	}
-
-	return buffer.Read(lines), true // newest → oldest
-}
-
-// superviseProcess runs an infinite supervision loop for a managed process.
-// It handles:
-// - Initial process startup with configurable restart cooldown
-// - Automatic restart on process exit/crash
-// - Graceful shutdown with SIGTERM (3s timeout) followed by SIGKILL
-// - Context cancellation during any phase of the lifecycle
+// Removal behavior:
 //
-// The supervisor continues until the context is cancelled via Stop().
-func (mng *ProcessManager) superviseProcess(proc *managedProcess, logBuf *logBuffer) {
-	log := mng.log.With(zap.Int64("id", proc.id), zap.Strings("argv", proc.argv))
-	log.Info("supervisor started")
+//   - If the unit is running → terminate it
+//   - Remove UID → PID mapping
+//   - Remove PID → spec
+//   - Drop from live process table
+//   - Scrub scheduler events referencing that PID
+//
+// Unknown UIDs are ignored safely.
+func (m *ProcessManager) Remove(uid int64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
+	pid, exists := m.units[uid]
+	if !exists {
+		return // unknown uid
+	}
+
+	// if running, ask the process to shut down
+	if proc, live := m.ps[pid]; live {
+		proc.Close()
+	}
+
+	// drop mappings and scheduled restarts
+	delete(m.units, uid)
+	delete(m.specs, pid)
+	delete(m.ps, pid) // if not already removed by exit handler
+	m.sched.remove(pid)
+}
+
+// mainloop drives the scheduling engine.
+//
+// It repeatedly:
+//
+//	(1) inspects the next scheduled launch time
+//	(2) sleeps until that time OR a wake-up signal arrives
+//	(3) launches due processes
+//
+// This loop runs forever in the background.
+// All scheduling operations are serialized by m.mu.
+func (m *ProcessManager) mainloop() {
 	timer := time.NewTimer(0)
-	defer timer.Stop()
 
 	for {
-		select {
-		case <-proc.ctx.Done():
-			if !timer.Stop() {
-				select {
-				case <-timer.C:
-				default:
-				}
-			}
-			log.Info("supervisor shutdown during restart cooldown",
-				zap.String("reason", proc.ctx.Err().Error()))
-			return
+		m.mu.Lock()
+		pid, when, ok := m.sched.next()
 
-		case <-timer.C:
-			log.Info("spawning process", zap.Duration("restart_cooldown", proc.restartCooldown))
+		if !ok {
+			// no future work; wait until someone pushes new work
+			m.mu.Unlock()
+			<-m.sig
+			continue
+		}
 
-			cmd := exec.Command(proc.argv[0], proc.argv[1:]...)
-			cmd.SysProcAttr = &syscall.SysProcAttr{
-				Pdeathsig: syscall.SIGKILL, // Linux-only
-				Setpgid:   true,            // new process group so we can signal the group
-			}
-			cmd.Env = mng.env
+		// compute delay until next due event
+		delay := time.Until(when)
 
-			stderrPipe, err := cmd.StderrPipe()
-			if err != nil {
-				log.Error("failed to create stderr pipe", zap.Error(err))
-				timer.Reset(proc.restartCooldown)
-				continue
-			}
-
-			if err := cmd.Start(); err != nil {
-				log.Error("failed to spawn process", zap.Error(err), zap.String("command", proc.argv[0]))
-				timer.Reset(proc.restartCooldown)
-				continue
-			}
-
-			pid := cmd.Process.Pid
-			log.Info("process started successfully", zap.Int("pid", pid))
-
-			// Drain stderr
-			go func(pid int) {
-				scanner := bufio.NewScanner(stderrPipe)
-				scanner.Buffer(make([]byte, 64*1024), 1024*1024)
-				for scanner.Scan() {
-					logBuf.Append(scanner.Text())
-				}
-				if err := scanner.Err(); err != nil {
-					logBuf.Append(err.Error())
-					log.Error("stderr reader exited abnormally", zap.Int("pid", pid), zap.Error(err))
-					return
-				}
-				log.Info("stderr reader exited normally", zap.Int("pid", pid))
-			}(pid)
-
-			// Fresh doneCh per spawn
-			doneCh := make(chan error, 1)
-			go func() {
-				doneCh <- cmd.Wait()
-				close(doneCh)
-			}()
+		// future event → set timer and wait
+		if delay > 0 {
+			arm(timer, delay)
+			m.mu.Unlock()
 
 			select {
-			case err := <-doneCh:
-				if err != nil {
-					if exitErr, ok := err.(*exec.ExitError); ok {
-						log.Warn("process exited abnormally",
-							zap.Int("pid", pid),
-							zap.Int("exit_code", exitErr.ExitCode()),
-							zap.Error(err))
-					} else {
-						log.Warn("process wait failed", zap.Int("pid", pid), zap.Error(err))
-					}
-				} else {
-					log.Info("process exited normally", zap.Int("pid", pid))
-				}
-				timer.Reset(proc.restartCooldown)
-				continue
-
-			case <-proc.ctx.Done():
-				log.Info("supervisor shutdown requested, initiating graceful shutdown sequence",
-					zap.Int("pid", pid), zap.String("reason", proc.ctx.Err().Error()))
-
-				// Graceful: SIGTERM the *group*
-				_ = syscall.Kill(-pid, syscall.SIGTERM)
-				log.Info("SIGTERM sent to process group", zap.Int("pgid", pid))
-
-				t := time.NewTimer(3 * time.Second)
-				defer t.Stop()
-
-				select {
-				case err := <-doneCh:
-					if !t.Stop() {
-						select {
-						case <-t.C:
-						default:
-						}
-					}
-					if err != nil {
-						log.Info("process terminated after SIGTERM", zap.Int("pid", pid), zap.Error(err))
-					} else {
-						log.Info("process exited gracefully after SIGTERM", zap.Int("pid", pid))
-					}
-					return
-
-				case <-t.C:
-					log.Warn("graceful shutdown timeout exceeded, sending SIGKILL",
-						zap.Int("pid", pid), zap.Duration("timeout", 3*time.Second))
-					_ = syscall.Kill(-pid, syscall.SIGKILL)
-					err := <-doneCh
-					log.Info("process forcefully terminated", zap.Int("pid", pid), zap.Error(err))
-					return
-				}
+			case <-timer.C:
+			case <-m.sig: // wake up early due to Add/Remove/reschedule
 			}
+			continue
+		}
+
+		// remove from scheduler → launch
+		m.sched.pop()
+		m.launchProcessUnsafe(pid)
+
+		m.mu.Unlock()
+	}
+}
+
+// launchProcessUnsafe launches the process for the given PID.
+//
+// Preconditions:
+//   - caller holds m.mu
+//
+// Behavior:
+//   - constructs process (stdin/stdout/stderr pipes + handlers)
+//   - attempts Start()
+//   - on success → installs exit handler
+//   - on failure → schedules retry
+//
+// Exit handler semantics:
+//   - Deletes the process from live map
+//   - If still authoritative (UID still mapped to this PID):
+//     schedule a restart
+//   - Else (superseded or removed):
+//     release PID back to allocator
+func (m *ProcessManager) launchProcessUnsafe(pid int64) {
+	spec := m.specs[pid] // must exist (manager invariant)
+
+	// pre-scoped logger
+	plog := m.log.With(
+		zap.Int64("uid", spec.unitID),
+		zap.Int64("pid", pid),
+	)
+
+	// construct process object (pipes + watchers)
+	proc, ok := newProcess(plog, m.logmgr.Get(spec.unitID), m.env, spec.argv)
+	if !ok {
+		// construction failed → schedule retry
+		m.log.Warn("process initialization failed; scheduling retry",
+			zap.Int64("uid", spec.unitID), zap.Int64("pid", pid))
+
+		m.scheduleUnsafe(pid, spec.restartCooldown)
+		return
+	}
+	m.ps[pid] = proc // mark as running
+
+	// attempt to start the process
+	if !proc.Start() {
+		m.log.Warn("process failed to start; scheduling restart",
+			zap.Int64("uid", spec.unitID), zap.Int64("pid", pid))
+
+		delete(m.ps, pid)
+		m.scheduleUnsafe(pid, spec.restartCooldown)
+		return
+	}
+
+	// attach background exit handler
+	go func(pid int64, uid int64, spec execSpec, proc *process) {
+		<-proc.Done() // wait for full shutdown
+
+		m.mu.Lock()
+		defer m.mu.Unlock()
+
+		delete(m.ps, pid)
+
+		current, exists := m.units[uid]
+		if exists && current == pid {
+			// PID is still the authoritative instance for this unit → restart it
+			m.log.Info("process exited; scheduling restart",
+				zap.Int64("uid", uid),
+				zap.Int64("pid", pid),
+			)
+			m.scheduleUnsafe(pid, spec.restartCooldown)
+			return
+		}
+
+		// PID no longer authoritative:
+		//   • either the unit was removed
+		//   • or the unit was removed and later re-added, producing a new PID
+		// In both cases this PID must not restart and should be released.
+		m.log.Debug("process exited; PID no longer authoritative → releasing",
+			zap.Int64("uid", uid),
+			zap.Int64("pid", pid),
+		)
+		m.gen.release(pid)
+
+	}(pid, spec.unitID, spec, proc)
+}
+
+// --- sched helper -----------------------------------------------------------
+
+// scheduleUnsafe queues PID for future launch after a given delay.
+// Caller must hold m.mu.
+//
+// Uses non-blocking signal to notify the event loop.
+// Multiple wakeups are coalesced naturally.
+//
+// This ensures no goroutine ever blocks while attempting to wake the scheduler.
+func (m *ProcessManager) scheduleUnsafe(pid int64, after time.Duration) {
+	m.sched.push(pid, time.Now().Add(after))
+
+	select {
+	case m.sig <- struct{}{}:
+	default:
+		// channel is full → signal already pending → that's fine
+	}
+}
+
+// --- spec carrier -----------------------------------------------------------
+
+// execSpec is the static configuration for a managed process.
+//
+// All restarts for a PID share the same spec.
+type execSpec struct {
+	unitID          int64
+	argv            []string
+	restartCooldown time.Duration
+}
+
+// --- timer helper -----------------------------------------------------------
+
+// arm resets a timer safely, ensuring stale ticks are never left unread.
+// Required when reusing timers in select-loops.
+func arm(t *time.Timer, d time.Duration) {
+	if !t.Stop() {
+		select {
+		case <-t.C:
+		default:
 		}
 	}
-}
-
-// managedProcess encapsulates supervision state for one process
-type managedProcess struct {
-	id              int64              // Unique identifier; IDs are managed externally (no auto-increment)
-	argv            []string           // Command-line arguments
-	restartCooldown time.Duration      // Delay between restarts
-	ctx             context.Context    // Cancellation signal
-	cancel          context.CancelFunc // Trigger shutdown
-}
-
-func newManagedProcess(id int64, argv []string, restartCooldown time.Duration) *managedProcess {
-	ctx, cancel := context.WithCancel(context.Background())
-	return &managedProcess{
-		id:              id,
-		argv:            argv,
-		restartCooldown: restartCooldown,
-		ctx:             ctx,
-		cancel:          cancel,
-	}
+	t.Reset(d)
 }

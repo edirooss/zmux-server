@@ -12,11 +12,12 @@ import (
 // POST /api/channels.
 //   - All fields are optional. Defaults applied.
 type ChannelCreate struct {
-	Name       W[string]                   `json:"name"`        //   optional; string | null                       (default: null)
-	Input      W[ChannelInputCreate]       `json:"input"`       //   optional; object                              (default: {})
-	Outputs    W[[]W[ChannelOutputCreate]] `json:"outputs"`     //   optional; array[object]                       (default: [])
-	Enabled    W[bool]                     `json:"enabled"`     //   optional; bool                                (default: false)
-	RestartSec W[uint]                     `json:"restart_sec"` //   optional; uint                                (default: 3)
+	B2BClientID W[int64]                    `json:"b2b_client_id"` //   optional; int64  | null                       (default: null)
+	Name        W[string]                   `json:"name"`          //   optional; string | null                       (default: null)
+	Input       W[ChannelInputCreate]       `json:"input"`         //   optional; object                              (default: {})
+	Outputs     W[[]W[ChannelOutputCreate]] `json:"outputs"`       //   optional; array[object]                       (default: [])
+	Enabled     W[bool]                     `json:"enabled"`       //   optional; bool                                (default: false)
+	RestartSec  W[uint]                     `json:"restart_sec"`   //   optional; uint                                (default: 3)
 }
 
 type ChannelInputCreate struct {
@@ -47,6 +48,18 @@ type ChannelOutputCreate struct {
 // Fills unset fields with defaults.
 func (req *ChannelCreate) ToChannel() (*channel.ZmuxChannel, error) {
 	ch := &channel.ZmuxChannel{}
+
+	// b2bclnt_id
+	// optional; int64 | null (default: null)
+	if req.B2BClientID.Set {
+		if req.B2BClientID.Null {
+			ch.B2BClientID = nil
+		} else {
+			ch.B2BClientID = &req.B2BClientID.V
+		}
+	} else {
+		ch.B2BClientID = nil
+	}
 
 	// name
 	// optional; string | null (default: null)

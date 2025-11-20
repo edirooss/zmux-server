@@ -174,7 +174,7 @@ func (h *ChannelsHandler) getChannelListByPrincipal(ctx context.Context, p *prin
 		if len(requestedIDs) > 0 {
 			// Intersect requestedIDs ∩ allowedIDs
 			for _, id := range requestedIDs {
-				if owner, ok := h.b2bsvc.LookupByChannelID(id); ok && owner.ID == clientID {
+				if ownerID, ok := h.b2bsvc.LookupByChannelID(id); ok && ownerID == clientID {
 					toFetch = append(toFetch, id)
 				}
 			}

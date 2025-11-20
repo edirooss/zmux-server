@@ -3,20 +3,22 @@ package channel
 // ZmuxChannelModel is a deep-copyable model representation of ZmuxChannel.
 // Sub-struct types are reused, but all pointer fields and slices are cloned.
 type ZmuxChannelModel struct {
-	Name       *string             `json:"name"`
-	Input      ZmuxChannelInput    `json:"input"`
-	Outputs    []ZmuxChannelOutput `json:"outputs"`
-	Enabled    bool                `json:"enabled"`
-	RestartSec uint                `json:"restart_sec"`
+	B2BClientID *int64              `json:"b2b_client_id"`
+	Name        *string             `json:"name"`
+	Input       ZmuxChannelInput    `json:"input"`
+	Outputs     []ZmuxChannelOutput `json:"outputs"`
+	Enabled     bool                `json:"enabled"`
+	RestartSec  uint                `json:"restart_sec"`
 }
 
 // Model returns a deep-copied ZmuxChannelModel from the receiver.
 // All pointer fields are reallocated, and all slices are cloned.
 func (ch *ZmuxChannel) Model() ZmuxChannelModel {
 	m := ZmuxChannelModel{
-		Name:       cloneString(ch.Name),
-		Enabled:    ch.Enabled,
-		RestartSec: ch.RestartSec,
+		B2BClientID: cloneInt64(ch.B2BClientID),
+		Name:        cloneString(ch.Name),
+		Enabled:     ch.Enabled,
+		RestartSec:  ch.RestartSec,
 		Input: ZmuxChannelInput{
 			URL:             cloneString(ch.Input.URL),
 			Username:        cloneString(ch.Input.Username),
@@ -51,6 +53,14 @@ func (ch *ZmuxChannel) Model() ZmuxChannelModel {
 }
 
 // --- helpers ---
+
+func cloneInt64(p *int64) *int64 {
+	if p == nil {
+		return nil
+	}
+	s := *p
+	return &s
+}
 
 func cloneString(p *string) *string {
 	if p == nil {

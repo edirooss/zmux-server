@@ -1,12 +1,14 @@
+// channel/views/admin_view.go
 package views
 
 type AdminZmuxChannel struct {
-	ID         int64         `json:"id"`
-	Name       *string       `json:"name"`
-	Input      AdminInput    `json:"input"`
-	Outputs    []AdminOutput `json:"outputs"`
-	Enabled    bool          `json:"enabled"`
-	RestartSec uint          `json:"restart_sec"`
+	ID          int64         `json:"id"`
+	B2BClientID *int64        `json:"b2b_client_id"`
+	Name        *string       `json:"name"`
+	Input       AdminInput    `json:"input"`
+	Outputs     []AdminOutput `json:"outputs"`
+	Enabled     bool          `json:"enabled"`
+	RestartSec  uint          `json:"restart_sec"`
 }
 
 type AdminInput struct {
