@@ -27,6 +27,7 @@ func FromChannel(c *channel.ZmuxChannel) *Builder {
 
 	// --- Global flags (CLI: StringVar) ---
 	b.WithStringFlag("--id", strconv.FormatInt(c.ID, 10))
+	b.WithBoolFlag("--interactive", c.Interactive)
 
 	// --- Positional: --input <url> ---
 	b.WithString("--input")

@@ -7,18 +7,16 @@ import (
 	"strconv"
 
 	b2bclient "github.com/edirooss/zmux-server/internal/domain/b2b-client"
-	"github.com/edirooss/zmux-server/internal/domain/channel"
 	"github.com/edirooss/zmux-server/internal/service"
 	"github.com/gin-gonic/gin"
 )
 
 type B2BClientHandler struct {
 	b2bclntsvc *service.B2BClientService
-	chnlsvc    *service.ChannelService
 }
 
-func NewB2BClientHandler(b2bclntsvc *service.B2BClientService, chnlsvc *service.ChannelService) *B2BClientHandler {
-	return &B2BClientHandler{b2bclntsvc, chnlsvc}
+func NewB2BClientHandler(b2bclntsvc *service.B2BClientService) *B2BClientHandler {
+	return &B2BClientHandler{b2bclntsvc}
 }
 
 func (h *B2BClientHandler) CreateB2BClient(c *gin.Context) {
@@ -31,19 +29,12 @@ func (h *B2BClientHandler) CreateB2BClient(c *gin.Context) {
 
 	if view, err := h.b2bclntsvc.Create(c.Request.Context(), &req); err != nil {
 		c.Error(err)
-
-		if errors.Is(err, service.ErrConflict) {
-			c.JSON(http.StatusConflict, gin.H{"message": err.Error()})
-		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
-		}
-
+		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 		return
 	} else {
 		c.Header("Location", fmt.Sprintf("/api/b2b-client/%d", view.ID))
 		c.JSON(http.StatusCreated, view)
 	}
-
 }
 
 func (h *B2BClientHandler) UpdateB2BClient(c *gin.Context) {
@@ -138,119 +129,4 @@ func (h *B2BClientHandler) DeleteB2BClient(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
-}
-
-//
-//
-//
-
-func (h *B2BClientHandler) GetChannelsAvailable(c *gin.Context) {
-	allChans, err := h.chnlsvc.GetList(c.Request.Context())
-	if err != nil {
-		c.Error(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
-		return
-	}
-
-	// Pre-allocate with capacity (worst case: all channels)
-	avilChans := make([]*channel.ZmuxChannel, 0, len(allChans))
-
-	for _, channel := range allChans {
-		// O(1) lookup in map
-		if _, ok := h.b2bclntsvc.LookupByChannelID(channel.ID); !ok {
-			avilChans = append(avilChans, channel)
-		}
-	}
-
-	c.JSON(http.StatusOK, avilChans)
-}
-
-func (h *B2BClientHandler) GetChannelsSelected(c *gin.Context) {
-	idStr := c.Param("id")
-	b2bClientID, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		c.Error(err)
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
-		return
-	}
-
-	b2bClient, err := h.b2bclntsvc.GetOne(b2bClientID)
-	if err != nil {
-		c.Error(err)
-
-		if errors.Is(err, service.ErrNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"message": err.Error()})
-		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
-		}
-
-		return
-	}
-
-	selectedChans, err := h.chnlsvc.GetMany(c.Request.Context(), b2bClient.ChannelIDs)
-	if err != nil {
-		c.Error(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, selectedChans)
-}
-
-func (h *B2BClientHandler) GetChannelsAvailableAndSelected(c *gin.Context) {
-	idStr := c.Param("id")
-	b2bClientID, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		c.Error(err)
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
-		return
-	}
-
-	allChans, err := h.chnlsvc.GetList(c.Request.Context())
-	if err != nil {
-		c.Error(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
-		return
-	}
-
-	// Pre-allocate with capacity (worst case: all channels)
-	chanChoices := make([]*channel.ZmuxChannel, 0, len(allChans))
-
-	for _, channel := range allChans {
-		// O(1) lookup in map
-		if b2bclnt, ok := h.b2bclntsvc.LookupByChannelID(channel.ID); !ok || b2bClientID == b2bclnt.ID {
-			chanChoices = append(chanChoices, channel)
-		}
-	}
-
-	c.JSON(http.StatusOK, chanChoices)
-}
-
-func (h *B2BClientHandler) GetQ(c *gin.Context) {
-	idStr := c.Param("id")
-	b2bClientID, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		c.Error(err)
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
-		return
-	}
-
-	allChans, err := h.chnlsvc.GetList(c.Request.Context())
-	if err != nil {
-		c.Error(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
-		return
-	}
-
-	// Pre-allocate with capacity (worst case: all channels)
-	chanChoices := make([]*channel.ZmuxChannel, 0, len(allChans))
-
-	for _, channel := range allChans {
-		// O(1) lookup in map
-		if b2bclnt, ok := h.b2bclntsvc.LookupByChannelID(channel.ID); !ok || b2bClientID == b2bclnt.ID {
-			chanChoices = append(chanChoices, channel)
-		}
-	}
-
-	c.JSON(http.StatusOK, chanChoices)
 }

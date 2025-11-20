@@ -45,8 +45,9 @@ func (ch *ZmuxChannel) AdminView() *views.AdminZmuxChannel {
 	}
 
 	return &views.AdminZmuxChannel{
-		ID:   ch.ID,
-		Name: ch.Name,
+		ID:          ch.ID,
+		B2BClientID: ch.B2BClientID,
+		Name:        ch.Name,
 		Input: views.AdminInput{
 			URL:             ch.Input.URL,
 			Username:        ch.Input.Username,

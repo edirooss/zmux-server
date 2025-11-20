@@ -13,11 +13,12 @@ import (
 // PATCH /api/channels/{id}. Partial-update semantics (RFC 7386):
 //   - All fields are optional.
 type ChannelModify struct {
-	Name       W[string]             `json:"name"`        //   optional; string | null
-	Input      W[ChannelInputModify] `json:"input"`       //   optional; object
-	Outputs    W[json.RawMessage]    `json:"outputs"`     //   optional; array[object] | object[string:object]
-	Enabled    W[bool]               `json:"enabled"`     //   optional; bool
-	RestartSec W[uint]               `json:"restart_sec"` //   optional; uint
+	B2BClientID W[int64]              `json:"b2b_client_id"` //   optional; int64  | null
+	Name        W[string]             `json:"name"`          //   optional; string | null
+	Input       W[ChannelInputModify] `json:"input"`         //   optional; object
+	Outputs     W[json.RawMessage]    `json:"outputs"`       //   optional; array[object] | object[string:object]
+	Enabled     W[bool]               `json:"enabled"`       //   optional; bool
+	RestartSec  W[uint]               `json:"restart_sec"`   //   optional; uint
 }
 
 type ChannelInputModify struct {
@@ -48,6 +49,20 @@ type ChannelOutputModify struct {
 // Unset fields remain unchanged.
 // Enforce field-level authorization based on principal kind.
 func (req *ChannelModify) MergePatch(prev *channel.ZmuxChannel, pKind principal.PrincipalKind) error {
+	// b2blnt_id
+	// optional; int64 | null
+	// admin-only
+	if req.B2BClientID.Set {
+		if pKind != principal.Admin {
+			return errors.New("b2blnt_id set unauthorized")
+		}
+		if req.B2BClientID.Null {
+			prev.B2BClientID = nil
+		} else {
+			prev.B2BClientID = &req.B2BClientID.V
+		}
+	}
+
 	// name
 	// optional; string | null
 	if req.Name.Set {

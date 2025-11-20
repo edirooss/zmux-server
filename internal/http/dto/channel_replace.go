@@ -12,11 +12,12 @@ import (
 // PUT /api/channels/{id}. Full-replacement semantics (RFC 9110):
 //   - All fields are required.
 type ChannelReplace struct {
-	Name       W[string]             `json:"name"`        //         required; string | null
-	Input      W[InputReplace]       `json:"input"`       //         required; object
-	Outputs    W[[]W[OutputReplace]] `json:"outputs"`     //         required; array
-	Enabled    W[bool]               `json:"enabled"`     //         required; bool
-	RestartSec W[uint]               `json:"restart_sec"` //         required; uint
+	B2BClientID W[int64]              `json:"b2b_client_id"` //         required; int64 | null
+	Name        W[string]             `json:"name"`          //         required; string | null
+	Input       W[InputReplace]       `json:"input"`         //         required; object
+	Outputs     W[[]W[OutputReplace]] `json:"outputs"`       //         required; array
+	Enabled     W[bool]               `json:"enabled"`       //         required; bool
+	RestartSec  W[uint]               `json:"restart_sec"`   //         required; uint
 }
 
 type InputReplace struct {
@@ -48,6 +49,18 @@ type OutputReplace struct {
 func (req *ChannelReplace) ToChannel(id int64) (*channel.ZmuxChannel, error) {
 	ch := &channel.ZmuxChannel{}
 	ch.ID = id
+
+	// b2bclnt_id
+	// required; int64 | null
+	if req.B2BClientID.Set {
+		if req.B2BClientID.Null {
+			ch.B2BClientID = nil
+		} else {
+			ch.B2BClientID = &req.B2BClientID.V
+		}
+	} else {
+		return nil, errors.New("b2bclnt_id is required")
+	}
 
 	// name
 	// required; string | null

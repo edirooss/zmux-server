@@ -8,12 +8,14 @@ import (
 )
 
 type ZmuxChannel struct {
-	ID         int64               `json:"id"`          //
-	Name       *string             `json:"name"`        // nullable
-	Input      ZmuxChannelInput    `json:"input"`       //
-	Outputs    []ZmuxChannelOutput `json:"outputs"`     //
-	Enabled    bool                `json:"enabled"`     // (on true, input.url required)
-	RestartSec uint                `json:"restart_sec"` //
+	ID          int64               `json:"id"` //
+	Interactive bool                //
+	B2BClientID *int64              `json:"b2b_client_id"` // nullable
+	Name        *string             `json:"name"`          // nullable
+	Input       ZmuxChannelInput    `json:"input"`         //
+	Outputs     []ZmuxChannelOutput `json:"outputs"`       //
+	Enabled     bool                `json:"enabled"`       // (on true, input.url required)
+	RestartSec  uint                `json:"restart_sec"`   //
 }
 
 type ZmuxChannelInput struct {

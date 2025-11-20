@@ -81,7 +81,13 @@ func Me(authsvc *service.AuthService, b2bclntsvc *service.B2BClientService) gin.
 				}{
 					EnabledChannels: clnt.Quotas.EnabledChannels,
 					EnabledOutputs:  enabledOutputs,
-					OnlineChannels:  clnt.Quotas.OnlineChannels,
+					OnlineChannels: struct {
+						Quota int64 `json:"quota"`
+						Usage int64 `json:"usage"`
+					}{
+						Quota: clnt.Quotas.EnabledChannels.Quota,
+						Usage: clnt.Quotas.EnabledChannels.Usage,
+					},
 				},
 				ChannelIDs: clnt.ChannelIDs,
 			}
