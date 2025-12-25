@@ -476,6 +476,22 @@ func (h *ChannelsHandler) DeleteChannel(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"id": id})
 }
 
+func (h *ChannelsHandler) DeleteChannelByMC(c *gin.Context) {
+	mc := c.Param("mc")
+
+	if err := h.svc.DeleteByMC(c.Request.Context(), mc); err != nil {
+		c.Error(err)
+		if errors.Is(err, service.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"message": service.ErrNotFound.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"mc": mc})
+}
+
 type itemResult struct {
 	ID     int64  `json:"id"`
 	Status int    `json:"status"`
