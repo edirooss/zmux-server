@@ -9,6 +9,7 @@ type AdminZmuxChannel struct {
 	Outputs     []AdminOutput `json:"outputs"`
 	Enabled     bool          `json:"enabled"`
 	RestartSec  uint          `json:"restart_sec"`
+	ReadOnly    bool          `json:"read_only"`
 }
 
 type AdminInput struct {

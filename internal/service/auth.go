@@ -22,9 +22,9 @@ type AuthService struct {
 }
 
 // NewAuthService creates a new AuthService.
-func NewAuthService(log *zap.Logger, isDev bool, b2bsvc *B2BClientService) (*AuthService, error) {
+func NewAuthService(log *zap.Logger, isDev bool, b2bsvc *B2BClientService, redisAddr string) (*AuthService, error) {
 	log = log.Named("auth")
-	usersesssvc, err := NewUserSessionService(isDev)
+	usersesssvc, err := NewUserSessionService(isDev, redisAddr)
 	if err != nil {
 		return nil, fmt.Errorf("new user session service: %w", err)
 	}

@@ -64,5 +64,6 @@ func (ch *ZmuxChannel) AdminView() *views.AdminZmuxChannel {
 		Outputs:    outputsView,
 		Enabled:    ch.Enabled,
 		RestartSec: ch.RestartSec,
+		ReadOnly:   ch.ReadOnly,
 	}
 }

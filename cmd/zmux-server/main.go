@@ -20,7 +20,16 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"gopkg.in/yaml.v3"
 )
+
+type Config struct {
+	RedisAddr      string `yaml:"redis_address"`
+	ZmuxServerAddr string `yaml:"zmux_server_address"`
+	Port           string `yaml:"port"`
+}
+
+var serverConfig *Config
 
 func init() {
 	// Handle version display
@@ -30,6 +39,12 @@ func init() {
 func main() {
 	// Read env
 	isDev := os.Getenv("ENV") == "dev"
+
+	// Load config
+	if err := loadConfig(); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to load config: %v\n", err)
+		os.Exit(1)
+	}
 
 	// Create Zap logger
 	log := buildLogger()
@@ -44,7 +59,7 @@ func main() {
 	r := gin.New()
 
 	// Apply Gin middlewares
-	rdb := buildRedisClient("127.0.0.1:6379", 0)
+	rdb := buildRedisClient(serverConfig.RedisAddr, 0)
 	logmngr := processmgr.NewLogManager()
 	b2bclntsvc, err := service.NewB2BClientService(context.TODO(), log, rdb, logmngr)
 	if err != nil {
@@ -54,7 +69,7 @@ func main() {
 	if err != nil {
 		log.Fatal("channel service creation failed", zap.Error(err))
 	}
-	authsvc, err := service.NewAuthService(log, isDev, b2bclntsvc)
+	authsvc, err := service.NewAuthService(log, isDev, b2bclntsvc, serverConfig.RedisAddr)
 	if err != nil {
 		log.Fatal("auth service creation failed", zap.Error(err))
 	}
@@ -64,7 +79,7 @@ func main() {
 
 		if isDev { // Enable CORS for local Vite dev
 			r.Use(cors.New(cors.Config{
-				AllowOrigins:     []string{"http://localhost:5173", "http://localhost:4173", "http://localhost:3000", "http://127.0.0.1:3000"},
+				AllowOrigins:     []string{"http://localhost:5173", "http://localhost:4173", "http://localhost:3000", "http://127.0.0.1:3000", "http://" + serverConfig.ZmuxServerAddr + ":" + serverConfig.Port},
 				AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 				AllowHeaders:     []string{"X-Request-ID", "Content-Type", "X-CSRF-Token", "Authorization"},
 				ExposeHeaders:    []string{"X-Request-ID", "X-Total-Count", "X-Cache", "X-Summary-Generated-At"},
@@ -72,7 +87,7 @@ func main() {
 				MaxAge:           12 * time.Hour,
 			}))
 		} else { // Behind Nginx + TLS
-			r.SetTrustedProxies([]string{"127.0.0.1"})
+			r.SetTrustedProxies([]string{"127.0.0.1", serverConfig.ZmuxServerAddr})
 			r.Use(secure.New(secure.Config{
 				SSLProxyHeaders: map[string]string{
 					"X-Forwarded-Proto": "https", // Fix scheme for secure cookies
@@ -167,7 +182,7 @@ func main() {
 	}
 
 	httpsrv := &http.Server{
-		Addr:              "127.0.0.1:8080",
+		Addr:              serverConfig.ZmuxServerAddr + ":" + serverConfig.Port,
 		Handler:           r,
 		ReadHeaderTimeout: 2 * time.Second,  // kills header-drip Slowloris
 		ReadTimeout:       10 * time.Second, // full request read (incl. body)
@@ -272,4 +287,18 @@ func buildRedisClient(addr string, db int) *redis.Client {
 	}
 
 	return redis.NewClient(opts)
+}
+
+func loadConfig() error {
+	data, err := os.ReadFile("zmux-server.yaml")
+	if err != nil {
+		return err
+	}
+
+	err = yaml.Unmarshal(data, &serverConfig)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

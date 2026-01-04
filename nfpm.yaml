@@ -19,6 +19,9 @@ contents:
   - src: ./systemd/zmux-server.service
     dst: /usr/lib/systemd/system/zmux-server.service
     type: config
+  - src: ./zmux-server.yaml
+    dst: /etc/zmux-server/zmux-server.yaml
+    type: config
 
 scripts:
   postinstall: ./scripts/postinstall.sh
