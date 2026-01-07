@@ -79,7 +79,7 @@ func main() {
 
 		if isDev { // Enable CORS for local Vite dev
 			r.Use(cors.New(cors.Config{
-				AllowOrigins:     []string{"http://localhost:5173", "http://localhost:4173", "http://localhost:3000", "http://127.0.0.1:3000", "http://" + serverConfig.ZmuxServerAddr + ":" + serverConfig.Port},
+				AllowOrigins:     []string{"http://localhost:5173", "http://localhost:4173", "http://localhost:3000", "http://127.0.0.1:3000", "https://" + serverConfig.ZmuxServerAddr},
 				AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 				AllowHeaders:     []string{"X-Request-ID", "Content-Type", "X-CSRF-Token", "Authorization"},
 				ExposeHeaders:    []string{"X-Request-ID", "X-Total-Count", "X-Cache", "X-Summary-Generated-At"},
