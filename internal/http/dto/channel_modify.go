@@ -19,6 +19,7 @@ type ChannelModify struct {
 	Outputs     W[json.RawMessage]    `json:"outputs"`       //   optional; array[object] | object[string:object]
 	Enabled     W[bool]               `json:"enabled"`       //   optional; bool
 	RestartSec  W[uint]               `json:"restart_sec"`   //   optional; uint
+	ReadOnly    W[bool]               `json:"read_only"`     //   optional; bool                                (default: false)
 }
 
 type ChannelInputModify struct {

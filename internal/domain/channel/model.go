@@ -235,7 +235,7 @@ func (ch *ZmuxChannel) isSet(field string) bool {
 		return ch.Input.Password != nil
 	case "enabled":
 		return ch.Enabled
-	case "readonly":
+	case "read_only":
 		return ch.ReadOnly
 	default:
 		// Unknown fields are treated as not set; expand switch as needed.
