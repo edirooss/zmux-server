@@ -9,6 +9,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/aviravitz/onvif-client/camera"
+	"github.com/aviravitz/onvif-client/deviceservice"
 	"github.com/edirooss/zmux-server/internal/config"
 	"github.com/edirooss/zmux-server/internal/http/handler"
 	mw "github.com/edirooss/zmux-server/internal/http/middleware"
@@ -155,6 +157,94 @@ func main() {
 				}
 
 				{
+					// handler.ONVIFClientHandler
+					//TODO: add middlware for hashed camera credentials?
+					encryptedCameraDetailsGet := mw.RequireValidEncryptedCameraDetailsGet()
+					encryptedCameraDetailsPost := mw.RequireValidEncryptedCameraDetailsPost()
+
+					onvifclnthndlr, err := handler.NewONVIFClientHandler(log)
+					if err != nil {
+						log.Fatal("onvif client http handler creation failed", zap.Error(err))
+					}
+
+					// --- ONVIF Camera actions ---
+					// admins.POST("/api/camera/create-camera", encryptedCameraDetailsPost, onvifclnthndlr.CreateCamera)
+					//API endpoints for ONVIF device service
+					admins.GET("/api/camera/:id/device-information", encryptedCameraDetailsGet, onvifclnthndlr.GetDeviceInformation)
+					admins.GET("/api/camera/:id/system-date-time", encryptedCameraDetailsGet, onvifclnthndlr.GetSystemDateAndTime)
+					admins.GET("/api/camera/:id/network-interfaces", encryptedCameraDetailsGet, onvifclnthndlr.GetNetworkInterfaces)
+					admins.GET("/api/camera/:id/users", encryptedCameraDetailsGet, onvifclnthndlr.GetUsers)
+					admins.GET("/api/camera/:id/dns", encryptedCameraDetailsGet, onvifclnthndlr.GetDNS)
+					admins.GET("/api/camera/:id/scopes", encryptedCameraDetailsGet, onvifclnthndlr.GetScopes)
+					admins.GET("/api/camera/:id/ntp", encryptedCameraDetailsGet, onvifclnthndlr.GetNTP)
+					admins.POST("/api/camera/:id/reboot", encryptedCameraDetailsGet, onvifclnthndlr.RebootCamera)
+
+					admins.GET("/api/camera/:id/profile-token", encryptedCameraDetailsGet, onvifclnthndlr.GetProfileToken)
+					admins.GET("/api/camera/:id/sensor-token", encryptedCameraDetailsGet, onvifclnthndlr.GetSensorToken)
+					admins.GET("/api/camera/:id/device-profiles", encryptedCameraDetailsGet, onvifclnthndlr.GetDeviceProfiles)
+					admins.GET("/api/camera/:id/stream-uri", encryptedCameraDetailsGet, onvifclnthndlr.GetStreamUri)
+					admins.GET("/api/camera/:id/snapshot-uri", encryptedCameraDetailsGet, onvifclnthndlr.GetSnapshotUri)
+					admins.GET("/api/camera/:id/video-encoder-configurations", encryptedCameraDetailsGet, onvifclnthndlr.GetVideoEncoderConfigurations)
+					admins.GET("/api/camera/:id/video-encoder-configuration", encryptedCameraDetailsGet, onvifclnthndlr.GetVideoEncoderConfiguration)
+					admins.GET("/api/camera/:id/video-options", encryptedCameraDetailsGet, onvifclnthndlr.GetVideoOptions)
+					admins.GET("/api/camera/:id/osds", encryptedCameraDetailsGet, onvifclnthndlr.GetOSDs)
+					admins.GET("/api/camera/:id/osd-token", encryptedCameraDetailsGet, onvifclnthndlr.GetOSDTokenByText)
+					admins.GET("/api/camera/:id/video-sources", encryptedCameraDetailsGet, onvifclnthndlr.GetVideoSources)
+					admins.GET("/api/camera/:id/audio-encoders", encryptedCameraDetailsGet, onvifclnthndlr.GetAudioEncoders)
+					admins.POST("/api/camera/:id/create-osd", encryptedCameraDetailsPost, onvifclnthndlr.CreateOSD)
+					admins.POST("/api/camera/:id/set-osd-text", encryptedCameraDetailsPost, onvifclnthndlr.SetOSDText)
+					admins.DELETE("/api/camera/:id/delete-osd", encryptedCameraDetailsPost, onvifclnthndlr.DeleteOSD)
+					admins.POST("/api/camera/:id/synchronization-point", encryptedCameraDetailsPost, onvifclnthndlr.SetSynchronizationPoint)
+					admins.POST("/api/camera/:id/modify-video-encoder-resolution", encryptedCameraDetailsPost, onvifclnthndlr.ModifyVideoEncoderResolution)
+					admins.POST("/api/camera/:id/modify-video-encoder-quality", encryptedCameraDetailsPost, onvifclnthndlr.ModifyVideoEncoderQuality)
+
+					admins.GET("/api/camera/:id/imaging-settings", encryptedCameraDetailsGet, onvifclnthndlr.GetImagingSettings)
+					admins.GET("/api/camera/:id/imaging-options", encryptedCameraDetailsGet, onvifclnthndlr.GetImagingOptions)
+					admins.GET("/api/camera/:id/imaging-status", encryptedCameraDetailsGet, onvifclnthndlr.GetImagingStatus)
+					admins.POST("/api/camera/:id/set-imaging-settings", encryptedCameraDetailsPost, onvifclnthndlr.SetImagingSettings)
+					admins.POST("/api/camera/:id/move-focus-absolute", encryptedCameraDetailsPost, onvifclnthndlr.MoveFocusAbsolute)
+					admins.POST("/api/camera/:id/move-focus-relative", encryptedCameraDetailsPost, onvifclnthndlr.MoveFocusRelative)
+					admins.POST("/api/camera/:id/set-focus-mode", encryptedCameraDetailsPost, onvifclnthndlr.SetFocusMode)
+					admins.POST("/api/camera/:id/set-ir-cut-filter", encryptedCameraDetailsPost, onvifclnthndlr.SetIrCutFilter)
+					admins.POST("/api/camera/:id/set-backlight-compensation", encryptedCameraDetailsPost, onvifclnthndlr.SetBacklightCompensation)
+					admins.POST("/api/camera/:id/set-wide-dynamic-range", encryptedCameraDetailsPost, onvifclnthndlr.SetWideDynamicRange)
+					admins.POST("/api/camera/:id/set-white-balance", encryptedCameraDetailsPost, onvifclnthndlr.SetWhiteBalance)
+					admins.POST("/api/camera/:id/set-exposure-mode", encryptedCameraDetailsPost, onvifclnthndlr.SetExposureMode)
+					admins.POST("/api/camera/:id/set-manual-exposure", encryptedCameraDetailsPost, onvifclnthndlr.SetManualExposure)
+					admins.POST("/api/camera/:id/set-exposure-limits", encryptedCameraDetailsPost, onvifclnthndlr.SetExposureLimits)
+					admins.GET("/api/camera/:id/is-manual-focus", encryptedCameraDetailsGet, onvifclnthndlr.IsManualFocus)
+
+					admins.GET("/api/camera/:id/ptz-status", encryptedCameraDetailsGet, onvifclnthndlr.GetPTZStatus)
+					admins.GET("/api/camera/:id/ptz-configurations", encryptedCameraDetailsGet, onvifclnthndlr.GetPTZConfigurations)
+					admins.GET("/api/camera/:id/presets", encryptedCameraDetailsGet, onvifclnthndlr.GetPresets)
+					admins.GET("/api/camera/:id/preset-token", encryptedCameraDetailsGet, onvifclnthndlr.GetPresetTokenByName)
+					admins.GET("/api/camera/:id/ptz-nodes", encryptedCameraDetailsGet, onvifclnthndlr.GetPTZNodes)
+					admins.GET("/api/camera/:id/preset-tours", encryptedCameraDetailsGet, onvifclnthndlr.GetPresetTours)
+					admins.POST("/api/camera/:id/operate-preset-tour", encryptedCameraDetailsPost, onvifclnthndlr.OperatePresetTour)
+					admins.POST("/api/camera/:id/goto-home-position", encryptedCameraDetailsPost, onvifclnthndlr.GotoHomePosition)
+					admins.POST("/api/camera/:id/set-home-position", encryptedCameraDetailsPost, onvifclnthndlr.SetHomePosition)
+					admins.POST("/api/camera/:id/absolute-move", encryptedCameraDetailsPost, onvifclnthndlr.AbsoluteMove)
+					admins.POST("/api/camera/:id/relative-move", encryptedCameraDetailsPost, onvifclnthndlr.RelativeMove)
+					admins.POST("/api/camera/:id/continuous-move", encryptedCameraDetailsPost, onvifclnthndlr.ContinuousMove)
+					admins.POST("/api/camera/:id/goto-preset", encryptedCameraDetailsPost, onvifclnthndlr.GotoPreset)
+					admins.POST("/api/camera/:id/set-preset", encryptedCameraDetailsPost, onvifclnthndlr.SetPreset)
+					admins.DELETE("/api/camera/:id/remove-preset", encryptedCameraDetailsPost, onvifclnthndlr.RemovePreset)
+
+					admins.GET("/api/camera/:id/relays", encryptedCameraDetailsGet, onvifclnthndlr.GetRelays)
+					admins.GET("/api/camera/:id/digital-inputs", encryptedCameraDetailsGet, onvifclnthndlr.GetDigitalInputs)
+					admins.POST("/api/camera/:id/trigger-relay", encryptedCameraDetailsPost, onvifclnthndlr.TriggerRelay)
+
+					admins.POST("/api/camera/:id/start-subscription", encryptedCameraDetailsPost, onvifclnthndlr.StartSubscription)
+					admins.GET("/api/camera/:id/fetch-events", encryptedCameraDetailsGet, onvifclnthndlr.FetchEvents)
+					admins.POST("/api/camera/:id/renew-subscription", encryptedCameraDetailsPost, onvifclnthndlr.RenewSubscription)
+					// api/create_camera with TTL 1 hour?
+					// api/camera/:id/ptz-move
+					// api/camera/:id/ptz-stop
+					// api/camera/:id/ntp-set
+					// api/camera/:id/system-log?type=access|system
+				}
+
+				{
 					// B2B Client handler
 					b2bclnthndlr := handler.NewB2BClientHandler(b2bclntsvc)
 
@@ -196,6 +286,14 @@ func main() {
 		log.Fatal("server failed", zap.Error(err))
 	}
 	log.Info("server closed")
+
+	camera, err := camera.CreateCamera("", "", "", "")
+	if err != nil {
+		log.Error("failed to create camera", zap.Error(err))
+		return
+	}
+	deviceservice.GetDeviceInformation(camera)
+	deviceservice.SetNTP(camera, false, "")
 }
 
 // handleVersion prints build metadata and exits when -v/--version is provided.
