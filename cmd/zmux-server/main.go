@@ -9,8 +9,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/aviravitz/onvif-client/camera"
-	"github.com/aviravitz/onvif-client/deviceservice"
 	"github.com/edirooss/zmux-server/internal/config"
 	"github.com/edirooss/zmux-server/internal/http/handler"
 	mw "github.com/edirooss/zmux-server/internal/http/middleware"
@@ -158,7 +156,6 @@ func main() {
 
 				{
 					// handler.ONVIFClientHandler
-					//TODO: add middlware for hashed camera credentials?
 					encryptedCameraDetailsGet := mw.RequireValidEncryptedCameraDetailsGet()
 					encryptedCameraDetailsPost := mw.RequireValidEncryptedCameraDetailsPost()
 
@@ -237,11 +234,6 @@ func main() {
 					admins.POST("/api/camera/:id/start-subscription", encryptedCameraDetailsPost, onvifclnthndlr.StartSubscription)
 					admins.GET("/api/camera/:id/fetch-events", encryptedCameraDetailsGet, onvifclnthndlr.FetchEvents)
 					admins.POST("/api/camera/:id/renew-subscription", encryptedCameraDetailsPost, onvifclnthndlr.RenewSubscription)
-					// api/create_camera with TTL 1 hour?
-					// api/camera/:id/ptz-move
-					// api/camera/:id/ptz-stop
-					// api/camera/:id/ntp-set
-					// api/camera/:id/system-log?type=access|system
 				}
 
 				{
@@ -286,14 +278,6 @@ func main() {
 		log.Fatal("server failed", zap.Error(err))
 	}
 	log.Info("server closed")
-
-	camera, err := camera.CreateCamera("", "", "", "")
-	if err != nil {
-		log.Error("failed to create camera", zap.Error(err))
-		return
-	}
-	deviceservice.GetDeviceInformation(camera)
-	deviceservice.SetNTP(camera, false, "")
 }
 
 // handleVersion prints build metadata and exits when -v/--version is provided.

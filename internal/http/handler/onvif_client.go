@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,6 +16,11 @@ import (
 	"github.com/aviravitz/onvif-client/ptzservice"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
+
+	"crypto/aes"
+	"crypto/cipher"
+	"encoding/base64"
+	"errors"
 )
 
 type CameraCacheType struct {
@@ -27,6 +34,54 @@ var (
 		cache: make(map[string]*camera.Camera),
 	}
 )
+
+func DecryptAES128(encrypted string, key []byte) (string, error) {
+	// 1. Decode the base64 string
+	ciphertext, err := base64.StdEncoding.DecodeString(encrypted)
+	if err != nil {
+		return "", err
+	}
+
+	// 2. Create the AES cipher block
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", err
+	}
+
+	// 3. Check if the ciphertext is long enough (must include IV)
+	if len(ciphertext) < aes.BlockSize {
+		return "", errors.New("ciphertext too short")
+	}
+
+	// 4. Extract the IV (Initialization Vector) from the start of the ciphertext
+	iv := ciphertext[:aes.BlockSize]
+	ciphertext = ciphertext[aes.BlockSize:]
+
+	// 5. Decrypt using CBC mode
+	mode := cipher.NewCBCDecrypter(block, iv)
+	mode.CryptBlocks(ciphertext, ciphertext)
+
+	// 6. Remove PKCS7 padding
+	decrypted, err := pkcs7Unpad(ciphertext)
+	if err != nil {
+		return "", err
+	}
+
+	return string(decrypted), nil
+}
+
+// Helper to remove PKCS7 padding
+func pkcs7Unpad(data []byte) ([]byte, error) {
+	length := len(data)
+	if length == 0 {
+		return nil, errors.New("invalid padding")
+	}
+	unpadding := int(data[length-1])
+	if unpadding > length {
+		return nil, errors.New("invalid padding")
+	}
+	return data[:(length - unpadding)], nil
+}
 
 // Get retrieves a value from the cache.
 func (c *CameraCacheType) Get(key string) (*camera.Camera, bool) {
@@ -53,12 +108,24 @@ func DecryptCameraDetails(encrypted string) (*camera.Camera, error) {
 		return decrypted, nil
 	}
 
-	// TODO: implement decryption logic
-	// TODO: implement parsing logic
-	addr := ""
-	port := ""
-	user := ""
-	password := ""
+	//TODO: Move the key to config or environment variable
+	// Decrypt the encrypted string using AES-128
+	decrypted, err := DecryptAES128(encrypted, []byte("examplekey12345")) // 16 bytes key for AES-128
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt camera details: %w", err)
+	}
+
+	// Parse the decrypted string (format: "addr:port:user:password")
+	parts := strings.Split(decrypted, ":")
+	if len(parts) != 4 {
+		return nil, fmt.Errorf("invalid decrypted format, expected 'addr:port:user:password'")
+	}
+
+	addr := parts[0]
+	port := parts[1]
+	user := parts[2]
+	password := parts[3]
+
 	cam, err := camera.CreateCamera(addr, port, user, password)
 	if err != nil {
 		return nil, err
