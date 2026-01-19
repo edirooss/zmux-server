@@ -30,7 +30,7 @@ func RequireValidEncryptedCameraDetailsPost() gin.HandlerFunc {
 // RequireValidEncryptedCameraDetailsGet ensures the path param ":encrypted_camera_details" is valid.
 func RequireValidEncryptedCameraDetailsGet() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		encryptedCameraDetails := c.Param("encrypted_camera_details")
+		encryptedCameraDetails := c.Query("encrypted_camera_details")
 		if encryptedCameraDetails == "" {
 			c.AbortWithStatus(http.StatusBadRequest)
 			return

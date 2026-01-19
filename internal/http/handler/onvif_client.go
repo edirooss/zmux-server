@@ -152,7 +152,7 @@ func NewONVIFClientHandler(log *zap.Logger) (*ONVIFClientHandler, error) {
 
 // GetDigitalInputs handles GET /GetDigitalInputs
 func (h *ONVIFClientHandler) GetDigitalInputs(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 
 	// 1. Validation check
 	if encryptedCameraDetails == "" {
@@ -185,7 +185,7 @@ func (h *ONVIFClientHandler) GetDigitalInputs(c *gin.Context) {
 
 // GetRelays handles GET /GetRelays
 func (h *ONVIFClientHandler) GetRelays(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	if encryptedCameraDetails == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "encryptedCameraDetails is required"})
 		return
@@ -214,7 +214,7 @@ func (h *ONVIFClientHandler) GetRelays(c *gin.Context) {
 // TriggerRelay handles POST /TriggerRelay
 func (h *ONVIFClientHandler) TriggerRelay(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string `json:"encryptedCameraDetails"`
+		EncryptedCameraDetails string `json:"encrypted_camera_details"`
 		Token                  string `json:"token"`
 		Active                 bool   `json:"active"`
 	}
@@ -249,7 +249,7 @@ func (h *ONVIFClientHandler) TriggerRelay(c *gin.Context) {
 
 // GetDeviceInformation handles GET /GetDeviceInformation
 func (h *ONVIFClientHandler) GetDeviceInformation(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	if encryptedCameraDetails == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "encryptedCameraDetails is required"})
 		return
@@ -275,7 +275,7 @@ func (h *ONVIFClientHandler) GetDeviceInformation(c *gin.Context) {
 
 // GetSystemDateAndTime handles GET /GetSystemDateAndTime
 func (h *ONVIFClientHandler) GetSystemDateAndTime(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	if encryptedCameraDetails == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "encryptedCameraDetails is required"})
 		return
@@ -301,7 +301,7 @@ func (h *ONVIFClientHandler) GetSystemDateAndTime(c *gin.Context) {
 
 // GetNetworkInterfaces handles GET /GetNetworkInterfaces
 func (h *ONVIFClientHandler) GetNetworkInterfaces(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	if encryptedCameraDetails == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "encryptedCameraDetails is required"})
 		return
@@ -325,7 +325,7 @@ func (h *ONVIFClientHandler) GetNetworkInterfaces(c *gin.Context) {
 
 // GetUsers handles GET /GetUsers
 func (h *ONVIFClientHandler) GetUsers(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	if encryptedCameraDetails == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "encryptedCameraDetails is required"})
 		return
@@ -349,7 +349,7 @@ func (h *ONVIFClientHandler) GetUsers(c *gin.Context) {
 
 // GetDNS handles GET /GetDNS
 func (h *ONVIFClientHandler) GetDNS(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	if encryptedCameraDetails == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "encryptedCameraDetails is required"})
 		return
@@ -373,7 +373,7 @@ func (h *ONVIFClientHandler) GetDNS(c *gin.Context) {
 
 // GetScopes handles GET /GetScopes
 func (h *ONVIFClientHandler) GetScopes(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	if encryptedCameraDetails == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "encryptedCameraDetails is required"})
 		return
@@ -397,7 +397,7 @@ func (h *ONVIFClientHandler) GetScopes(c *gin.Context) {
 
 // GetNTP handles GET /GetNTP
 func (h *ONVIFClientHandler) GetNTP(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	if encryptedCameraDetails == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "encryptedCameraDetails is required"})
 		return
@@ -422,7 +422,7 @@ func (h *ONVIFClientHandler) GetNTP(c *gin.Context) {
 // RebootCamera handles POST /RebootCamera
 func (h *ONVIFClientHandler) RebootCamera(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string `json:"encryptedCameraDetails"`
+		EncryptedCameraDetails string `json:"encrypted_camera_details"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
@@ -447,7 +447,7 @@ func (h *ONVIFClientHandler) RebootCamera(c *gin.Context) {
 // SetNTP handles POST /SetNTP
 func (h *ONVIFClientHandler) SetNTP(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string `json:"encryptedCameraDetails"`
+		EncryptedCameraDetails string `json:"encrypted_camera_details"`
 		FromDHCP               bool   `json:"fromDHCP"`
 		Server                 string `json:"server"`
 	}
@@ -473,7 +473,7 @@ func (h *ONVIFClientHandler) SetNTP(c *gin.Context) {
 
 // GetSystemLog handles GET /GetSystemLog
 func (h *ONVIFClientHandler) GetSystemLog(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	logType := c.Query("logType")
 	if encryptedCameraDetails == "" || logType == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "encryptedCameraDetails and logType are required"})
@@ -499,7 +499,7 @@ func (h *ONVIFClientHandler) GetSystemLog(c *gin.Context) {
 // StartSubscription handles POST /StartSubscription
 func (h *ONVIFClientHandler) StartSubscription(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string `json:"encryptedCameraDetails"`
+		EncryptedCameraDetails string `json:"encrypted_camera_details"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
@@ -524,7 +524,7 @@ func (h *ONVIFClientHandler) StartSubscription(c *gin.Context) {
 
 // FetchEvents handles GET /FetchEvents
 func (h *ONVIFClientHandler) FetchEvents(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	subscriptionUrl := c.Query("subscriptionUrl")
 	if encryptedCameraDetails == "" || subscriptionUrl == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "encryptedCameraDetails and subscriptionUrl are required"})
@@ -551,7 +551,7 @@ func (h *ONVIFClientHandler) FetchEvents(c *gin.Context) {
 // RenewSubscription handles POST /RenewSubscription
 func (h *ONVIFClientHandler) RenewSubscription(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string `json:"encryptedCameraDetails"`
+		EncryptedCameraDetails string `json:"encrypted_camera_details"`
 		SubscriptionUrl        string `json:"subscriptionUrl"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -578,7 +578,7 @@ func (h *ONVIFClientHandler) RenewSubscription(c *gin.Context) {
 
 // GetImagingSettings handles GET /GetImagingSettings
 func (h *ONVIFClientHandler) GetImagingSettings(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	videoSourceToken := c.Query("videoSourceToken")
 	if encryptedCameraDetails == "" || videoSourceToken == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "encryptedCameraDetails and videoSourceToken are required"})
@@ -603,7 +603,7 @@ func (h *ONVIFClientHandler) GetImagingSettings(c *gin.Context) {
 
 // GetImagingOptions handles GET /GetImagingOptions
 func (h *ONVIFClientHandler) GetImagingOptions(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	videoSourceToken := c.Query("videoSourceToken")
 	if encryptedCameraDetails == "" || videoSourceToken == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "encryptedCameraDetails and videoSourceToken are required"})
@@ -628,7 +628,7 @@ func (h *ONVIFClientHandler) GetImagingOptions(c *gin.Context) {
 
 // GetImagingStatus handles GET /GetImagingStatus
 func (h *ONVIFClientHandler) GetImagingStatus(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	videoSourceToken := c.Query("videoSourceToken")
 	if encryptedCameraDetails == "" || videoSourceToken == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "encryptedCameraDetails and videoSourceToken are required"})
@@ -653,7 +653,7 @@ func (h *ONVIFClientHandler) GetImagingStatus(c *gin.Context) {
 
 // IsManualFocus handles GET /IsManualFocus
 func (h *ONVIFClientHandler) IsManualFocus(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	token := c.Query("token")
 	if encryptedCameraDetails == "" || token == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "encryptedCameraDetails and token are required"})
@@ -673,7 +673,7 @@ func (h *ONVIFClientHandler) IsManualFocus(c *gin.Context) {
 // SetImagingSettings handles POST /SetImagingSettings
 func (h *ONVIFClientHandler) SetImagingSettings(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string  `json:"encryptedCameraDetails"`
+		EncryptedCameraDetails string  `json:"encrypted_camera_details"`
 		VideoSourceToken       string  `json:"videoSourceToken"`
 		NewBright              float64 `json:"newBright"`
 		NewContrast            float64 `json:"newContrast"`
@@ -703,7 +703,7 @@ func (h *ONVIFClientHandler) SetImagingSettings(c *gin.Context) {
 // MoveFocusAbsolute handles POST /MoveFocusAbsolute
 func (h *ONVIFClientHandler) MoveFocusAbsolute(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string  `json:"encryptedCameraDetails"`
+		EncryptedCameraDetails string  `json:"encrypted_camera_details"`
 		VideoSourceToken       string  `json:"videoSourceToken"`
 		Position               float64 `json:"position"`
 		Speed                  float64 `json:"speed"`
@@ -731,7 +731,7 @@ func (h *ONVIFClientHandler) MoveFocusAbsolute(c *gin.Context) {
 // MoveFocusRelative handles POST /MoveFocusRelative
 func (h *ONVIFClientHandler) MoveFocusRelative(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string  `json:"encryptedCameraDetails"`
+		EncryptedCameraDetails string  `json:"encrypted_camera_details"`
 		VideoSourceToken       string  `json:"videoSourceToken"`
 		Distance               float64 `json:"distance"`
 		Speed                  float64 `json:"speed"`
@@ -759,7 +759,7 @@ func (h *ONVIFClientHandler) MoveFocusRelative(c *gin.Context) {
 // StartFocusMove handles POST /StartFocusMove
 func (h *ONVIFClientHandler) StartFocusMove(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string  `json:"encryptedCameraDetails"`
+		EncryptedCameraDetails string  `json:"encrypted_camera_details"`
 		VideoSourceToken       string  `json:"videoSourceToken"`
 		Speed                  float64 `json:"speed"`
 	}
@@ -786,7 +786,7 @@ func (h *ONVIFClientHandler) StartFocusMove(c *gin.Context) {
 // StopFocus handles POST /StopFocus
 func (h *ONVIFClientHandler) StopFocus(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string `json:"encryptedCameraDetails"`
+		EncryptedCameraDetails string `json:"encrypted_camera_details"`
 		VideoSourceToken       string `json:"videoSourceToken"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -812,7 +812,7 @@ func (h *ONVIFClientHandler) StopFocus(c *gin.Context) {
 // SetFocusMode handles POST /SetFocusMode
 func (h *ONVIFClientHandler) SetFocusMode(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string `json:"encryptedCameraDetails"`
+		EncryptedCameraDetails string `json:"encrypted_camera_details"`
 		VideoSourceToken       string `json:"videoSourceToken"`
 		Mode                   string `json:"mode"`
 	}
@@ -839,7 +839,7 @@ func (h *ONVIFClientHandler) SetFocusMode(c *gin.Context) {
 // SetIrCutFilter handles POST /SetIrCutFilter
 func (h *ONVIFClientHandler) SetIrCutFilter(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string `json:"encryptedCameraDetails"`
+		EncryptedCameraDetails string `json:"encrypted_camera_details"`
 		VideoSourceToken       string `json:"videoSourceToken"`
 		Mode                   string `json:"mode"`
 	}
@@ -866,7 +866,7 @@ func (h *ONVIFClientHandler) SetIrCutFilter(c *gin.Context) {
 // SetBacklightCompensation handles POST /SetBacklightCompensation
 func (h *ONVIFClientHandler) SetBacklightCompensation(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string  `json:"encryptedCameraDetails"`
+		EncryptedCameraDetails string  `json:"encrypted_camera_details"`
 		VideoSourceToken       string  `json:"videoSourceToken"`
 		Mode                   string  `json:"mode"`
 		Level                  float64 `json:"level"`
@@ -894,7 +894,7 @@ func (h *ONVIFClientHandler) SetBacklightCompensation(c *gin.Context) {
 // SetWideDynamicRange handles POST /SetWideDynamicRange
 func (h *ONVIFClientHandler) SetWideDynamicRange(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string  `json:"encryptedCameraDetails"`
+		EncryptedCameraDetails string  `json:"encrypted_camera_details"`
 		VideoSourceToken       string  `json:"videoSourceToken"`
 		Mode                   string  `json:"mode"`
 		Level                  float64 `json:"level"`
@@ -922,7 +922,7 @@ func (h *ONVIFClientHandler) SetWideDynamicRange(c *gin.Context) {
 // SetWhiteBalance handles POST /SetWhiteBalance
 func (h *ONVIFClientHandler) SetWhiteBalance(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string  `json:"encryptedCameraDetails"`
+		EncryptedCameraDetails string  `json:"encrypted_camera_details"`
 		VideoSourceToken       string  `json:"videoSourceToken"`
 		Mode                   string  `json:"mode"`
 		CrGain                 float64 `json:"crGain"`
@@ -951,7 +951,7 @@ func (h *ONVIFClientHandler) SetWhiteBalance(c *gin.Context) {
 // SetExposureMode handles POST /SetExposureMode
 func (h *ONVIFClientHandler) SetExposureMode(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string `json:"encryptedCameraDetails"`
+		EncryptedCameraDetails string `json:"encrypted_camera_details"`
 		VideoSourceToken       string `json:"videoSourceToken"`
 		Mode                   string `json:"mode"`
 		Priority               string `json:"priority"`
@@ -979,7 +979,7 @@ func (h *ONVIFClientHandler) SetExposureMode(c *gin.Context) {
 // SetManualExposure handles POST /SetManualExposure
 func (h *ONVIFClientHandler) SetManualExposure(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string  `json:"encryptedCameraDetails"`
+		EncryptedCameraDetails string  `json:"encrypted_camera_details"`
 		VideoSourceToken       string  `json:"videoSourceToken"`
 		ExpTime                float64 `json:"expTime"`
 		Gain                   float64 `json:"gain"`
@@ -1008,7 +1008,7 @@ func (h *ONVIFClientHandler) SetManualExposure(c *gin.Context) {
 // SetExposureLimits handles POST /SetExposureLimits
 func (h *ONVIFClientHandler) SetExposureLimits(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string  `json:"encryptedCameraDetails"`
+		EncryptedCameraDetails string  `json:"encrypted_camera_details"`
 		VideoSourceToken       string  `json:"videoSourceToken"`
 		MinTime                float64 `json:"minTime"`
 		MaxTime                float64 `json:"maxTime"`
@@ -1040,7 +1040,7 @@ func (h *ONVIFClientHandler) SetExposureLimits(c *gin.Context) {
 // Media handlers
 // GetProfileToken handles GET /GetProfileToken
 func (h *ONVIFClientHandler) GetProfileToken(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	if encryptedCameraDetails == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "encryptedCameraDetails is required"})
 		return
@@ -1058,7 +1058,7 @@ func (h *ONVIFClientHandler) GetProfileToken(c *gin.Context) {
 
 // GetSensorToken handles GET /GetSensorToken
 func (h *ONVIFClientHandler) GetSensorToken(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	if encryptedCameraDetails == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "encryptedCameraDetails is required"})
 		return
@@ -1076,7 +1076,7 @@ func (h *ONVIFClientHandler) GetSensorToken(c *gin.Context) {
 
 // GetDeviceProfiles handles GET /GetDeviceProfiles
 func (h *ONVIFClientHandler) GetDeviceProfiles(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	if encryptedCameraDetails == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "encryptedCameraDetails is required"})
 		return
@@ -1100,7 +1100,7 @@ func (h *ONVIFClientHandler) GetDeviceProfiles(c *gin.Context) {
 
 // GetStreamUri handles GET /GetStreamUri
 func (h *ONVIFClientHandler) GetStreamUri(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	token := c.Query("token")
 	if encryptedCameraDetails == "" || token == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "encryptedCameraDetails and token are required"})
@@ -1125,7 +1125,7 @@ func (h *ONVIFClientHandler) GetStreamUri(c *gin.Context) {
 
 // GetSnapshotUri handles GET /GetSnapshotUri
 func (h *ONVIFClientHandler) GetSnapshotUri(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	token := c.Query("token")
 	if encryptedCameraDetails == "" || token == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "encryptedCameraDetails and token are required"})
@@ -1150,7 +1150,7 @@ func (h *ONVIFClientHandler) GetSnapshotUri(c *gin.Context) {
 
 // GetVideoEncoderConfigurations handles GET /GetVideoEncoderConfigurations
 func (h *ONVIFClientHandler) GetVideoEncoderConfigurations(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	if encryptedCameraDetails == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "encryptedCameraDetails is required"})
 		return
@@ -1174,7 +1174,7 @@ func (h *ONVIFClientHandler) GetVideoEncoderConfigurations(c *gin.Context) {
 
 // GetVideoEncoderConfiguration handles GET /GetVideoEncoderConfiguration
 func (h *ONVIFClientHandler) GetVideoEncoderConfiguration(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	token := c.Query("token")
 	if encryptedCameraDetails == "" || token == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "encryptedCameraDetails and token are required"})
@@ -1199,7 +1199,7 @@ func (h *ONVIFClientHandler) GetVideoEncoderConfiguration(c *gin.Context) {
 
 // GetOSDs handles GET /GetOSDs
 func (h *ONVIFClientHandler) GetOSDs(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	token := c.Query("token")
 	if encryptedCameraDetails == "" || token == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "encryptedCameraDetails and token are required"})
@@ -1225,7 +1225,7 @@ func (h *ONVIFClientHandler) GetOSDs(c *gin.Context) {
 // GetOSD handles GET /GetOSD
 func (h *ONVIFClientHandler) SetOSDText(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string `json:"encryptedCameraDetails"`
+		EncryptedCameraDetails string `json:"encrypted_camera_details"`
 		OsdToken               string `json:"osdToken"`
 		VideoSourceToken       string `json:"videoSourceToken"`
 		NewText                string `json:"newText"`
@@ -1252,7 +1252,7 @@ func (h *ONVIFClientHandler) SetOSDText(c *gin.Context) {
 // DeleteOSD handles POST /DeleteOSD
 func (h *ONVIFClientHandler) DeleteOSD(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string `json:"encryptedCameraDetails"`
+		EncryptedCameraDetails string `json:"encrypted_camera_details"`
 		OsdToken               string `json:"osdToken"`
 	}
 	if err := c.BindJSON(&req); err != nil {
@@ -1274,7 +1274,7 @@ func (h *ONVIFClientHandler) DeleteOSD(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 func (h *ONVIFClientHandler) GetOSD(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	token := c.Query("token")
 	if encryptedCameraDetails == "" || token == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "encryptedCameraDetails and token are required"})
@@ -1299,7 +1299,7 @@ func (h *ONVIFClientHandler) GetOSD(c *gin.Context) {
 // GetVideoSources handles GET /GetVideoSources
 // GetVideoSources handles GET /GetVideoSources
 func (h *ONVIFClientHandler) GetVideoSources(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	if encryptedCameraDetails == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "encryptedCameraDetails is required"})
 		return
@@ -1326,7 +1326,7 @@ func (h *ONVIFClientHandler) GetVideoSources(c *gin.Context) {
 
 // GetAudioEncoders handles GET /GetAudioEncoders
 func (h *ONVIFClientHandler) GetAudioEncoders(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	if encryptedCameraDetails == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "encryptedCameraDetails is required"})
 		return
@@ -1352,7 +1352,7 @@ func (h *ONVIFClientHandler) GetAudioEncoders(c *gin.Context) {
 
 // GetVideoOptions handles GET /GetVideoOptions
 func (h *ONVIFClientHandler) GetVideoOptions(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	profileToken := c.Query("profileToken")
 	if encryptedCameraDetails == "" || profileToken == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "encryptedCameraDetails and profileToken are required"})
@@ -1382,7 +1382,7 @@ func (h *ONVIFClientHandler) GetVideoOptions(c *gin.Context) {
 
 // GetOSDTokenByText handles GET /GetOSDTokenByText
 func (h *ONVIFClientHandler) GetOSDTokenByText(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	configToken := c.Query("configToken")
 	targetText := c.Query("targetText")
 
@@ -1412,7 +1412,7 @@ func (h *ONVIFClientHandler) GetOSDTokenByText(c *gin.Context) {
 // CreateOSD handles POST /CreateOSD
 func (h *ONVIFClientHandler) CreateOSD(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string  `json:"encryptedCameraDetails" binding:"required"`
+		EncryptedCameraDetails string  `json:"encrypted_camera_details" binding:"required"`
 		VideoSourceToken       string  `json:"videoSourceToken" binding:"required"`
 		Text                   string  `json:"text" binding:"required"`
 		X                      float64 `json:"x"`
@@ -1445,7 +1445,7 @@ func (h *ONVIFClientHandler) CreateOSD(c *gin.Context) {
 // SetSynchronizationPoint handles POST /SetSynchronizationPoint
 func (h *ONVIFClientHandler) SetSynchronizationPoint(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string `json:"encryptedCameraDetails" binding:"required"`
+		EncryptedCameraDetails string `json:"encrypted_camera_details" binding:"required"`
 		ProfileToken           string `json:"profileToken" binding:"required"`
 	}
 
@@ -1473,7 +1473,7 @@ func (h *ONVIFClientHandler) SetSynchronizationPoint(c *gin.Context) {
 // ModifyVideoEncoderResolution handles POST /ModifyVideoEncoderResolution
 func (h *ONVIFClientHandler) ModifyVideoEncoderResolution(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string `json:"encryptedCameraDetails" binding:"required"`
+		EncryptedCameraDetails string `json:"encrypted_camera_details" binding:"required"`
 		ConfigToken            string `json:"configToken" binding:"required"`
 		NewWidth               int    `json:"newWidth" binding:"required"`
 		NewHeight              int    `json:"newHeight" binding:"required"`
@@ -1506,7 +1506,7 @@ func (h *ONVIFClientHandler) ModifyVideoEncoderResolution(c *gin.Context) {
 // ModifyVideoEncoderQuality handles POST /ModifyVideoEncoderQuality
 func (h *ONVIFClientHandler) ModifyVideoEncoderQuality(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string `json:"encryptedCameraDetails" binding:"required"`
+		EncryptedCameraDetails string `json:"encrypted_camera_details" binding:"required"`
 		ConfigToken            string `json:"configToken" binding:"required"`
 		Bitrate                int    `json:"bitrate" binding:"required"`
 		GovLength              int    `json:"govLength" binding:"required"`
@@ -1540,7 +1540,7 @@ func (h *ONVIFClientHandler) ModifyVideoEncoderQuality(c *gin.Context) {
 
 // GetPTZStatus handles GET /GetPTZStatus
 func (h *ONVIFClientHandler) GetPTZStatus(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	profileToken := c.Query("profileToken")
 
 	if encryptedCameraDetails == "" || profileToken == "" {
@@ -1568,7 +1568,7 @@ func (h *ONVIFClientHandler) GetPTZStatus(c *gin.Context) {
 
 // GetPTZConfigurations handles GET /GetPTZConfigurations
 func (h *ONVIFClientHandler) GetPTZConfigurations(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 
 	if encryptedCameraDetails == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "encryptedCameraDetails is required"})
@@ -1595,7 +1595,7 @@ func (h *ONVIFClientHandler) GetPTZConfigurations(c *gin.Context) {
 
 // GetPresets handles GET /GetPresets
 func (h *ONVIFClientHandler) GetPresets(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	profileToken := c.Query("profileToken")
 	if encryptedCameraDetails == "" || profileToken == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "encryptedCameraDetails and profileToken are required"})
@@ -1618,7 +1618,7 @@ func (h *ONVIFClientHandler) GetPresets(c *gin.Context) {
 }
 
 func (h *ONVIFClientHandler) GetPresetTokenByName(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	profileToken := c.Query("profileToken")
 	searchName := c.Query("searchName")
 	if encryptedCameraDetails == "" || profileToken == "" || searchName == "" {
@@ -1642,7 +1642,7 @@ func (h *ONVIFClientHandler) GetPresetTokenByName(c *gin.Context) {
 
 func (h *ONVIFClientHandler) SetPreset(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string `json:"encryptedCameraDetails" binding:"required"`
+		EncryptedCameraDetails string `json:"encrypted_camera_details" binding:"required"`
 		ProfileToken           string `json:"profileToken" binding:"required"`
 		Name                   string `json:"name" binding:"required"`
 	}
@@ -1667,7 +1667,7 @@ func (h *ONVIFClientHandler) SetPreset(c *gin.Context) {
 
 func (h *ONVIFClientHandler) RemovePreset(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string `json:"encryptedCameraDetails" binding:"required"`
+		EncryptedCameraDetails string `json:"encrypted_camera_details" binding:"required"`
 		ProfileToken           string `json:"profileToken" binding:"required"`
 		PresetToken            string `json:"presetToken" binding:"required"`
 	}
@@ -1692,7 +1692,7 @@ func (h *ONVIFClientHandler) RemovePreset(c *gin.Context) {
 
 func (h *ONVIFClientHandler) AbsoluteMove(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string  `json:"encryptedCameraDetails" binding:"required"`
+		EncryptedCameraDetails string  `json:"encrypted_camera_details" binding:"required"`
 		Token                  string  `json:"token" binding:"required"`
 		Pan                    float64 `json:"pan"`
 		Tilt                   float64 `json:"tilt"`
@@ -1719,7 +1719,7 @@ func (h *ONVIFClientHandler) AbsoluteMove(c *gin.Context) {
 
 func (h *ONVIFClientHandler) RelativeMove(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string  `json:"encryptedCameraDetails" binding:"required"`
+		EncryptedCameraDetails string  `json:"encrypted_camera_details" binding:"required"`
 		Token                  string  `json:"token" binding:"required"`
 		XDist                  float64 `json:"xDist"`
 		YDist                  float64 `json:"yDist"`
@@ -1746,7 +1746,7 @@ func (h *ONVIFClientHandler) RelativeMove(c *gin.Context) {
 
 func (h *ONVIFClientHandler) ContinuousMove(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string  `json:"encryptedCameraDetails" binding:"required"`
+		EncryptedCameraDetails string  `json:"encrypted_camera_details" binding:"required"`
 		Token                  string  `json:"token" binding:"required"`
 		PanSpeed               float64 `json:"panSpeed"`
 		TiltSpeed              float64 `json:"tiltSpeed"`
@@ -1774,7 +1774,7 @@ func (h *ONVIFClientHandler) ContinuousMove(c *gin.Context) {
 
 func (h *ONVIFClientHandler) StopPTZ(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string `json:"encryptedCameraDetails" binding:"required"`
+		EncryptedCameraDetails string `json:"encrypted_camera_details" binding:"required"`
 		Token                  string `json:"token" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -1797,7 +1797,7 @@ func (h *ONVIFClientHandler) StopPTZ(c *gin.Context) {
 }
 
 func (h *ONVIFClientHandler) GetPTZNodes(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	if encryptedCameraDetails == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "encryptedCameraDetails is required"})
 		return
@@ -1818,7 +1818,7 @@ func (h *ONVIFClientHandler) GetPTZNodes(c *gin.Context) {
 }
 
 func (h *ONVIFClientHandler) GetPresetTours(c *gin.Context) {
-	encryptedCameraDetails := c.Query("encryptedCameraDetails")
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	profileToken := c.Query("profileToken")
 	if encryptedCameraDetails == "" || profileToken == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "details and profileToken are required"})
@@ -1841,7 +1841,7 @@ func (h *ONVIFClientHandler) GetPresetTours(c *gin.Context) {
 
 func (h *ONVIFClientHandler) OperatePresetTour(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string `json:"encryptedCameraDetails" binding:"required"`
+		EncryptedCameraDetails string `json:"encrypted_camera_details" binding:"required"`
 		ProfileToken           string `json:"profileToken" binding:"required"`
 		TourToken              string `json:"tourToken" binding:"required"`
 		Operation              string `json:"operation" binding:"required"` // Start, Stop, Pause
@@ -1867,7 +1867,7 @@ func (h *ONVIFClientHandler) OperatePresetTour(c *gin.Context) {
 
 func (h *ONVIFClientHandler) GotoHomePosition(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string  `json:"encryptedCameraDetails" binding:"required"`
+		EncryptedCameraDetails string  `json:"encrypted_camera_details" binding:"required"`
 		ProfileToken           string  `json:"profileToken" binding:"required"`
 		Speed                  float64 `json:"speed"`
 	}
@@ -1892,7 +1892,7 @@ func (h *ONVIFClientHandler) GotoHomePosition(c *gin.Context) {
 
 func (h *ONVIFClientHandler) SetHomePosition(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string `json:"encryptedCameraDetails" binding:"required"`
+		EncryptedCameraDetails string `json:"encrypted_camera_details" binding:"required"`
 		ProfileToken           string `json:"profileToken" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -1916,7 +1916,7 @@ func (h *ONVIFClientHandler) SetHomePosition(c *gin.Context) {
 
 func (h *ONVIFClientHandler) GotoPreset(c *gin.Context) {
 	var req struct {
-		EncryptedCameraDetails string `json:"encryptedCameraDetails" binding:"required"`
+		EncryptedCameraDetails string `json:"encrypted_camera_details" binding:"required"`
 		ProfileToken           string `json:"profileToken" binding:"required"`
 		PresetToken            string `json:"presetToken" binding:"required"`
 	}
