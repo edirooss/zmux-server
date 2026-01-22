@@ -548,7 +548,6 @@ func (h *ONVIFClientHandler) FetchEvents(c *gin.Context) {
 }
 
 // RenewSubscription handles POST /RenewSubscription
-// RenewSubscription handles POST /RenewSubscription
 func (h *ONVIFClientHandler) RenewSubscription(c *gin.Context) {
 	var req struct {
 		EncryptedCameraDetails string `json:"encrypted_camera_details"`
