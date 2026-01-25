@@ -3,6 +3,7 @@ module github.com/edirooss/zmux-server
 go 1.24.5
 
 require (
+	github.com/aviravitz/onvif-client v1.0.1
 	github.com/davecgh/go-spew v1.1.1
 	github.com/gin-contrib/cors v1.7.6
 	github.com/gin-contrib/secure v1.1.2
@@ -12,10 +13,10 @@ require (
 	github.com/redis/go-redis/v9 v9.12.1
 	go.uber.org/zap v1.27.0
 	golang.org/x/sync v0.16.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
-	github.com/aviravitz/onvif-client v1.0.0 // indirect
 	github.com/beevik/etree v1.1.0 // indirect
 	github.com/boj/redistore v1.4.1 // indirect
 	github.com/bytedance/sonic v1.14.0 // indirect
@@ -53,5 +54,4 @@ require (
 	golang.org/x/sys v0.35.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
 	google.golang.org/protobuf v1.36.8 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

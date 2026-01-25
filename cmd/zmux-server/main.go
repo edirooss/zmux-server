@@ -167,6 +167,7 @@ func main() {
 					// --- ONVIF Camera actions ---
 					// admins.POST("/api/camera/create-camera", encryptedCameraDetailsPost, onvifclnthndlr.CreateCamera)
 					//API endpoints for ONVIF device service
+					admins.GET("/api/camera/all-device-service-info", encryptedCameraDetailsGet, onvifclnthndlr.GetAllDeviceServiceInfo)
 					admins.GET("/api/camera/device-information", encryptedCameraDetailsGet, onvifclnthndlr.GetDeviceInformation)
 					admins.GET("/api/camera/system-date-time", encryptedCameraDetailsGet, onvifclnthndlr.GetSystemDateAndTime)
 					admins.GET("/api/camera/network-interfaces", encryptedCameraDetailsGet, onvifclnthndlr.GetNetworkInterfaces)

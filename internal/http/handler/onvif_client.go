@@ -496,6 +496,38 @@ func (h *ONVIFClientHandler) GetSystemLog(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
+// GetAllDeviceServiceInfo handles GET /GetAllDeviceServiceInfo
+func (h *ONVIFClientHandler) GetAllDeviceServiceInfo(c *gin.Context) {
+	// 1. Extract the query parameter
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
+	if encryptedCameraDetails == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "encrypted_camera_details is required"})
+		return
+	}
+
+	// 2. Retrieve the camera from cache
+	cam, exists := h.cache.Get(encryptedCameraDetails)
+	if !exists {
+		h.log.Warn("camera not found in cache", zap.String("key", encryptedCameraDetails))
+		c.JSON(http.StatusNotFound, gin.H{"error": "failed to retrieve camera from cache"})
+		return
+	}
+
+	h.log.Info("GetAllDeviceServiceInfo", zap.String("encryptedCameraDetails", encryptedCameraDetails))
+
+	// 3. Call the device service logic
+	// Assuming deviceservice has a corresponding GetAllDeviceServiceInfo method
+	serviceInfo, err := deviceservice.GetAllDeviceServiceInfo(cam)
+	if err != nil {
+		h.log.Error("failed to get all device service info", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get all device service info"})
+		return
+	}
+
+	// 4. Return the response (AllDeviceServiceInfo struct)
+	c.JSON(http.StatusOK, serviceInfo)
+}
+
 // StartSubscription handles POST /StartSubscription
 func (h *ONVIFClientHandler) StartSubscription(c *gin.Context) {
 	var req struct {

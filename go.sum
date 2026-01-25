@@ -1,7 +1,7 @@
-github.com/aviravitz/onvif-client v0.0.0-20260111112430-a882c6806293 h1:pU5hAT5U/WbOSz3tWrPROyWK7QMsSDI4tjNDizLQG4Y=
-github.com/aviravitz/onvif-client v0.0.0-20260111112430-a882c6806293/go.mod h1:SNJHvNj46sGz8xv+Ft6YFiWCN5bTXHjA810CyGFB/vk=
 github.com/aviravitz/onvif-client v1.0.0 h1:YzBXMnipYPvZ83c1SG/9SVMwOY8XlTrtTzFCQw87wCk=
 github.com/aviravitz/onvif-client v1.0.0/go.mod h1:SNJHvNj46sGz8xv+Ft6YFiWCN5bTXHjA810CyGFB/vk=
+github.com/aviravitz/onvif-client v1.0.1 h1:8VHawSfwhQJHytHDu3qDubETNrl8EwQlSY44rul1gsI=
+github.com/aviravitz/onvif-client v1.0.1/go.mod h1:SNJHvNj46sGz8xv+Ft6YFiWCN5bTXHjA810CyGFB/vk=
 github.com/beevik/etree v1.1.0 h1:T0xke/WvNtMoCqgzPhkX2r4rjY3GDZFi+FjpRZY2Jbs=
 github.com/beevik/etree v1.1.0/go.mod h1:r8Aw8JqVegEf0w2fDnATrX9VpkMcyFeM0FhwO62wh+A=
 github.com/boj/redistore v1.4.1 h1:lP9ZZWqKMq2RIqexlZX1w1ODSnegL+puxGIujkU5tIw=
