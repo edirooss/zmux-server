@@ -180,7 +180,8 @@ func main() {
 					admins.POST("/api/camera/set-ntp", encryptedCameraDetailsPost, onvifclnthndlr.SetNTP)
 
 					admins.GET("/api/camera/profile-token", encryptedCameraDetailsGet, onvifclnthndlr.GetProfileToken)
-					admins.GET("/api/camera/sensor-token", encryptedCameraDetailsGet, onvifclnthndlr.GetSensorToken)
+					admins.GET("/api/camera/video-source-token", encryptedCameraDetailsGet, onvifclnthndlr.GetVideoSourceToken)
+					admins.GET("/api/camera/video-source-configuration-token", encryptedCameraDetailsGet, onvifclnthndlr.GetVideoSourceConfigurationToken)
 					admins.GET("/api/camera/device-profiles", encryptedCameraDetailsGet, onvifclnthndlr.GetDeviceProfiles)
 					admins.GET("/api/camera/stream-uri", encryptedCameraDetailsGet, onvifclnthndlr.GetStreamUri)
 					admins.GET("/api/camera/snapshot-uri", encryptedCameraDetailsGet, onvifclnthndlr.GetSnapshotUri)
@@ -196,6 +197,7 @@ func main() {
 					admins.POST("/api/camera/synchronization-point", encryptedCameraDetailsPost, onvifclnthndlr.SetSynchronizationPoint)
 					admins.POST("/api/camera/modify-video-encoder-resolution", encryptedCameraDetailsPost, onvifclnthndlr.ModifyVideoEncoderResolution)
 					admins.POST("/api/camera/modify-video-encoder-quality", encryptedCameraDetailsPost, onvifclnthndlr.ModifyVideoEncoderQuality)
+					admins.GET("/api/camera/all-tokens", encryptedCameraDetailsGet, onvifclnthndlr.GetAllTokens)
 
 					admins.GET("/api/camera/imaging-settings", encryptedCameraDetailsGet, onvifclnthndlr.GetImagingSettings)
 					admins.GET("/api/camera/imaging-options", encryptedCameraDetailsGet, onvifclnthndlr.GetImagingOptions)
@@ -214,6 +216,7 @@ func main() {
 					admins.POST("/api/camera/set-exposure-limits", encryptedCameraDetailsPost, onvifclnthndlr.SetExposureLimits)
 					admins.POST("/api/camera/start-focus-move", encryptedCameraDetailsGet, onvifclnthndlr.StartFocusMove)
 					admins.POST("/api/camera/stop-focus", encryptedCameraDetailsGet, onvifclnthndlr.StopFocus)
+					admins.GET("/api/camera/focus-move-options", encryptedCameraDetailsGet, onvifclnthndlr.GetFocusMoveOptions)
 
 					admins.GET("/api/camera/ptz-status", encryptedCameraDetailsGet, onvifclnthndlr.GetPTZStatus)
 					admins.GET("/api/camera/ptz-configurations", encryptedCameraDetailsGet, onvifclnthndlr.GetPTZConfigurations)
@@ -231,6 +234,7 @@ func main() {
 					admins.POST("/api/camera/goto-preset", encryptedCameraDetailsPost, onvifclnthndlr.GotoPreset)
 					admins.POST("/api/camera/set-preset", encryptedCameraDetailsPost, onvifclnthndlr.SetPreset)
 					admins.DELETE("/api/camera/remove-preset", encryptedCameraDetailsPost, onvifclnthndlr.RemovePreset)
+					admins.GET("/api/camera/ptz-speed-limits", encryptedCameraDetailsGet, onvifclnthndlr.GetPTZSpeedLimits)
 
 					admins.GET("/api/camera/relays", encryptedCameraDetailsGet, onvifclnthndlr.GetRelays)
 					admins.GET("/api/camera/digital-inputs", encryptedCameraDetailsGet, onvifclnthndlr.GetDigitalInputs)

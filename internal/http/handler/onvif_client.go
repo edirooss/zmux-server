@@ -1084,11 +1084,11 @@ func (h *ONVIFClientHandler) GetProfileToken(c *gin.Context) {
 	h.log.Info("GetProfileToken", zap.String("encryptedCameraDetails", encryptedCameraDetails))
 
 	token := mediaservice.GetProfileToken(cam)
-	c.JSON(http.StatusOK, gin.H{"token": token})
+	c.JSON(http.StatusOK, token)
 }
 
-// GetSensorToken handles GET /GetSensorToken
-func (h *ONVIFClientHandler) GetSensorToken(c *gin.Context) {
+// GetVideoSourceToken handles GET /GetVideoSourceToken
+func (h *ONVIFClientHandler) GetVideoSourceToken(c *gin.Context) {
 	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	if encryptedCameraDetails == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "encryptedCameraDetails is required"})
@@ -1101,8 +1101,8 @@ func (h *ONVIFClientHandler) GetSensorToken(c *gin.Context) {
 	}
 	h.log.Info("GetSensorToken", zap.String("encryptedCameraDetails", encryptedCameraDetails))
 
-	token := mediaservice.GetSensorToken(cam)
-	c.JSON(http.StatusOK, gin.H{"token": token})
+	token := mediaservice.GetVideoSourceToken(cam)
+	c.JSON(http.StatusOK, token)
 }
 
 // GetDeviceProfiles handles GET /GetDeviceProfiles
@@ -1385,8 +1385,9 @@ func (h *ONVIFClientHandler) GetAudioEncoders(c *gin.Context) {
 func (h *ONVIFClientHandler) GetVideoOptions(c *gin.Context) {
 	encryptedCameraDetails := c.Query("encrypted_camera_details")
 	profileToken := c.Query("profileToken")
-	if encryptedCameraDetails == "" || profileToken == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "encryptedCameraDetails and profileToken are required"})
+	videoEncoderToken := c.Query("videoEncoderToken")
+	if encryptedCameraDetails == "" || profileToken == "" || videoEncoderToken == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "encryptedCameraDetails, profileToken, and videoEncoderToken are required"})
 		return
 	}
 
@@ -1401,7 +1402,7 @@ func (h *ONVIFClientHandler) GetVideoOptions(c *gin.Context) {
 		zap.String("profileToken", profileToken),
 	)
 
-	options, err := mediaservice.GetVideoOptions(cam, profileToken)
+	options, err := mediaservice.GetVideoOptions(cam, profileToken, videoEncoderToken)
 	if err != nil {
 		h.log.Error("failed to get video options", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get video options"})
@@ -1968,4 +1969,169 @@ func (h *ONVIFClientHandler) GotoPreset(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusOK)
+}
+
+// GetPTZSpeedLimits handles GET /GetPTZSpeedLimits
+// It retrieves the supported speed ranges (Pan, Tilt, Zoom) for a specific profile.
+func (h *ONVIFClientHandler) GetPTZSpeedLimits(c *gin.Context) {
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
+	profileToken := c.Query("profileToken")
+
+	// 1. Validate Parameters
+	if encryptedCameraDetails == "" || profileToken == "" {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"error": "encrypted_camera_details and profileToken are required",
+		})
+		return
+	}
+
+	// 2. Retrieve Camera from Cache
+	cam, exists := h.cache.Get(encryptedCameraDetails)
+	if !exists {
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
+			"error": "failed to retrieve camera from cache",
+		})
+		return
+	}
+
+	h.log.Info("GetPTZSpeedLimits", zap.String("profileToken", profileToken))
+
+	// 3. Call the Service Logic
+	// Assuming the function provided in your prompt is accessible via the 'ptzservice' package
+	limits, err := ptzservice.GetPTZSpeedLimits(cam, profileToken)
+	if err != nil {
+		h.log.Error("failed to get PTZ speed limits", zap.Error(err))
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to get PTZ speed limits",
+		})
+		return
+	}
+
+	// 4. Return JSON Response
+	c.JSON(http.StatusOK, limits)
+}
+
+// GetFocusMoveOptions handles GET /GetFocusMoveOptions
+// It retrieves the available focus ranges (Absolute, Relative, Continuous) for a specific video source.
+func (h *ONVIFClientHandler) GetFocusMoveOptions(c *gin.Context) {
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
+	videoSourceToken := c.Query("videoSourceToken")
+
+	// 1. Validate Parameters
+	if encryptedCameraDetails == "" || videoSourceToken == "" {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"error": "encrypted_camera_details and videoSourceToken are required",
+		})
+		return
+	}
+
+	// 2. Retrieve Camera from Cache
+	cam, exists := h.cache.Get(encryptedCameraDetails)
+	if !exists {
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
+			"error": "failed to retrieve camera from cache",
+		})
+		return
+	}
+
+	h.log.Info("GetFocusMoveOptions", zap.String("videoSourceToken", videoSourceToken))
+
+	// 3. Call the Service Logic
+	// Accessing the function via the 'imagingservice' package
+	options, err := imagingservice.GetFocusMoveOptions(cam, videoSourceToken)
+	if err != nil {
+		h.log.Error("failed to get focus move options", zap.Error(err))
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to get focus move options",
+		})
+		return
+	}
+
+	// 4. Return JSON Response
+	// The EnvelopeMoveOptions struct will be serialized to JSON here.
+	c.JSON(http.StatusOK, options)
+}
+
+// GetAllTokens handles GET /GetAllTokens
+// It retrieves a collection of essential ONVIF tokens (Profile, VideoSource, Configs)
+// required for subsequent PTZ, Imaging, and OSD operations.
+func (h *ONVIFClientHandler) GetAllTokens(c *gin.Context) {
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
+
+	// 1. Validate Parameters
+	if encryptedCameraDetails == "" {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"error": "encrypted_camera_details is required",
+		})
+		return
+	}
+
+	// 2. Retrieve Camera from Cache
+	cam, exists := h.cache.Get(encryptedCameraDetails)
+	if !exists {
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
+			"error": "failed to retrieve camera from cache",
+		})
+		return
+	}
+
+	h.log.Info("GetAllTokens")
+
+	// 3. Call the Service Logic
+	// Accessing the function via the 'mediaservice' package
+	tokens, err := mediaservice.GetAllTokens(cam)
+	if err != nil {
+		h.log.Error("failed to retrieve all tokens", zap.Error(err))
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error": fmt.Sprintf("failed to retrieve tokens: %v", err),
+		})
+		return
+	}
+
+	// 4. Return JSON Response
+	c.JSON(http.StatusOK, tokens)
+}
+
+// GetVideoSourceConfigurationToken handles GET /GetVideoSourceConfigurationToken
+// It retrieves the "Physical Source" token required for OSDs and Imaging services.
+func (h *ONVIFClientHandler) GetVideoSourceConfigurationToken(c *gin.Context) {
+	encryptedCameraDetails := c.Query("encrypted_camera_details")
+
+	// 1. Validate Parameters
+	if encryptedCameraDetails == "" {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"error": "encrypted_camera_details is required",
+		})
+		return
+	}
+
+	// 2. Retrieve Camera from Cache
+	cam, exists := h.cache.Get(encryptedCameraDetails)
+	if !exists {
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
+			"error": "failed to retrieve camera from cache",
+		})
+		return
+	}
+
+	h.log.Info("GetVideoSourceConfigurationToken")
+
+	// 3. Call the Service Logic
+	// This function returns a string. If it fails, it returns an empty string "".
+	token := mediaservice.GetVideoSourceConfigToken(cam)
+
+	if token == "" {
+		h.log.Error("failed to retrieve video source configuration token")
+		// We return 500 here because if we have the camera in cache,
+		// we should theoretically be able to get its profiles.
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to retrieve video source configuration token",
+		})
+		return
+	}
+
+	// 4. Return JSON Response
+	c.JSON(http.StatusOK, gin.H{
+		"videoSourceToken": token,
+	})
 }

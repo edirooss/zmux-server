@@ -3,7 +3,7 @@ module github.com/edirooss/zmux-server
 go 1.24.5
 
 require (
-	github.com/aviravitz/onvif-client v1.0.1
+	github.com/aviravitz/onvif-client v1.0.4
 	github.com/davecgh/go-spew v1.1.1
 	github.com/gin-contrib/cors v1.7.6
 	github.com/gin-contrib/secure v1.1.2
