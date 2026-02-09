@@ -90,8 +90,10 @@ type DataStore struct {
 	ids []int64       // ordered list of ids; sorted by id
 }
 
-func (s *DataStore) GetIDByMC(ctx context.Context, mc string) (int64, error) {
-	val, err := s.rdb.Get(ctx, mc).Int64()
+func (s *DataStore) GetIDByInputURL(ctx context.Context, inputURL string) (int64, error) {
+	test, _ := s.rdb.Get(ctx, inputURL).Result()
+	fmt.Println(test)
+	val, err := s.rdb.Get(ctx, inputURL).Int64()
 	if err != nil {
 		return -1, err
 	}
@@ -159,7 +161,7 @@ func (s *DataStore) Create(ctx context.Context, value []byte) (int64, error) {
 func (s *DataStore) CreateWithIndex(ctx context.Context, key string, value int64) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
+	fmt.Printf("CreateWithIndex: key=%s, value=%d\n", key, value)
 	if err := s.rdb.Set(ctx, key, value, 0).Err(); err != nil {
 		return 0, fmt.Errorf("set (key=%s): %w", key, err)
 	}

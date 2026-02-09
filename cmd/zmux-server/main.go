@@ -147,7 +147,7 @@ func main() {
 					admins.PUT("/api/channels/:id", requireValidID, channelshndlr.ReplaceChannel)                        // update one (replace/full-update)
 					authed.PATCH("/api/channels/:id", requireValidID, requireChannelAccess, channelshndlr.ModifyChannel) // update one (modify/partial-update)
 					admins.DELETE("/api/channels/:id", requireValidID, channelshndlr.DeleteChannel)                      // delete one
-					admins.DELETE("/api/channels/adama/:mc", channelshndlr.DeleteChannelByMC)                            // delete one
+					admins.DELETE("/api/channels/adama", channelshndlr.DeleteChannelByInputURL)                          // delete one
 
 					// --- Channel views ---
 					admins.GET("/api/channels/summary", channelshndlr.Summary)
