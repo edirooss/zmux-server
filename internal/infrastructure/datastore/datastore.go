@@ -91,8 +91,6 @@ type DataStore struct {
 }
 
 func (s *DataStore) GetIDByInputURL(ctx context.Context, inputURL string) (int64, error) {
-	test, _ := s.rdb.Get(ctx, inputURL).Result()
-	fmt.Println(test)
 	val, err := s.rdb.Get(ctx, inputURL).Int64()
 	if err != nil {
 		return -1, err
