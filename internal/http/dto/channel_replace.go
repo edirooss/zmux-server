@@ -18,6 +18,7 @@ type ChannelReplace struct {
 	Outputs     W[[]W[OutputReplace]] `json:"outputs"`       //         required; array
 	Enabled     W[bool]               `json:"enabled"`       //         required; bool
 	RestartSec  W[uint]               `json:"restart_sec"`   //         required; uint
+	ReadOnly    W[bool]               `json:"read_only"`     //   optional; bool                                (default: false)
 }
 
 type InputReplace struct {

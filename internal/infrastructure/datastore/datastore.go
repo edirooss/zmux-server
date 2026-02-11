@@ -90,6 +90,14 @@ type DataStore struct {
 	ids []int64       // ordered list of ids; sorted by id
 }
 
+func (s *DataStore) GetIDByInputURL(ctx context.Context, inputURL string) (int64, error) {
+	val, err := s.rdb.Get(ctx, inputURL).Int64()
+	if err != nil {
+		return -1, err
+	}
+	return val, nil
+}
+
 // NewDataStore constructs a ready-to-use DataStore.
 // On initialization, reconciles any existing Redis state under the given keyPrefix
 // into the in-memory index. This is a read-only operation against Redis.
@@ -146,6 +154,16 @@ func (s *DataStore) Create(ctx context.Context, value []byte) (int64, error) {
 	s.indexInsert(id)
 
 	return id, nil
+}
+
+func (s *DataStore) CreateWithIndex(ctx context.Context, key string, value int64) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	fmt.Printf("CreateWithIndex: key=%s, value=%d\n", key, value)
+	if err := s.rdb.Set(ctx, key, value, 0).Err(); err != nil {
+		return 0, fmt.Errorf("set (key=%s): %w", key, err)
+	}
+	return 0, nil
 }
 
 // Update overwrites the stored value by the record's id. Returns error.

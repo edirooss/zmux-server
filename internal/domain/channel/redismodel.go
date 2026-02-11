@@ -9,6 +9,7 @@ type ZmuxChannelModel struct {
 	Outputs     []ZmuxChannelOutput `json:"outputs"`
 	Enabled     bool                `json:"enabled"`
 	RestartSec  uint                `json:"restart_sec"`
+	ReadOnly    bool                `json:"read_only"`
 }
 
 // Model returns a deep-copied ZmuxChannelModel from the receiver.
@@ -19,6 +20,7 @@ func (ch *ZmuxChannel) Model() ZmuxChannelModel {
 		Name:        cloneString(ch.Name),
 		Enabled:     ch.Enabled,
 		RestartSec:  ch.RestartSec,
+		ReadOnly:    ch.ReadOnly,
 		Input: ZmuxChannelInput{
 			URL:             cloneString(ch.Input.URL),
 			Username:        cloneString(ch.Input.Username),

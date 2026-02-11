@@ -18,6 +18,7 @@ type ChannelCreate struct {
 	Outputs     W[[]W[ChannelOutputCreate]] `json:"outputs"`       //   optional; array[object]                       (default: [])
 	Enabled     W[bool]                     `json:"enabled"`       //   optional; bool                                (default: false)
 	RestartSec  W[uint]                     `json:"restart_sec"`   //   optional; uint                                (default: 3)
+	ReadOnly    W[bool]                     `json:"read_only"`     //   optional; bool                                (default: false)
 }
 
 type ChannelInputCreate struct {
@@ -135,6 +136,17 @@ func (req *ChannelCreate) ToChannel() (*channel.ZmuxChannel, error) {
 		ch.RestartSec = req.RestartSec.V
 	} else {
 		ch.RestartSec = 3
+	}
+
+	// readonly
+	// optional; bool (default: false)
+	if req.ReadOnly.Set {
+		if req.ReadOnly.Null {
+			return nil, errors.New("readonly cannot be null")
+		}
+		ch.ReadOnly = req.ReadOnly.V
+	} else {
+		ch.ReadOnly = false
 	}
 
 	return ch, nil

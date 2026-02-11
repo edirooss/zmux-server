@@ -3,6 +3,7 @@ Description=Zmux Server
 After=network.target
 
 [Service]
+WorkingDirectory=/etc/zmux-server
 ExecStart=/usr/bin/zmux-server
 Restart=always
 User=nobody

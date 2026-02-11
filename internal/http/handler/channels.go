@@ -475,6 +475,34 @@ func (h *ChannelsHandler) DeleteChannel(c *gin.Context) {
 	// RA-friendly response
 	c.JSON(http.StatusOK, gin.H{"id": id})
 }
+func (h *ChannelsHandler) DeleteChannelByInputURL(c *gin.Context) {
+	// 1. Define a struct to represent the JSON body
+	// You can also define this outside the function if preferred
+	var req struct {
+		InputURL string `json:"inputURL" binding:"required"`
+	}
+
+	// 2. Bind the JSON body to the struct
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": err.Error()})
+		return
+	}
+
+	fmt.Printf("DeleteChannelByInputURL: inputURL=%s\n", req.InputURL)
+
+	// 3. Use req.InputURL instead of the query variable
+	if err := h.svc.DeleteByInputURL(c.Request.Context(), req.InputURL); err != nil {
+		c.Error(err)
+		if errors.Is(err, service.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"message": service.ErrNotFound.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"inputURL": req.InputURL})
+}
 
 type itemResult struct {
 	ID     int64  `json:"id"`

@@ -92,6 +92,14 @@ func (s *ChannelService) Create(ctx context.Context, ch *channel.ZmuxChannel) er
 	ch.ID = chID
 	s.objs.Upsert(chID, ch)
 
+	//zmux controller comptability start: index input.url → channel.id
+	inputURL := ch.Input.URL
+	_, err = s.ds.CreateWithIndex(ctx, *inputURL, chID)
+	if err != nil {
+		return fmt.Errorf("create with index: %w", err)
+	}
+	//zmux controller comptabilty end
+
 	if ch.B2BClientID != nil {
 		s.b2bclntsvc.RegisterChannel(*ch.B2BClientID, ch)
 		return nil
@@ -235,6 +243,14 @@ func (s *ChannelService) Delete(ctx context.Context, id int64) error {
 	}
 
 	return nil
+}
+
+func (s *ChannelService) DeleteByInputURL(ctx context.Context, inputURL string) error {
+	id, err := s.ds.GetIDByInputURL(ctx, inputURL)
+	if err != nil {
+		return err
+	}
+	return s.Delete(ctx, id)
 }
 
 func (s *ChannelService) reconcile(ctx context.Context) error {

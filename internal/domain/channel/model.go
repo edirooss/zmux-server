@@ -16,6 +16,7 @@ type ZmuxChannel struct {
 	Outputs     []ZmuxChannelOutput `json:"outputs"`       //
 	Enabled     bool                `json:"enabled"`       // (on true, input.url required)
 	RestartSec  uint                `json:"restart_sec"`   //
+	ReadOnly    bool                `json:"read_only"`     //
 }
 
 type ZmuxChannelInput struct {
@@ -234,6 +235,8 @@ func (ch *ZmuxChannel) isSet(field string) bool {
 		return ch.Input.Password != nil
 	case "enabled":
 		return ch.Enabled
+	case "read_only":
+		return ch.ReadOnly
 	default:
 		// Unknown fields are treated as not set; expand switch as needed.
 		return false
