@@ -45,8 +45,8 @@ func validateOutputURL(raw string) error {
 
 	if /* Note: This condition will be removed in the future when Zmux would support different output format then MPEG-TS
 	Right now, we require protocol `udp` for all output URLs to ensure compatiabillty with remux hard-coded output format [-f mpegts]
-	*/url.Schema != "udp" {
-		return errors.New("only `udp` protocol allowed for media output")
+	*/url.Schema != "udp" && url.Schema != "srt" {
+		return errors.New("only `udp` and `srt` protocols allowed for media output")
 	}
 
 	// For `udp` outputs, require hostname & port
